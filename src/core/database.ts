@@ -50,7 +50,10 @@ export function resolveDbDir(): string {
   if (customState && customState.trim()) {
     return customState.trim();
   }
-  const dir = path.join(os.homedir(), ".alphaway");
+  const homeDir = process.platform === "win32"
+    ? process.env.USERPROFILE || process.env.HOME || os.homedir()
+    : process.env.HOME || process.env.USERPROFILE || os.homedir();
+  const dir = path.join(homeDir, ".alphaway");
   try {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
