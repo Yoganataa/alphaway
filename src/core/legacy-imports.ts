@@ -15,7 +15,7 @@ type LegacyImportStatus = "imported" | "skipped";
 
 export interface LegacyImportReport {
   sourceKey: string;
-  status: LegacyImportStatus | "already-imported" | "missing";
+  status: LegacyImportStatus | "already-imported" | "already-skipped" | "missing";
   rowCount: number;
   details?: string;
 }
@@ -216,11 +216,28 @@ function importSourceFile(
   }
 
   if (stat.size > MAX_LEGACY_JSON_BYTES) {
+    const checksum = sha256(`oversize:${stat.size}:${stat.mtimeMs}`);
+    const details = `File exceeds the ${MAX_LEGACY_JSON_BYTES}-byte import limit.`;
+    if (prior?.checksum !== checksum || prior?.status !== "skipped") {
+      const recordSkipped = db.transaction(() => {
+        db.prepare(`
+          INSERT INTO legacy_imports (source_key, checksum, status, imported_at, row_count, details)
+          VALUES (?, ?, 'skipped', ?, 0, ?)
+          ON CONFLICT(source_key) DO UPDATE SET
+            checksum = excluded.checksum,
+            status = excluded.status,
+            imported_at = excluded.imported_at,
+            row_count = 0,
+            details = excluded.details
+        `).run(sourceKey, checksum, new Date().toISOString(), details);
+      });
+      recordSkipped();
+    }
     return {
       sourceKey,
-      status: "skipped",
+      status: prior?.checksum === checksum && prior?.status === "skipped" ? "already-skipped" : "skipped",
       rowCount: 0,
-      details: `File exceeds the ${MAX_LEGACY_JSON_BYTES}-byte import limit.`,
+      details,
     };
   }
 
@@ -229,7 +246,7 @@ function importSourceFile(
   if (prior?.checksum === checksum) {
     return {
       sourceKey,
-      status: "already-imported",
+      status: prior.status === "skipped" ? "already-skipped" : "already-imported",
       rowCount: Number(prior.row_count || 0),
       details: prior.details || undefined,
     };
