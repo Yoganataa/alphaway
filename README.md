@@ -176,7 +176,7 @@ All `/api/*` management endpoints require an administrator session. The session 
 
 CodeBuddy upstream credentials are separate from the AlphaWay gateway key. The dashboard OAuth flow and CLI OAuth login store the CodeBuddy token encrypted in SQLite; the HTTP polling response never returns the access token. `CODEBUDDY_API_KEY` remains an optional environment override for existing deployments. An explicit `x-codebuddy-api-key` may be sent per request when no server-side credential is configured. AlphaWay never forwards its gateway `Authorization` token as the CodeBuddy upstream credential.
 
-Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encrypted at rest with AES-256-GCM. When `ALPHAWAY_ENCRYPTION_KEY` is unset, AlphaWay generates `~/.alphaway/secret-encryption.key`. Back up that file together with the database; losing the encryption key makes encrypted credentials unrecoverable. POSIX key-file permissions are restricted to the owner.
+Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encrypted at rest with AES-256-GCM. When `ALPHAWAY_ENCRYPTION_KEY` is unset, AlphaWay generates `~/.alphaway/secret-encryption.key`. Back up that file together with the database; losing the encryption key makes encrypted credentials unrecoverable. POSIX key-file permissions are restricted to the owner. The one-time legacy JSON import preserves source files as rollback copies: symlink sources are refused and POSIX permissions are reduced to `0600`, but those retained JSON contents are still plaintext. Remove or separately protect those rollback files once they are no longer needed; Windows ACL behavior is not yet verified.
 
 ---
 ## 🔌 Client Integration Guide (Tri-Protocol)
