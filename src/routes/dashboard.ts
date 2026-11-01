@@ -1,17 +1,42 @@
 /**
- * Web Dashboard Route (Svelte 5 Static Bundle Hosting + SSR Metadata)
+ * Dashboard static hosting.
+ *
+ * The default path is relative to this module so it resolves both from the
+ * source tree and from Bun's embedded filesystem in a compiled executable.
+ * Set ALPHAWAY_DASHBOARD_DIR only when intentionally serving external assets.
  */
 
 import { Hono } from "hono";
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import { adminRequestError } from "../core/admin-guard";
 
 export const dashboardRoute = new Hono();
 
-const ROOT_DIST = path.join(process.cwd(), "dist");
-const LEGACY_DIST = path.join(process.cwd(), "web", "dist");
-const DIST_DIR = fs.existsSync(ROOT_DIST) ? ROOT_DIST : LEGACY_DIST;
+const configuredDist = process.env.ALPHAWAY_DASHBOARD_DIR?.trim();
+const DIST_DIR = configuredDist
+  ? path.resolve(configuredDist)
+  : path.resolve(import.meta.dir, "../../dist");
+
+const CONTENT_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+};
 
 function getPublicEndpoint(): string {
   const raw = (
@@ -31,46 +56,65 @@ function getBridgeApiKey(): string {
   return (process.env.BRIDGE_API_KEY || process.env.API_KEY || "").trim();
 }
 
+function resolveAssetPath(reqPath: string): string | null {
+  const relativePath = reqPath === "/" ? "index.html" : reqPath.replace(/^\/+/, "");
+  const resolved = path.resolve(DIST_DIR, relativePath);
+  if (resolved !== DIST_DIR && !resolved.startsWith(DIST_DIR + path.sep)) return null;
+  return resolved;
+}
+
 dashboardRoute.get("*", (c) => {
   const reqPath = c.req.path;
 
   if (reqPath === "/" || reqPath === "/index.html") {
     const denied = adminRequestError(c);
-    if (denied) {
-      return c.json({ error: denied }, 403);
+    if (denied) return c.json({ error: denied }, 403);
+  }
+
+  if (!fs.existsSync(DIST_DIR)) {
+    return c.html(
+      "<!doctype html><html><body><h1>AlphaWay</h1><p>Dashboard assets are not built.</p></body></html>",
+      503
+    );
+  }
+
+  const filePath = resolveAssetPath(reqPath);
+  if (!filePath) return c.text("Not found", 404);
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath).toLowerCase();
+
+    // Let the SPA fallback render the main document so runtime metadata is
+    // injected consistently for "/" and client-side navigation paths.
+    if (reqPath !== "/" && ext !== ".html") {
+      const headers: Record<string, string> = {
+        "Content-Type": CONTENT_TYPES[ext] || "application/octet-stream",
+        "X-Content-Type-Options": "nosniff",
+      };
+      if (reqPath.startsWith("/assets/")) {
+        headers["Cache-Control"] = "public, max-age=31536000, immutable";
+      } else {
+        headers["Cache-Control"] = "public, max-age=3600";
+      }
+      return c.body(fs.readFileSync(filePath), 200, headers);
     }
   }
 
-  // Serve static assets from dist if present
-  if (fs.existsSync(DIST_DIR)) {
-    const filePath = path.join(DIST_DIR, reqPath === "/" ? "index.html" : reqPath.slice(1));
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-      const ext = path.extname(filePath);
-      let contentType = "text/html";
-      if (ext === ".js") contentType = "application/javascript";
-      else if (ext === ".css") contentType = "text/css";
-      else if (ext === ".svg") contentType = "image/svg+xml";
-      else if (ext === ".png") contentType = "image/png";
-      else if (ext === ".json") contentType = "application/json";
+  const indexHtml = path.join(DIST_DIR, "index.html");
+  if (!fs.existsSync(indexHtml)) {
+    return c.text("Dashboard entry point is missing.", 503);
+  }
 
-      if (reqPath !== "/" && ext !== ".html") {
-        return c.body(fs.readFileSync(filePath), 200, { "Content-Type": contentType });
-      }
-    }
+  let html = fs.readFileSync(indexHtml, "utf8");
+  const publicEp = getPublicEndpoint();
+  const apiKey = getBridgeApiKey();
+  const host = c.req.header("host") || "127.0.0.1:20129";
+  const endpointUrl = publicEp
+    ? (publicEp.endsWith("/v1") ? publicEp : publicEp + "/v1")
+    : `http://${host}/v1`;
+  const authText = apiKey ? "Wajib (dikonfigurasi via API_KEY)" : "Opsional (publik)";
 
-    // SPA index.html with embedded SSR metadata
-    const indexHtml = path.join(DIST_DIR, "index.html");
-    if (fs.existsSync(indexHtml)) {
-      let html = fs.readFileSync(indexHtml, "utf8");
-      const publicEp = getPublicEndpoint();
-      const apiKey = getBridgeApiKey();
-      const host = c.req.header("host") || "127.0.0.1:20129";
-      const endpointUrl = publicEp
-        ? (publicEp.endsWith("/v1") ? publicEp : publicEp + "/v1")
-        : `http://${host}/v1`;
-      const authText = apiKey ? "Wajib (dikonfigurasi via API_KEY)" : "Opsional (publik)";
-
-      const ssrSnippet = `
+  const ssrSnippet = `
 <div id="ssr-metadata" style="display:none" aria-hidden="true">
   <span id="ssr-endpoint">${endpointUrl}</span>
   <span id="ssr-auth-text">${authText}</span>
@@ -80,14 +124,8 @@ dashboardRoute.get("*", (c) => {
   <div id="report" aria-live="polite"></div>
 </div>
 `;
-      if (html.includes("</body>")) {
-        html = html.replace("</body>", `${ssrSnippet}\n</body>`);
-      } else {
-        html += ssrSnippet;
-      }
-      return c.html(html);
-    }
-  }
+  if (html.includes("</body>")) html = html.replace("</body>", `${ssrSnippet}\n</body>`);
+  else html += ssrSnippet;
 
-  return c.html("<!doctype html><html><body><h1>AlphaWay</h1><p>Dashboard is loading...</p></body></html>");
+  return c.html(html, 200, { "Cache-Control": "no-cache" });
 });
