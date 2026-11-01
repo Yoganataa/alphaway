@@ -213,24 +213,21 @@ function importSetting(key: string): ImportHandler {
 }
 
 function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksum: string, expectedStat?: fs.Stats): boolean {
-  let sourceFd: number;
+  const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
   try {
     const pathStat = fs.lstatSync(filePath);
     if (pathStat.isSymbolicLink() || !pathStat.isFile()) return false;
-    const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
-    sourceFd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
-    const currentStat = fs.fstatSync(sourceFd);
-    if (currentStat.dev !== pathStat.dev || currentStat.ino !== pathStat.ino) {
+    const sourceFd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    let current: string;
+    try {
+      const currentStat = fs.fstatSync(sourceFd);
+      if (currentStat.dev !== pathStat.dev || currentStat.ino !== pathStat.ino) return false;
+      if (expectedStat && (currentStat.dev !== expectedStat.dev || currentStat.ino !== expectedStat.ino)) return false;
+      if (process.platform !== "win32") fs.fchmodSync(sourceFd, 0o600);
+      current = fs.readFileSync(sourceFd, "utf8");
+    } finally {
       fs.closeSync(sourceFd);
-      return false;
     }
-    if (expectedStat && (currentStat.dev !== expectedStat.dev || currentStat.ino !== expectedStat.ino)) {
-      fs.closeSync(sourceFd);
-      return false;
-    }
-    if (process.platform !== "win32") fs.fchmodSync(sourceFd, 0o600);
-    const current = fs.readFileSync(sourceFd, "utf8");
-    fs.closeSync(sourceFd);
     if (sha256(current) !== expectedChecksum) return false;
   } catch {
     return false;
@@ -238,19 +235,29 @@ function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksu
 
   const encrypted = encryptSecret(plaintext);
   const tempPath = path.join(path.dirname(filePath), "." + path.basename(filePath) + "." + randomUUID() + ".tmp");
-  const fd = fs.openSync(tempPath, "wx", 0o600);
   try {
-    fs.writeFileSync(fd, encrypted, "utf8");
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
+    const fd = fs.openSync(tempPath, "wx", 0o600);
+    try {
+      fs.writeFileSync(fd, encrypted, "utf8");
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
 
-  try {
-    const latestStat = fs.lstatSync(filePath);
-    if (latestStat.isSymbolicLink() || !latestStat.isFile()) return false;
-    if (expectedStat && (latestStat.dev !== expectedStat.dev || latestStat.ino !== expectedStat.ino)) return false;
-    if (sha256(fs.readFileSync(filePath, "utf8")) !== expectedChecksum) return false;
+    const latestPathStat = fs.lstatSync(filePath);
+    if (latestPathStat.isSymbolicLink() || !latestPathStat.isFile()) return false;
+    if (expectedStat && (latestPathStat.dev !== expectedStat.dev || latestPathStat.ino !== expectedStat.ino)) return false;
+    const verifyFd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    let latestContents: string;
+    try {
+      const latestStat = fs.fstatSync(verifyFd);
+      if (latestStat.dev !== latestPathStat.dev || latestStat.ino !== latestPathStat.ino) return false;
+      latestContents = fs.readFileSync(verifyFd, "utf8");
+    } finally {
+      fs.closeSync(verifyFd);
+    }
+    if (sha256(latestContents) !== expectedChecksum) return false;
+
     fs.renameSync(tempPath, filePath);
     if (process.platform !== "win32") {
       try { fs.chmodSync(filePath, 0o600); } catch {}
@@ -262,12 +269,10 @@ function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksu
     return true;
   } catch {
     return false;
-  }
   } finally {
     try { fs.unlinkSync(tempPath); } catch {}
   }
 }
-
 /** Restore an encrypted legacy JSON rollback copy without overwriting an existing file. */
 export function restoreLegacyBackup(encryptedPath: string, outputPath: string): void {
   const source = path.resolve(encryptedPath);
