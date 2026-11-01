@@ -18,6 +18,32 @@ describe("administrator authentication and managed gateway API keys", () => {
     expect((await response.json()).code).toBe("admin_auth_required");
   });
 
+  it("rejects a same-host but cross-port Origin for cookie-authenticated admin requests", async () => {
+    const session = await adminHeaders();
+    const response = await app.request("/api/keys", {
+      headers: {
+        ...session,
+        Host: "localhost:20129",
+        Origin: "http://localhost:3000",
+        "sec-fetch-site": "same-site",
+      },
+    });
+    expect(response.status).toBe(403);
+    expect((await response.json()).code).toBe("admin_origin_rejected");
+  });
+
+  it("accepts an exact same-origin request including the port", async () => {
+    const session = await adminHeaders();
+    const response = await app.request("/api/keys", {
+      headers: {
+        ...session,
+        Host: "localhost:20129",
+        Origin: "http://localhost:20129",
+      },
+    });
+    expect(response.status).toBe(200);
+  });
+
   it("keeps administrator status public but protects dashboard session endpoints and sets secure cookie attributes", async () => {
     await adminHeaders();
     const status = await app.request("/api/admin/auth/status", { headers: { Host: "localhost" } });
