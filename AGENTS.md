@@ -6,7 +6,7 @@ This file gives AI coding agents (OpenCode, Claude Code, Cursor, Codex, Cline, A
 
 ## 1. Critical Rules (Read First)
 
-1. **Runtime MUST be Bun 1.4.3 or newer** (`bun src/index.ts` or a standalone Bun executable).
+1. **Runtime MUST be Bun 1.4.4 or newer** (`bun src/index.ts` or a standalone Bun executable).
    - Do **not** run production provider traffic under Node.js. The OpenCode free-tier path depends on a compatible TLS `ClientHello` fingerprint (BoringSSL).
    - `ALLOW_NODE=1` is not a supported runtime mode; never use it for production or live provider requests.
    - Keep the Bun version used in CI aligned with the recorded transport fingerprint baseline. Do not upgrade it without running `bun run fingerprint:check` and reviewing the result.
