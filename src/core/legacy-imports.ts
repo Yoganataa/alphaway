@@ -279,7 +279,9 @@ export function restoreLegacyBackup(encryptedPath: string, outputPath: string): 
   const destination = path.resolve(outputPath);
   if (source === destination) throw new Error("Restore output must be a different file");
   const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
-  const sourcePathStat = fs.lstatSync(source);\n  if (sourcePathStat.isSymbolicLink() || !sourcePathStat.isFile()) throw new Error("Encrypted backup source must be a regular, non-symlink file");\n  const sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
+  const sourcePathStat = fs.lstatSync(source);
+  if (sourcePathStat.isSymbolicLink() || !sourcePathStat.isFile()) throw new Error("Encrypted backup source must be a regular, non-symlink file");
+  const sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
   let envelope: string;
   try {
     const sourceStat = fs.fstatSync(sourceFd);
