@@ -5,14 +5,14 @@
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `chore/phase-0-ci-distribution`  
-> **Last implementation HEAD before this checkpoint update:** `e1d8fbbe2a8f0a360109e48f476d9745cdefda4a`  
+> **Last implementation HEAD before this checkpoint update:** `337cea4287ebc1710c9821c6d1b3315b96686d0a`  
 > **Base main HEAD:** `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
 > **PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
 
 ## 1. Current Status
 
-**Phase 0 is complete on the implementation branch.** All required GitHub Actions jobs passed on Bun 1.4.4 in run `41322403767`. PR #1 is open and has not been merged into `main`.
+**Phase 0 is complete and verified on the implementation branch.** All required GitHub Actions jobs passed on Bun 1.4.4 in run `41325262197`. The P1 legacy-systemd retirement finding has been fixed, the review thread resolved, and PR #1 is ready for merge.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
@@ -20,7 +20,7 @@
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
-- [ ] Phase 1 — Database Migrations and Canonical Persistence.
+- [ ] Phase 1 — Database Migrations and Canonical Persistence (implementation started on `feat/phase-1-sqlite-migrations`; rebase onto Phase 0 after merge before opening its PR).
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
@@ -28,7 +28,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Implementation branch changes are limited to Phase 0; no application feature work for later phases has started. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so all verification below comes from GitHub Actions. Baseline `main` run `41317617602` had failed on stale `.test.js` paths and the absent `test:node` script. The final current-branch run `41322403767` completed successfully with Bun 1.4.4: 270 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed (17 ciphers, 12 extensions), and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
+Phase 1 implementation has begun on a separate feature branch, but it was created before the final Phase 0 installer review fix and must be rebased onto the merged Phase 0 commit before its own PR is opened. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so verification comes from GitHub Actions. Baseline `main` run `41317617602` failed on stale `.test.js` paths and the absent `test:node` script. The final Phase 0 run `41325262197` completed successfully with Bun 1.4.4: 271 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed (17 ciphers, 12 extensions), and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The installer also disables and retires both legacy systemd service names before replacing the application. The prior P1 review finding is resolved. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
 
 ## 2. Agreed Product Direction
 
@@ -227,7 +227,7 @@ Target produk yang sudah diputuskan:
 - Tambahkan Plans serta Persona/Jailbreak.
 - Ikuti struktur TypeScript idiomatis; jangan membuat struktur ala Go secara menyeluruh.
 
-Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 sudah selesai dan PR #1 masih terbuka. Setelah memeriksa status PR terbaru, lanjut ke Phase 1 — Database Migrations and Canonical Persistence sesuai ROADMAP.md. Kerjakan bertahap, gunakan branch/PR, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
+Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 selesai, semua CI job hijau, temuan P1 legacy systemd sudah ditangani, dan PR #1 siap merge. Setelah Phase 0 masuk ke main, rebase `feat/phase-1-sqlite-migrations` pada main terbaru, verifikasi ulang semua test, lalu lanjut Phase 1 — Database Migrations and Canonical Persistence sesuai ROADMAP.md. Jangan membuka PR Phase 1 sebelum branch sinkron dengan main. Kerjakan bertahap, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
 ```
 
 ---
