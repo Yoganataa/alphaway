@@ -127,14 +127,22 @@ describe("SQLite migration runner", () => {
     `);
     insert.run("legacy-secret", "Legacy Secret", "https://provider.example", "sk-real-provider-secret", "openai", "[]", 1, Date.now());
     insert.run("legacy-placeholder", "Legacy Placeholder", "https://provider.example", "sk-xxxxxxxxxxxxxxxxxxxxxxxx", "openai", "[]", 1, Date.now());
+    const legacyBaseUrl = "https://url-user:url-password@provider.example/v1?api_key=url-query-secret&tenant=team-a";
+    insert.run("legacy-url-secret", "Legacy URL Secret", legacyBaseUrl, "", "openai", "[]", 1, Date.now());
 
     runMigrations(db);
     const encrypted = db.prepare("SELECT api_key FROM custom_providers WHERE id = ?").get("legacy-secret").api_key;
     const placeholder = db.prepare("SELECT api_key FROM custom_providers WHERE id = ?").get("legacy-placeholder").api_key;
+    const encryptedBaseUrl = db.prepare("SELECT base_url FROM custom_providers WHERE id = ?").get("legacy-url-secret").base_url;
     expect(encrypted).toMatch(/^awenc:v1:/);
     expect(encrypted).not.toContain("sk-real-provider-secret");
     expect(decryptSecret(encrypted)).toBe("sk-real-provider-secret");
     expect(placeholder).toBe("");
+    expect(encryptedBaseUrl).toMatch(/^awenc:v1:/);
+    expect(encryptedBaseUrl).not.toContain("url-user");
+    expect(encryptedBaseUrl).not.toContain("url-password");
+    expect(encryptedBaseUrl).not.toContain("url-query-secret");
+    expect(decryptSecret(encryptedBaseUrl)).toBe(legacyBaseUrl);
   });
 
   it("encrypts legacy single-proxy URLs, pool URLs, and relay tokens during migration", () => {
