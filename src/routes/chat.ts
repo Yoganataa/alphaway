@@ -270,11 +270,15 @@ async function dispatchToUpstream(
         const errText = await upstreamRes.text();
         let errJson: any = null;
         try { errJson = JSON.parse(errText); } catch {}
+        const safeErrorText = apiKey ? errText.replaceAll(apiKey, "[REDACTED]") : errText;
         if (errJson && errJson.code) {
           const classified = codebuddy.classifyCodebuddyError(upstreamRes.status, errJson);
-          return Response.json({ error: classified }, { status: classified.status as any });
+          const safeClassified = apiKey
+            ? JSON.parse(JSON.stringify(classified).replaceAll(apiKey, "[REDACTED]"))
+            : classified;
+          return Response.json({ error: safeClassified }, { status: safeClassified.status as any });
         }
-        return new Response(errText, { status: upstreamRes.status, headers: { "Content-Type": "application/json" } });
+        return new Response(safeErrorText, { status: upstreamRes.status, headers: { "Content-Type": "application/json" } });
       }
 
       if (isStream) {
