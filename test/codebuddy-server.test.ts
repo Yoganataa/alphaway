@@ -202,6 +202,40 @@ describe("codebuddy server integration tests", () => {
     }
   });
 
+  it("redacts CodeBuddy upstream credentials from error bodies", async () => {
+    const testServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: app.fetch });
+    const port = testServer.port;
+    const originalStatus = mockResponseStatus;
+    const originalBody = mockResponseBody;
+    const originalSse = mockIsSSE;
+    mockResponseStatus = 500;
+    mockIsSSE = false;
+    mockResponseBody = JSON.stringify({ error: "Rejected credential: test-codebuddy-jwt-token" });
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${gatewayApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "cbai/deepseek-v4.1-flash",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+      });
+      expect(response.status).toBe(500);
+      const body = await response.text();
+      expect(body).not.toContain("test-codebuddy-jwt-token");
+      expect(body).toContain("[REDACTED]");
+    } finally {
+      mockResponseStatus = originalStatus;
+      mockResponseBody = originalBody;
+      mockIsSSE = originalSse;
+      testServer.stop();
+    }
+  });
+
   it("handles upstream 11140 account restriction returning 403 with helpful advice", async () => {
     const testServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: app.fetch });
     const port = testServer.port;
@@ -267,6 +301,8 @@ describe("codebuddy server integration tests", () => {
       expect(stored).not.toContain(accessToken);
       delete process.env.CODEBUDDY_API_KEY;
       expect(getCodeBuddyApiKey()).toBe(accessToken);
+      const health = await app.request("/health");
+      expect((await health.json()).codebuddy.configured).toBe(true);
     } finally {
       getDatabase().prepare("DELETE FROM app_settings WHERE key = ?").run("codebuddy_api_key");
       if (previousProviderKey === undefined) delete process.env.CODEBUDDY_API_KEY;
