@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -61,7 +62,6 @@ export function restoreDatabaseBackup(
   fs.mkdirSync(restoreDir, { recursive: true, mode: 0o700 });
 
   // Validate the backup before touching the destination.
-  const { Database } = require("bun:sqlite");
   const validation = new Database(backupPath, { readonly: true });
   try {
     const result = validation.query("PRAGMA quick_check").get();
@@ -73,19 +73,44 @@ export function restoreDatabaseBackup(
     validation.close();
   }
 
-  // Do not replace a live database. SQLite will also fail safely when source
-  // and destination are the same path.
+  // Do not replace a live database. The caller must stop AlphaWay and close
+  // every SQLite connection before invoking this function.
   if (path.resolve(backupPath) === path.resolve(databasePath)) {
     throw new Error("Backup path and destination database path must differ");
   }
 
-  const stagedPath = `${databasePath}.restore-${randomUUID()}.tmp`;
+  const unique = randomUUID();
+  const stagedPath = `${databasePath}.restore-${unique}.tmp`;
+  const previousPath = `${databasePath}.pre-restore-${unique}.sqlite`;
+  let previousMoved = false;
+
   try {
     fs.copyFileSync(backupPath, stagedPath);
     if (process.platform !== "win32") fs.chmodSync(stagedPath, 0o600);
+
+    if (fs.existsSync(databasePath)) {
+      const current = new Database(databasePath);
+      try {
+        current.exec("PRAGMA wal_checkpoint(FULL)");
+      } finally {
+        current.close();
+      }
+
+      fs.renameSync(databasePath, previousPath);
+      previousMoved = true;
+    }
+
+    // A stopped database may still have sidecars from the previous WAL mode.
+    fs.rmSync(`${databasePath}-wal`, { force: true });
+    fs.rmSync(`${databasePath}-shm`, { force: true });
     fs.renameSync(stagedPath, databasePath);
+
+    if (process.platform !== "win32") fs.chmodSync(databasePath, 0o600);
   } catch (error) {
     try { fs.rmSync(stagedPath, { force: true }); } catch {}
+    if (previousMoved && !fs.existsSync(databasePath)) {
+      try { fs.renameSync(previousPath, databasePath); } catch {}
+    }
     throw error;
   }
 }
