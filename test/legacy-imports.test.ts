@@ -138,6 +138,7 @@ describe("legacy JSON import", () => {
 
     // Pre-existing SQLite state wins over either JSON source.
     expect(readSetting("tokensaver_config")).toEqual({ rtkEnabled: false, soulMode: "custom" });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM app_settings WHERE key IS NULL").get().count).toBe(0);
     expect(readSetting("proxy_config")).toEqual({
       url: "http://user:secret@127.0.0.1:3128",
       strategy: "failover",
