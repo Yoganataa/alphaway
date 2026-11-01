@@ -130,6 +130,21 @@ describe("SQLite migration backup and restore", () => {
     });
   });
 
+  it("encrypts historical pre-restore copies beside the database during startup migration", () => {
+    withTempDirectory((directory) => {
+      const legacyPath = path.join(directory, "alphaway.sqlite.pre-restore-old.sqlite");
+      const legacyDb = new Database(legacyPath);
+      legacyDb.exec("CREATE TABLE checkpoint_state (value TEXT NOT NULL)");
+      legacyDb.prepare("INSERT INTO checkpoint_state VALUES (?)").run("pre-restore-value");
+      legacyDb.close();
+
+      const encrypted = encryptExistingMigrationBackups(directory, "alphaway.sqlite");
+      expect(encrypted).toEqual([legacyPath + ".awenc"]);
+      expect(fs.existsSync(legacyPath)).toBe(false);
+      expect(isEncryptedSecret(fs.readFileSync(legacyPath + ".awenc", "utf8").trim())).toBe(true);
+    });
+  });
+
   it("converts a legacy plaintext backup when it is restored directly", () => {
     withTempDirectory((directory) => {
       const legacyPath = path.join(directory, "legacy-plain.sqlite");
