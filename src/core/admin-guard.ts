@@ -65,18 +65,52 @@ export function adminRequestError(c: any): string | null {
 
   const origin = String(c.req.header("origin") || "").trim();
   if (origin) {
-    let originHost = "";
+    let incomingOrigin: string;
     try {
-      originHost = new URL(origin).hostname.toLowerCase();
+      const parsedOrigin = new URL(origin);
+      if (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") {
+        return "Origin must use HTTP or HTTPS.";
+      }
+      incomingOrigin = parsedOrigin.origin.toLowerCase();
     } catch {
-      return `Origin ${origin} is invalid.`;
+      return "Origin is invalid.";
     }
-    const configured = String(process.env.CORS_ORIGIN || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (originHost !== host && !configured.includes(origin)) {
-      return `Origin ${origin} is not allowed.`;
+
+    // Origin is a tuple (scheme, host, port), not a hostname. Comparing only
+    // hostname permits same-site pages on another port to submit cookie-authenticated
+    // requests because SameSite cookies are not port-scoped.
+    const requestUrl = new URL(c.req.url);
+    const forwardedProto = process.env.TRUST_PROXY === "1"
+      ? String(c.req.header("x-forwarded-proto") || "").split(",")[0].trim().toLowerCase()
+      : "";
+    const protocol = forwardedProto || requestUrl.protocol.slice(0, -1).toLowerCase();
+    if (protocol !== "http" && protocol !== "https") {
+      return "Request protocol is invalid for administrator access.";
+    }
+    let requestOrigin: string;
+    try {
+      requestOrigin = new URL(`${protocol}://${rawHost}`).origin.toLowerCase();
+    } catch {
+      return "Request origin is invalid.";
+    }
+
+    const configuredOrigins = new Set(
+      String(process.env.CORS_ORIGIN || "")
+        .split(",")
+        .map((value) => {
+          try {
+            const parsed = new URL(value.trim());
+            return parsed.protocol === "http:" || parsed.protocol === "https:"
+              ? parsed.origin.toLowerCase()
+              : "";
+          } catch {
+            return "";
+          }
+        })
+        .filter(Boolean)
+    );
+    if (incomingOrigin !== requestOrigin && !configuredOrigins.has(incomingOrigin)) {
+      return "Origin does not match the administrator request origin.";
     }
   }
   return null;
