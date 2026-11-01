@@ -5,7 +5,7 @@
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-1-sqlite-migrations` (based on merged Phase 0 main)  
-> **Last implementation HEAD before this checkpoint update:** `0bddb30cd33b37b23d19bbc8e5ee457a4650a529`  
+> **Last implementation HEAD before this checkpoint update:** `be5019f8e041afd4f69b4e1ca77222c9bbf9ca30`  
 > **Base main HEAD:** `9805d2335293539424fd66af3c047b493edad630`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
@@ -29,7 +29,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Phase 1 implementation is complete for the existing persistence-backed features on `feat/phase-1-sqlite-migrations`, based on merged `main` at `9805d2335293539424fd66af3c047b493edad630`. Draft PR #3 is ready for review against `main`. It includes ordered SQLite migrations, checksummed/idempotent legacy JSON imports, canonical SQLite persistence for custom providers, TokenSaver/SOUL, API key records, proxy settings, and custom Security rule configuration, atomic usage event/snapshot persistence, and a backup/restore utility with file-backed recovery tests. Custom Security rule persistence is separate from actual request-time enforcement. Plans and Persona/Jailbreak do not yet have domain models in this codebase; persistence will be added alongside those features in Phases 3 and 4. Credential verification, hashing, and at-rest encryption remain Phase 2 work. GitHub Actions run `41327665505` passed on Bun 1.4.4: 291 unit/protocol tests passed (0 failed) across 29 files, 8 browser E2E tests passed, standalone build passed, installer/embedded dashboard smoke passed, and the transport fingerprint matched 17 ciphers / 12 extensions. The optional live upstream gate drill was skipped intentionally. The verification run was on Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
+Phase 1 implementation is complete for the existing persistence-backed features on `feat/phase-1-sqlite-migrations`, based on merged `main` at `9805d2335293539424fd66af3c047b493edad630`. Draft PR #3 is ready for review against `main`. It includes ordered SQLite migrations, checksummed/idempotent legacy JSON imports, canonical SQLite persistence for custom providers, TokenSaver/SOUL, API key records, proxy settings, and custom Security rule configuration, atomic usage event/snapshot persistence, and a backup/restore utility with file-backed recovery tests. Custom Security rule persistence is separate from actual request-time enforcement. Plans and Persona/Jailbreak do not yet have domain models in this codebase; persistence will be added alongside those features in Phases 3 and 4. Credential verification, hashing, and at-rest encryption remain Phase 2 work. GitHub Actions run `41327959473` passed on Bun 1.4.4 for the current PR head `be5019f8e041afd4f69b4e1ca77222c9bbf9ca30`: 291 unit/protocol tests passed (0 failed) across 29 files, dashboard E2E passed, standalone build passed, installer/embedded dashboard smoke passed, and the transport fingerprint matched 17 ciphers / 12 extensions. The optional live upstream gate drill was skipped intentionally. The verification run was on Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
 
 ## 2. Agreed Product Direction
 
