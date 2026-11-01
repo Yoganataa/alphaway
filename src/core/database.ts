@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { runMigrations } from "./migrations";
-import { createMigrationBackup } from "./migrations/backup";
+import { createMigrationBackup, encryptExistingMigrationBackups } from "./migrations/backup";
 import { importLegacyJson } from "./legacy-imports";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "./secrets";
 import { hasEmbeddedProviderUrlSecrets } from "./provider-url-secrets";
@@ -84,7 +84,13 @@ export function getDatabase(): any {
     try {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
-    } catch {}
+      // Convert legacy pre-Phase-2 plaintext SQLite migration/restore snapshots
+      // before the application serves requests or exposes backup diagnostics.
+      encryptExistingMigrationBackups(path.join(dir, "backups"));
+      encryptExistingMigrationBackups(dir, path.basename(dbPath));
+    } catch (error) {
+      throw new Error("Could not secure existing SQLite migration backups: " + (error instanceof Error ? error.message : String(error)));
+    }
   }
 
   // 1. Initialize SQLite Database strictly with native Bun SQLite (bun:sqlite)
