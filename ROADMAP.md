@@ -2,9 +2,9 @@
 
 > Canonical engineering roadmap for AlphaWay. Update this file when scope, sequencing, or acceptance criteria change.
 >
-> **Last updated:** 2026-11-01  
-> **Planning baseline:** `main` at `9805d2335293539424fd66af3c047b493edad630`  
-> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 is complete for all existing persistence-backed features and passed GitHub Actions run `41328662898` on current code HEAD `cc6eaf7bfa42993300757725cb0ec728fda48bbd`. PR #3 is open, non-draft, and mergeable. Plans and Persona/Jailbreak persistence are introduced with their domain features in Phases 3 and 4.
+> **Last updated:** 2026-11-02  
+> **Planning baseline:** `main` at `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`  
+> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final PR-head CI run `41328813739` passed on Bun 1.4.4 (build, unit/protocol, installer smoke, and dashboard E2E). The optional live upstream gate drill was skipped by design. Phase 2 has not started and must remain paused until explicitly requested.
 
 ## 1. Product Direction
 
@@ -142,7 +142,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 
-**Status:** Implementation complete for existing persistence-backed features; CI verified on Bun 1.4.4; PR #3 ready for review.  
+**Status:** Merged into `main` via PR #3 (`1d34c45dbf2d7a2e947a62fd298642691c38f8e2`); final PR-head CI passed on Bun 1.4.4.  
 **Priority:** P1
 
 - [x] Introduce a versioned SQLite migration mechanism with ordered migrations, a `schema_migrations` ledger, registry validation, and transactional DDL/history writes.
