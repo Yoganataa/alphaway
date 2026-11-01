@@ -5,7 +5,7 @@ import path from "node:path";
 
 const dashboardOutput = process.env.ALPHAWAY_DASHBOARD_DIR?.trim()
   ? path.resolve(process.env.ALPHAWAY_DASHBOARD_DIR)
-  : path.resolve(import.meta.dir, "dist");
+  : path.resolve(__dirname, "dist");
 
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
@@ -25,7 +25,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dir, "./src"),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
 });
