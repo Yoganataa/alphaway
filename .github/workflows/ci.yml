@@ -76,7 +76,7 @@ jobs:
           "$ALPHAWAY_INSTALL_ROOT/app/alphaway" --version
           mv "$ALPHAWAY_INSTALL_ROOT/app/dist" "$ALPHAWAY_INSTALL_ROOT/dist-outside-app"
           mkdir -p "$ALPHAWAY_INSTALL_ROOT/state"
-          PORT=20261 HOST=127.0.0.1 ALPHAWAY_STATE_DIR="$ALPHAWAY_INSTALL_ROOT/state" \
+          PORT=20261 HOST=127.0.0.1 ALPHAWAY_STATE_DIR="$ALPHAWAY_INSTALL_ROOT/state" ALPHAWAY_DEBUG_ASSETS=1 \
             "$ALPHAWAY_INSTALL_ROOT/app/alphaway" > "$ALPHAWAY_INSTALL_ROOT/server.log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
@@ -89,11 +89,18 @@ jobs:
             sleep 1
           done
           test "$ready" = "1"
-          curl --fail --silent http://127.0.0.1:20261/ > "$ALPHAWAY_INSTALL_ROOT/dashboard.html"
+          if ! curl --fail --silent --show-error http://127.0.0.1:20261/ > "$ALPHAWAY_INSTALL_ROOT/dashboard.html"; then
+            cat "$ALPHAWAY_INSTALL_ROOT/server.log"
+            exit 1
+          fi
           grep -q 'id="app"' "$ALPHAWAY_INSTALL_ROOT/dashboard.html"
           asset="$(grep -oE 'src="/assets/[^"]+\.js"' "$ALPHAWAY_INSTALL_ROOT/dashboard.html" | head -n 1 | cut -d '"' -f 2)"
           test -n "$asset"
-          curl --fail --silent "http://127.0.0.1:20261$asset" >/dev/null
+          if ! curl --fail --silent --show-error "http://127.0.0.1:20261$asset" >/dev/null; then
+            echo "Failed to fetch embedded dashboard asset: $asset"
+            cat "$ALPHAWAY_INSTALL_ROOT/server.log"
+            exit 1
+          fi
 
   e2e:
     name: Dashboard browser tests
