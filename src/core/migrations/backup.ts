@@ -31,7 +31,7 @@ function writeExclusive(filePath: string, data: string | Buffer): void {
 function encryptPlainDatabaseBackup(plainPath: string, expectedBytes?: Buffer): string {
   const read = readRegularFile(plainPath);
   if (expectedBytes && sha256(read.bytes) !== sha256(expectedBytes)) throw new Error("Database backup changed before encryption");
-  const encryptedPath = plainPath.endsWith(".sqlite") ? plainPath + ".awenc" : plainPath.replace(/\.plain\.tmp$/, ".sqlite.awenc");
+  const encryptedPath = plainPath + ".awenc";
   const tempPath = encryptedPath + "." + randomUUID() + ".tmp";
   try {
     writeExclusive(tempPath, encryptSecret(read.bytes.toString("base64")));
@@ -56,7 +56,7 @@ export function encryptExistingMigrationBackups(backupDir: string, legacyDatabas
   const encrypted: string[] = [];
   for (const name of fs.readdirSync(backupDir)) {
     const legacyMigration = /^alphaway-before-.+\.sqlite$/i.test(name);
-    const legacyRestore = Boolean(legacyDatabaseName && name.startsWith(legacyDatabaseName + ".pre-restore-") && name.endsWith(".sqlite"));
+    const legacyRestore = Boolean(legacyDatabaseName && name.startsWith(legacyDatabaseName + ".pre-restore-") && (name.endsWith(".sqlite") || name.endsWith(".tmp")));
     if (!legacyMigration && !legacyRestore) continue;
     const source = path.join(backupDir, name);
     const target = source + ".awenc";
