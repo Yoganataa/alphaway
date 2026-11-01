@@ -9,7 +9,8 @@
 > **Current main HEAD:** `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
-> **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3) (merged)
+> **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3) (merged)  
+> **Superseded Phase 1 PR:** [#2 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/2) (closed; old stacked PR targeting the Phase 0 branch)
 
 ## 1. Current Status
 
@@ -198,7 +199,7 @@ test/verify-quick.test.ts
 
 ### Next phase
 
-Phase 0 and Phase 1 acceptance criteria are met for the tested Linux x86_64 path. PR #1 and PR #3 are both merged. Phase 1 merge commit: `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`. Stop here: Phase 2 — Authentication, API Keys, and Administrative Access has not started. Do not create a Phase 2 branch or PR until the user explicitly instructs to continue.
+Phase 0 and Phase 1 acceptance criteria are met for the tested Linux x86_64 path. PR #1 and PR #3 are merged. Obsolete stacked PR #2 was closed without merging because it targeted the old Phase 0 branch and was superseded by PR #3. There are currently no open PRs. Phase 1 merge commit: `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`. Stop here: Phase 2 — Authentication, API Keys, and Administrative Access has not started. Do not create a Phase 2 branch or PR until the user explicitly instructs to continue.
 
 ## 6. Working Rules for the Next Session
 
@@ -222,9 +223,10 @@ Current Phase 1 implementation files:
 
 Next actions:
 1. Phase 1 is complete and PR #3 is merged into `main` at `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`.
-2. Keep the repository paused on `main`; do not create a Phase 2 branch or PR until the user explicitly requests it.
-3. When authorized to continue, re-check the live repository state and start Phase 2 from the then-current `main`.
-4. Future phase scope remains recorded in `ROADMAP.md`; do not begin Plans, Persona/Jailbreak, or the remaining DLP runtime work prematurely.
+2. The duplicate/obsolete PR #2 is closed (not merged); no PRs remain open.
+3. Keep the repository paused on `main`; do not create a Phase 2 branch or PR until the user explicitly requests it.
+4. When authorized to continue, re-check the live repository state and start Phase 2 from the then-current `main`.
+5. Future phase scope remains recorded in `ROADMAP.md`; do not begin Plans, Persona/Jailbreak, or the remaining DLP runtime work prematurely.
 
 Copy this prompt into the next session:
 
