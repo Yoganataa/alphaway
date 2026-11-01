@@ -142,23 +142,26 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 
-**Status:** Not started  
+**Status:** In progress (feature branch is stacked on Phase 0 PR #1; do not open/merge Phase 1 until Phase 0 is merged).  
 **Priority:** P1
 
-- [ ] Introduce a versioned SQLite migration mechanism with ordered, idempotent migrations and a recorded schema version.
-- [ ] Add migration tests for fresh databases, existing databases, interrupted upgrades, and repeated startup.
-- [ ] Make SQLite the source of truth for application settings, API keys, custom providers, proxy pools, security rules, usage events, plans, and persona configuration.
-- [ ] Convert JSON fallback/mirror behavior into one-time, idempotent legacy import paths where applicable.
-- [ ] Define backup and recovery behavior before destructive migrations or schema changes.
-- [ ] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
+- [x] Introduce a versioned SQLite migration mechanism with ordered migrations, a `schema_migrations` ledger, registry validation, and transactional DDL/history writes.
+- [x] Add tests for fresh databases, adoption of pre-migration databases without data loss, repeated startup, rollback after a failed migration, retry, invalid registry versions, and destructive-migration backup guards.
+- [x] Make SQLite canonical for custom providers, TokenSaver configuration, usage snapshots/events, and proxy pool configuration. Proxy health remains a credential-free runtime cache.
+- [x] Convert legacy custom-provider, usage, TokenSaver, and proxy JSON files into one-time imports tracked by checksums and `legacy_imports`; retain source files as backups.
+- [x] Persist each usage request event and its aggregate snapshot atomically in one SQLite transaction.
+- [x] Add a pre-destructive-migration backup hook using SQLite `VACUUM INTO` and owner-only backup permissions.
+- [ ] Make SQLite canonical for API keys, DLP/security rules, Plans, Persona/Jailbreak configuration, and remaining settings.
+- [ ] Add an end-to-end file-backed backup and restore test, including interrupted upgrade/recovery behavior.
 - [ ] Review credential storage separately: caller API keys should be verifiable without storing raw secrets; upstream credentials that must be replayed need recoverable encryption and a documented key-management strategy.
+- [x] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
 
 **Acceptance criteria**
 
-- A new install and an existing install converge to the same schema.
-- Migrations are safe to rerun and preserve existing user data.
-- No feature silently reads from one source and writes to another.
-- Migration and rollback/recovery behavior is covered by tests and documented.
+- [x] A fresh database and an existing pre-migration database converge to the initial schema without losing existing rows.
+- [x] Migrations are safe to rerun; failed DDL/history transactions roll back together.
+- [ ] All persistence-backed features use SQLite as the canonical source; this is still pending for API keys, security, Plans, and Persona.
+- [ ] File-backed backup/restore and recovery behavior is verified end to end.
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
