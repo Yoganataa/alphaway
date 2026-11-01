@@ -69,38 +69,50 @@ jobs:
           install_root="$(mktemp -d "$RUNNER_TEMP/alphaway-install.XXXXXX")"
           echo "ALPHAWAY_INSTALL_ROOT=$install_root" >> "$GITHUB_ENV"
           BINDIR="$install_root" SOURCE=local NO_START=1 bash install.sh
-      - name: Verify installed binary and embedded dashboard
+
+      - name: Verify upgrade preserves configuration and SQLite state
+        run: |
+          printf 'API_KEY=upgrade-preserved-key\\n' > "$ALPHAWAY_INSTALL_ROOT/.env"
+          ALPHAWAY_DB_PATH="$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite" bun -e '
+            import { Database } from "bun:sqlite";
+            const db = new Database(process.env.ALPHAWAY_DB_PATH);
+            db.exec("CREATE TABLE checkpoint_state (value TEXT NOT NULL)");
+            db.prepare("INSERT INTO checkpoint_state VALUES (?)").run("preserve-me");
+            db.close();
+          '
+          BINDIR="$ALPHAWAY_INSTALL_ROOT" SOURCE=local NO_START=1 bash install.sh
+          grep -qx 'API_KEY=upgrade-preserved-key' "$ALPHAWAY_INSTALL_ROOT/.env"
+          test -s "$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite"
+          test -d "$ALPHAWAY_INSTALL_ROOT/app"
+          find "$ALPHAWAY_INSTALL_ROOT" -maxdepth 1 -type d -name '.backup-app-*' | grep -q .
+          ALPHAWAY_DB_PATH="$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite" bun -e '
+            import { Database } from "bun:sqlite";
+            const db = new Database(process.env.ALPHAWAY_DB_PATH);
+            const row = db.query("SELECT value FROM checkpoint_state").get();
+            if (row?.value !== "preserve-me") process.exit(1);
+            db.close();
+          '
+
+      - name: Verify installer background startup
+        run: |
+          BINDIR="$ALPHAWAY_INSTALL_ROOT" SOURCE=local NO_SERVICE=1 PORT=20261 HOST=127.0.0.1 bash install.sh
+      - name: Verify standalone binary and embedded dashboard
         run: |
           test -s "$ALPHAWAY_INSTALL_ROOT/app/alphaway"
           test -s "$ALPHAWAY_INSTALL_ROOT/app/dist/index.html"
           "$ALPHAWAY_INSTALL_ROOT/app/alphaway" --version
+          test -s "$ALPHAWAY_INSTALL_ROOT/alphaway.pid"
+          server_pid="$(cat "$ALPHAWAY_INSTALL_ROOT/alphaway.pid")"
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           mv "$ALPHAWAY_INSTALL_ROOT/app/dist" "$ALPHAWAY_INSTALL_ROOT/dist-outside-app"
-          mkdir -p "$ALPHAWAY_INSTALL_ROOT/state"
-          PORT=20261 HOST=127.0.0.1 ALPHAWAY_STATE_DIR="$ALPHAWAY_INSTALL_ROOT/state" ALPHAWAY_DEBUG_ASSETS=1 \
-            "$ALPHAWAY_INSTALL_ROOT/app/alphaway" > "$ALPHAWAY_INSTALL_ROOT/server.log" 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
-          ready=0
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:20261/health >/dev/null; then
-              ready=1
-              break
-            fi
-            sleep 1
-          done
-          test "$ready" = "1"
-          if ! curl --fail --silent --show-error http://127.0.0.1:20261/ > "$ALPHAWAY_INSTALL_ROOT/dashboard.html"; then
-            cat "$ALPHAWAY_INSTALL_ROOT/server.log"
-            exit 1
-          fi
+          curl --fail --silent --show-error http://127.0.0.1:20261/health >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:20261/ > "$ALPHAWAY_INSTALL_ROOT/dashboard.html"
           grep -q 'id="app"' "$ALPHAWAY_INSTALL_ROOT/dashboard.html"
           asset="$(grep -oE 'src="/assets/[^"]+\.js"' "$ALPHAWAY_INSTALL_ROOT/dashboard.html" | head -n 1 | cut -d '"' -f 2)"
           test -n "$asset"
-          if ! curl --fail --silent --show-error "http://127.0.0.1:20261$asset" >/dev/null; then
-            echo "Failed to fetch embedded dashboard asset: $asset"
-            cat "$ALPHAWAY_INSTALL_ROOT/server.log"
-            exit 1
-          fi
+          curl --fail --silent --show-error "http://127.0.0.1:20261$asset" >/dev/null
+          kill "$server_pid" 2>/dev/null || true
+          rm -f "$ALPHAWAY_INSTALL_ROOT/alphaway.pid"
 
   e2e:
     name: Dashboard browser tests
