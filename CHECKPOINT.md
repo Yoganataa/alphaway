@@ -4,15 +4,15 @@
 >
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active branch:** `chore/phase-0-ci-distribution`  
-> **Last implementation HEAD before this checkpoint update:** `337cea4287ebc1710c9821c6d1b3315b96686d0a`  
+> **Active branch:** `feat/phase-1-sqlite-migrations` (rebased on latest Phase 0 PR head)  
+> **Last implementation HEAD before this checkpoint update:** `9b3a75def232d88ff08bc7ec283f2112e7f65a85`  
 > **Base main HEAD:** `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
 > **PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
 
 ## 1. Current Status
 
-**Phase 0 is complete and verified on the implementation branch.** All required GitHub Actions jobs passed on Bun 1.4.4 in run `41325262197`. The P1 legacy-systemd retirement finding has been fixed, the review thread resolved, and PR #1 is ready for merge.
+**Phase 0 is complete and verified on `chore/phase-0-ci-distribution`.** All required GitHub Actions jobs passed on Bun 1.4.4 in run `41325262197`. The P1 legacy-systemd retirement finding has been fixed and the review thread resolved. PR #1 remains the merge prerequisite for this Phase 1 branch.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
@@ -20,7 +20,7 @@
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
-- [ ] Phase 1 — Database Migrations and Canonical Persistence (implementation started on `feat/phase-1-sqlite-migrations`; rebase onto Phase 0 after merge before opening its PR).
+- [~] Phase 1 — Database Migrations and Canonical Persistence (implementation started on `feat/phase-1-sqlite-migrations`, now rebased onto latest Phase 0 PR head; no Phase 1 PR opened).
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
@@ -28,7 +28,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Phase 1 implementation has begun on a separate feature branch, but it was created before the final Phase 0 installer review fix and must be rebased onto the merged Phase 0 commit before its own PR is opened. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so verification comes from GitHub Actions. Baseline `main` run `41317617602` failed on stale `.test.js` paths and the absent `test:node` script. The final Phase 0 run `41325262197` completed successfully with Bun 1.4.4: 271 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed (17 ciphers, 12 extensions), and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The installer also disables and retires both legacy systemd service names before replacing the application. The prior P1 review finding is resolved. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
+Phase 1 is active on `feat/phase-1-sqlite-migrations`, rebased directly onto the latest Phase 0 PR head `bbad49140818abc340e0aef3203c317c2e77e173`. It is intentionally not opened as a PR while Phase 0 is still unmerged. The previous Phase 1 branch history was replaced with a clean 14-file diff on top of Phase 0; the E2E timing fix and installer retirement changes are inherited from Phase 0, not duplicated. Phase 1 changes cover versioned SQLite migrations, legacy imports, and canonical persistence for custom providers, TokenSaver, usage, and proxy configuration. New Phase 1 tests have not yet been executed in GitHub Actions; local Bun execution is unavailable in this environment. Phase 0 evidence is GitHub Actions run `41325262197` on Bun 1.4.4: 271 unit/protocol tests passed, 8 Playwright E2E tests passed, build and fingerprint checks passed (17 ciphers, 12 extensions), and installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
 
 ## 2. Agreed Product Direction
 
@@ -211,6 +211,20 @@ Phase 0 acceptance criteria are met for the tested Linux x86_64 path. After revi
 - If work is interrupted, leave the repository in a clean, committed state where practical and update this checkpoint before stopping.
 
 ## 7. Prompt to Resume in a New Chat
+
+Current Phase 1 implementation files:
+- `src/core/migrations/{types.ts,index.ts,001_initial_schema.ts}`: versioned migration runner and initial schema.
+- `src/core/legacy-imports.ts`: idempotent JSON import ledger with checksums.
+- `src/core/database.ts`: migration startup, backup hook, canonical SQLite queries and atomic usage writes.
+- `src/core/custom-providers.ts`, `src/features/tokensaver.ts`, `src/core/usage-tracker.ts`, `src/core/proxy.ts`: SQLite canonical persistence.
+- Tests: `test/migrations.test.ts`, `test/legacy-imports.test.ts`, plus database/proxy/usage regression coverage.
+
+Next actions:
+1. Confirm Phase 0 PR #1 is merged into `main`; do not merge Phase 1 first.
+2. Rebase/fast-forward `feat/phase-1-sqlite-migrations` onto the resulting `main` if needed.
+3. Run `bun run test:unit`, `bun run test:e2e`, `bun run fingerprint:check`, and the production build on Bun 1.4.4 via CI.
+4. Fix all test/type/runtime regressions; then open Phase 1 PR against `main`.
+5. Continue persistence coverage for API keys, security, Plans, and Persona; test file-backed backup/restore before marking Phase 1 complete.
 
 Copy this prompt into the next session:
 
