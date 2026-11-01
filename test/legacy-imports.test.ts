@@ -213,7 +213,7 @@ describe("legacy JSON import", () => {
     const expectedSourceKey = "custom_providers:" + path.resolve(source);
     const providerReport = reports.find((report) => report.sourceKey === expectedSourceKey);
     expect(providerReport?.status).toBe("skipped");
-    expect(providerReport?.details).toContain("Symlinked legacy JSON sources");
+    expect(providerReport?.details).toContain("non-symlink");
     expect(db.prepare("SELECT COUNT(*) AS count FROM custom_providers").get().count).toBe(0);
   }));
 
