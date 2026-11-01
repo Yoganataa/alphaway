@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **Current state:** Phase 0 acceptance criteria passed on `chore/phase-0-ci-distribution` in GitHub Actions run `41320438608`. PR #1 remains open for review.
+> **Current state:** Phase 0 acceptance criteria passed on `chore/phase-0-ci-distribution` in GitHub Actions run `41325262197`. The installer legacy-service retirement review finding is fixed and its thread is resolved; PR #1 is ready for merge.
 
 ## 1. Product Direction
 
@@ -129,11 +129,12 @@ The phases are sequential. A phase is not complete until its acceptance criteria
 
 **Verification evidence (2026-11-01)**
 
-GitHub Actions [run `41322403767`](https://github.com/Yoganataa/alphaway/actions/runs/41322403767) completed successfully on Bun 1.4.4:
-- Unit and protocol tests: **270 passed, 0 failed** across 25 files.
+GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions/runs/41325262197) completed successfully on Bun 1.4.4 after the legacy-service retirement fix:
+- Unit and protocol tests: **271 passed, 0 failed** across 25 files.
 - Transport fingerprint: Bun 1.4.4 matched the 17-cipher / 12-extension baseline.
 - Dashboard and standalone binary build: passed.
 - Installer smoke: passed fresh install, upgrade preservation of `.env` and SQLite row, detached background startup, and embedded dashboard/JS asset serving after physical `dist/` removal.
+- Legacy service retirement: `opencode-bridge.service` and `opencode-free-bridge.service` are disabled and local unit definitions are moved out of systemd's active search path before replacing the app; regression assertion passed. The prior P1 Codex review thread is resolved.
 - Browser E2E: **8 passed, 0 failed**.
 - Live upstream gate drill: intentionally skipped; it is an explicit manual workflow action, not a deterministic CI check.
 
