@@ -214,11 +214,52 @@ stop_managed_background() {
   rm -f "$pid_file"
 }
 
+retire_legacy_systemd_services() {
+  command -v systemctl >/dev/null 2>&1 || return 0
+
+  local stamp name system_unit user_unit
+  stamp="$(date +%Y%m%d%H%M%S)"
+
+  # Older AlphaWay/OpenCode Bridge releases installed one of these units.
+  # Stopping alone is insufficient: systemd may restart an enabled unit after
+  # reboot and race the new alphaway.service for the same port.
+  for name in opencode-bridge.service opencode-free-bridge.service; do
+    system_unit="/etc/systemd/system/$name"
+    user_unit="$HOME/.config/systemd/user/$name"
+
+    if [ -f "$system_unit" ] || systemctl cat "$name" >/dev/null 2>&1; then
+      # Disable and stop while the original unit is still discoverable.
+      systemctl disable --now "$name" >/dev/null 2>&1 || true
+
+      # Preserve local unit definitions for diagnostics/recovery, but move them
+      # outside systemd's active unit search path.
+      if [ -f "$system_unit" ]; then
+        mv "$system_unit" "$system_unit.retired-$stamp" \
+          || die "Could not retire legacy system unit $system_unit; refusing to continue"
+      fi
+      rm -f "/etc/systemd/system/multi-user.target.wants/$name" \
+        "/etc/systemd/system/default.target.wants/$name"
+      systemctl daemon-reload >/dev/null 2>&1 || true
+      say "Retired legacy system service $name"
+    fi
+
+    if [ -f "$user_unit" ]; then
+      systemctl --user disable --now "$name" >/dev/null 2>&1 || true
+      mv "$user_unit" "$user_unit.retired-$stamp" \
+        || die "Could not retire legacy user unit $user_unit; refusing to continue"
+      rm -f "$HOME/.config/systemd/user/default.target.wants/$name"
+      systemctl --user daemon-reload >/dev/null 2>&1 || true
+      say "Retired legacy user service $name"
+    fi
+  done
+}
+
 stop_existing_services() {
   stop_managed_background
   if command -v systemctl >/dev/null 2>&1; then
     systemctl stop alphaway 2>/dev/null || true
     systemctl --user stop alphaway 2>/dev/null || true
+    retire_legacy_systemd_services
   fi
 
   if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
