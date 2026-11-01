@@ -93,7 +93,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     // Check CodeBuddy International section
     expect(mainText).toContain("CodeBuddy International");
     expect(mainText).toContain("WorkBuddy 5.8.4");
-    expect(mainText).toContain("Start OAuth Device Login");
+    expect(mainText).toContain("Start OAuth Login");
   }, 15000);
 
   it("navigates to TokenSaver, toggles settings and tests compression sandbox", async () => {
