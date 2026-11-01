@@ -62,6 +62,9 @@
 ## 🚀 Getting Started
 
 ### 1. Running Directly with Bun (Developer Mode)
+
+**Runtime requirement:** Bun 1.4.4 or newer. AlphaWay's OpenCode transport profile is verified against Bun 1.4.4 (17 TLS cipher suites, 12 extensions); run `bun run fingerprint:check` before adopting a newer runtime.
+
 ```bash
 # Clone the repository
 git clone https://github.com/Yoganataa/alphaway.git
