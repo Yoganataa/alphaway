@@ -176,7 +176,17 @@ All `/api/*` management endpoints require an administrator session. The session 
 
 CodeBuddy upstream credentials are separate from the AlphaWay gateway key. The dashboard OAuth flow and CLI OAuth login store the CodeBuddy token encrypted in SQLite; the HTTP polling response never returns the access token. `CODEBUDDY_API_KEY` remains an optional environment override for existing deployments. An explicit `x-codebuddy-api-key` may be sent per request when no server-side credential is configured. AlphaWay never forwards its gateway `Authorization` token as the CodeBuddy upstream credential.
 
-Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encrypted at rest with AES-256-GCM. When `ALPHAWAY_ENCRYPTION_KEY` is unset, AlphaWay generates `~/.alphaway/secret-encryption.key`. Back up that file together with the database; losing the encryption key makes encrypted credentials unrecoverable. POSIX key-file permissions are restricted to the owner. The one-time legacy JSON import preserves source files as rollback copies: symlink sources are refused and POSIX permissions are reduced to `0600`, but those retained JSON contents are still plaintext. Remove or separately protect those rollback files once they are no longer needed; Windows ACL behavior is not yet verified.
+Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encrypted at rest with AES-256-GCM. When `ALPHAWAY_ENCRYPTION_KEY` is unset, AlphaWay generates `~/.alphaway/secret-encryption.key`. Back up that file together with the database; losing the encryption key makes encrypted credentials unrecoverable. POSIX key-file permissions are restricted to the owner.
+
+The one-time legacy JSON importer refuses symlink sources and replaces each processed source (including malformed or structurally invalid JSON) with an AES-256-GCM rollback envelope after handling it. The original filenames remain in place, but their contents are no longer plaintext. Sources larger than 50 MiB or files that cannot be safely replaced are not imported/encrypted; on POSIX they remain owner-only (`0600`) and are reported. Windows ACL behavior is not yet verified.
+
+To restore an encrypted legacy source to a new, non-existing JSON file:
+
+```bash
+bun src/index.ts --restore-legacy-backup ~/.alphaway/custom_providers.json ~/.alphaway/custom_providers.restored.json
+```
+
+The command requires the same `ALPHAWAY_ENCRYPTION_KEY` (or local master-key file) that encrypted the backup. It never overwrites an existing destination and writes the restored JSON as `0600` on POSIX. For a skipped/invalid source, edit the restored copy and replace the original source file while AlphaWay is stopped; the changed checksum lets the importer retry. Already-imported SQLite data remains authoritative, so use the dashboard to modify providers/settings after a successful import.
 
 ---
 ## 🔌 Client Integration Guide (Tri-Protocol)
