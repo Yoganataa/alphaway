@@ -96,6 +96,18 @@ curl -s http://127.0.0.1:20129/response \
 
 ---
 
+## SQLite Migrations and Persistent State
+
+- The canonical application database is native Bun SQLite at `~/.alphaway/alphaway.sqlite` (or the configured `ALPHAWAY_DB_PATH`). Keep WAL mode enabled for file-backed databases.
+- All schema changes MUST be introduced as a new ordered migration under `src/core/migrations/`. Do not add production `CREATE TABLE` blocks to `getDatabase()` or reintroduce ad-hoc schema creation outside the migration registry.
+- Migration versions are contiguous and immutable after release. Never rewrite an already-shipped migration; add a new migration instead.
+- Each migration's DDL/data changes and its `schema_migrations` row execute in one SQLite transaction. A failed migration must leave the version unapplied so startup can retry safely.
+- Mark destructive migrations with `destructive: true`. The runner refuses to execute them without a backup callback. Production startup supplies a `VACUUM INTO` backup under `<database-directory>/backups/` before applying destructive changes.
+- SQLite is the source of truth for application settings, custom providers, TokenSaver settings, proxy configuration, request logs, and usage snapshots. Do not add JSON write mirrors or silently fall back to a second source of truth.
+- Legacy JSON files are read only by `src/core/legacy-imports.ts`. Imports are transactional, checksum-ledgered in `legacy_imports`, preserve existing SQLite values, and leave source files untouched. Never delete source files as part of import.
+- Add tests for fresh DBs, pre-migration DB adoption, repeated startup, failure/rollback/retry, SQLite precedence, and import idempotency whenever persistent schemas or formats change.
+- Caller API-key hashing and recoverable encryption/key management for upstream credentials are separate security work. Do not mistake restrictive filesystem permissions for a completed credential-security design.
+
 ## 3. Connecting Clients & Coding Assistants
 
 Use these connection details in Cursor, Continue.dev, Cline, Roo-Code, Claude Code, or OpenAI/Anthropic SDKs:
