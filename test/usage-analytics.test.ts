@@ -1,3 +1,4 @@
+import { dbGetRequestLogById, dbGetSetting } from "../src/core/database";
 /**
  * Usage and Analytics Engine Tests
  */
@@ -65,6 +66,14 @@ describe("Usage and Token Analytics Engine", () => {
     expect(stats.byModel["mimo-v2.6-flash-free"]).toBeDefined();
     expect(stats.byModel["mimo-v2.6-flash-free"].requests).toBe(1);
     expect(stats.byModel["mimo-v2.6-flash-free"].totalTokens).toBe(200);
+
+    // Request event and aggregate projection are committed together.
+    const persistedLog = dbGetRequestLogById(entry.id);
+    const persistedSnapshot = dbGetSetting<any>("usage_stats_snapshot", null);
+    expect(persistedLog?.totalTokens).toBe(200);
+    expect(persistedSnapshot.totalRequests).toBe(1);
+    expect(persistedSnapshot.totalTokens).toBe(200);
+    expect(persistedSnapshot.recentLogs[0].id).toBe(entry.id);
   });
 
   it("tracks tri-protocol requests across different providers", () => {
