@@ -3,8 +3,8 @@
 > Canonical engineering roadmap for AlphaWay. Update this file when scope, sequencing, or acceptance criteria change.
 >
 > **Last updated:** 2026-11-02  
-> **Planning baseline:** `main` at `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`  
-> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final PR-head CI run `41328813739` passed on Bun 1.4.4 (build, unit/protocol, installer smoke, and dashboard E2E). The optional live upstream gate drill was skipped by design. Phase 2 has not started and must remain paused until explicitly requested.
+> **Planning baseline:** `main` at `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
+> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final Phase 1 PR-head CI run `41328813739` passed on Bun 1.4.4. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4. The most recent completed CI run `41338584108` passed on commit `b6980cec177f22f0f16306b1b4f63059a23595bc` (311 unit/protocol tests, transport fingerprint, build, installer smoke, and dashboard E2E); a newer run for the current branch head was queued at the last check. The optional live upstream gate drill remains skipped by design.
 
 ## 1. Product Direction
 
@@ -170,7 +170,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; CI and final review pending.  
+**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; PR #4 is draft. CI has passed on earlier branch heads; latest-head CI and final security review remain pending.  
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -181,12 +181,15 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [x] Replace predictable `Math.random()` API key generation with CSPRNG keys and UUID identifiers.
 - [ ] Add policy/plan assignment to individual keys. The current implementation has inference scopes; plan enforcement remains Phase 3 work.
 - [x] Add negative tests for missing, invalid, revoked, wrong-scope, and unauthenticated admin credentials.
-- [ ] Finish the full secret-flow audit across logs, upstream errors, analytics, backups, and platform-specific storage permissions. Current coverage includes hashed API keys, provider/proxy/relay/CodeBuddy OAuth encryption, response redaction, and one-time bootstrap/session tests.
+- [ ] Finish the full secret-flow audit across logs, analytics, backup/export surfaces, and platform-specific storage permissions. Current coverage includes hashed API keys, encrypted provider/proxy/relay/CodeBuddy OAuth credentials, CodeBuddy/custom-provider upstream error redaction, and one-time bootstrap/session tests.
 - [x] Encrypt custom-provider credentials at the SQLite adapter boundary, proxy/relay credentials in the egress store, legacy JSON imports, and CodeBuddy OAuth credentials.
 - [x] Separate AlphaWay gateway bearer credentials from CodeBuddy upstream credentials; use server-side CodeBuddy configuration or the explicit `x-codebuddy-api-key` override.
 - [x] Keep the CodeBuddy OAuth access/refresh token out of HTTP responses and persist the upstream access token encrypted in SQLite.
 - [x] Align the dashboard CodeBuddy OAuth client with the provider's actual `state`/`authUrl` polling contract.
 - [x] Isolate Bun unit-test SQLite state using a preload before application modules are imported.
+- [x] Bound administrator login username/password lengths and failed-login tracking memory; add regression coverage for lockout and API-key label control characters.
+- [x] Make `/health` recognize an encrypted CodeBuddy OAuth credential in SQLite without exposing the token.
+- [x] Add direct AES-GCM tests for nonce uniqueness, authenticated decryption/tamper rejection, symlink refusal, and POSIX owner-only key-file permissions.
 
 **Implementation notes**
 
@@ -197,15 +200,17 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 **Verification state**
 
-- The feature branch has not yet been verified by GitHub Actions. Create a draft PR to run the repository CI on Bun 1.4.4, inspect all failing job logs, and resolve findings before marking Phase 2 complete.
+- Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
+- GitHub Actions run `41338584108` passed on Bun 1.4.4 for commit `b6980cec177f22f0f16306b1b4f63059a23595bc`: **311 passed, 0 failed** across 31 test files; the 17-cipher/12-extension transport fingerprint, standalone build, installer/embedded-dashboard smoke, and browser E2E jobs passed. The optional live upstream drill was skipped as designed.
+- Run `41338441043` also passed on commit `2eb3d54d95e79ca30244dbd01a2575908563821b`, including direct AES-GCM tests (310 passed, 0 failed). CI must be rechecked on the latest branch head `a7ee2b123c77f2adb55588df5be2b5e62a6d298b` before treating the new login/key-label tests as verified.
 - Do not begin Phase 3 until Phase 2 CI, security review, and merge acceptance criteria are satisfied.
 
 **Acceptance criteria**
 
-- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; CI pending).
-- The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; CI pending).
-- Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; CI pending).
-- Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter tests committed; CI pending).
+- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; CI passed on prior branch heads; latest-head rerun pending).
+- The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; CI passed on prior branch heads; latest-head rerun pending).
+- Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; CI passed on prior branch heads; latest-head rerun pending).
+- Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter tests committed; CI passed on prior branch heads; latest-head rerun pending).
 ### Phase 3 — Plans, Limits, and Request Enforcement
 
 **Status:** Not started  
@@ -214,7 +219,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [ ] Define a typed plan model with lifecycle state, name, description, and configurable limits.
 - [ ] Support limits for request count, tokens, RPM, TPM, concurrency, allowed models/providers, and time windows where meaningful.
 - [ ] Support hard limits and configurable warning thresholds.
-- [ ] Assign plans to API keys; define deterministic precedence between plan defaults and per-key overrides.
+- [ ] Assign plans to API keys (the Phase 2 key records already expose inference scopes); define deterministic precedence between plan defaults and per-key overrides.
 - [ ] Enforce policy consistently across OpenAI Chat, Anthropic Messages, and Codex Responses before forwarding upstream.
 - [ ] Implement atomic quota reservation and settlement so concurrent requests cannot overspend limits.
 - [ ] Account correctly for streaming success, upstream errors, cancellations, client disconnects, and unknown usage.
@@ -305,6 +310,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [ ] Run the complete test suite, type checks, UI build, binary build, fingerprint check, and deterministic offline drills.
 - [ ] Run cross-platform install/upgrade smoke tests for the supported targets.
 - [ ] Run security review for admin auth, key storage, SSRF, proxy egress, DLP, file import, and log redaction.
+- [ ] Implement and verify restrictive Windows ACLs for the generated encryption master key and bootstrap token; POSIX mode `0600`/`0700` is tested, but Windows ACL behavior is not verified yet.
 - [ ] Validate backward compatibility for the three client protocols and all preserved provider handshakes.
 - [ ] Update README, AGENTS, CHANGELOG, environment examples, installer docs, and THIRD_PARTY_NOTICES to match the shipped implementation.
 - [ ] Document backup/restore, admin bootstrap, API key lifecycle, Plans, Persona, quota semantics, and known provider limitations.
