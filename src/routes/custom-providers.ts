@@ -14,7 +14,12 @@ import { adminRequestError } from "../core/admin-guard";
 
 function publicProvider(provider: CustomProvider) {
   const { apiKey, ...safe } = provider;
-  return { ...safe, apiKey: "", hasApiKey: Boolean(apiKey) };
+  return {
+    ...safe,
+    baseUrl: redactProviderBaseUrl(provider.baseUrl),
+    apiKey: "",
+    hasApiKey: Boolean(apiKey || hasEmbeddedProviderUrlSecrets(provider.baseUrl)),
+  };
 }
 
 export const customProvidersRoute = new Hono();
@@ -103,7 +108,7 @@ customProvidersRoute.post("/api/custom-providers/test", async (c) => {
 
       if (!res.ok) {
         const text = await res.text();
-        return c.json({ ok: false, status: res.status, error: redactUpstreamError(text, [cleanKey, rawKey]) });
+        return c.json({ ok: false, status: res.status, error: redactUpstreamError(text, [cleanKey, rawKey, ...embeddedProviderUrlSecrets(cleanUrl)]) });
       }
       return c.json({ ok: true, status: res.status, message: "Anthropic endpoint reachable!" });
     } else {
