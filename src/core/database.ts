@@ -129,7 +129,7 @@ export function getDatabase(): any {
 
   // Import pre-SQLite JSON data exactly once. Each source file and all of
   // its row/settings writes are committed in one transaction with its ledger
-  // record. Source files remain untouched as operator-readable backups.
+  // record. Processed legacy sources are replaced by encrypted rollback envelopes.
   const legacyDirs = [
     process.env.ALPHAWAY_HOME,
     path.join(os.homedir(), ".opencode-free-bridge"),
