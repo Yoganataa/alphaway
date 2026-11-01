@@ -170,8 +170,6 @@
         isOpen = false;
       },
     },
-
-    },
   ];
 
   let filteredItems = $derived.by(() => {
