@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **Current state:** Phase 0 acceptance criteria passed on `chore/phase-0-ci-distribution` in GitHub Actions run `41320438608`. PR #1 remains open for review.
+> **Current state:** Phase 0 passed on Bun 1.4.4 in GitHub Actions run `41322998575`; PR #1 is open. Phase 1 implementation is in progress on `feat/phase-1-sqlite-migrations-rebased`.
 
 ## 1. Product Direction
 
@@ -141,23 +141,32 @@ GitHub Actions [run `41322403767`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 
-**Status:** Not started  
+**Status:** In progress — implementation added; PR/CI verification pending  
 **Priority:** P1
 
-- [ ] Introduce a versioned SQLite migration mechanism with ordered, idempotent migrations and a recorded schema version.
-- [ ] Add migration tests for fresh databases, existing databases, interrupted upgrades, and repeated startup.
-- [ ] Make SQLite the source of truth for application settings, API keys, custom providers, proxy pools, security rules, usage events, plans, and persona configuration.
-- [ ] Convert JSON fallback/mirror behavior into one-time, idempotent legacy import paths where applicable.
-- [ ] Define backup and recovery behavior before destructive migrations or schema changes.
-- [ ] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
+- [x] Introduce a versioned SQLite migration mechanism with ordered, contiguous migrations and a recorded `schema_migrations` version.
+- [x] Add migration tests for fresh databases, pre-migration database adoption, repeated startup, failed migration rollback, retry, registry validation, and destructive-migration backup requirements.
+- [x] Adopt the existing `custom_providers`, `request_logs`, and `app_settings` schema without dropping/re-writing current rows.
+- [x] Make SQLite canonical for existing TokenSaver config, custom providers, proxy/pool intent, usage request events, and aggregate usage snapshots. Keep the proxy health file as a runtime-only cache, not configuration.
+- [ ] Extend canonical SQLite persistence to Security rules and future Plans/Persona records as those backend features are implemented; do not invent schemas for UI-only placeholders.
+- [x] Replace custom-provider, usage, TokenSaver, and proxy JSON fallback/mirror writes with a one-time legacy import path.
+- [x] Record legacy imports in `legacy_imports` with source path, checksum, status, timestamp, row count, and details. Preserve source JSON files as recovery copies.
+- [x] Preserve existing SQLite data over stale JSON mirrors: provider import only runs when the provider table is empty; usage import is skipped when a canonical usage snapshot already exists; existing settings are not overwritten.
+- [x] Make import work transactional and retry a previously skipped source when its content checksum changes.
+- [x] Define pre-destructive-migration backup behavior. Destructive migrations require a backup callback; production startup checkpoints WAL and creates a `VACUUM INTO` backup under `backups/` before applying them.
+- [x] Keep native Bun SQLite and WAL behavior; no second database engine introduced.
 - [ ] Review credential storage separately: caller API keys should be verifiable without storing raw secrets; upstream credentials that must be replayed need recoverable encryption and a documented key-management strategy.
+- [ ] Run full Bun 1.4.4 CI on this branch, inspect all failures, and verify migration/import behavior before marking Phase 1 complete.
 
 **Acceptance criteria**
 
-- A new install and an existing install converge to the same schema.
-- Migrations are safe to rerun and preserve existing user data.
-- No feature silently reads from one source and writes to another.
-- Migration and rollback/recovery behavior is covered by tests and documented.
+- A new install and an existing pre-migration install converge to the same schema without losing rows.
+- Migrations are safe to rerun; migration DDL and history changes are atomic.
+- Existing SQLite data is not overwritten or resurrected by stale JSON mirrors.
+- Legacy imports are idempotent and recoverable; source files remain available until an operator removes them.
+- A destructive migration cannot proceed without a successful pre-migration backup.
+- Usage request events and the corresponding aggregate snapshot are committed in one transaction.
+- CI covers migration, importer, proxy-setting, and usage-persistence regression tests.
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
