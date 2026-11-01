@@ -131,10 +131,10 @@ elif [ "$SOURCE" = "remote" ]; then
   ARCHIVE_URL="https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH"
   say "Downloading source snapshot: $REPO@$BRANCH"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL --retry 3 --retry-delay 1 "$ARCHIVE_URL" -o "$ARCHIVE" \
+    curl -fsSL --connect-timeout 10 --max-time 180 --retry 3 --retry-delay 1 "$ARCHIVE_URL" -o "$ARCHIVE" \
       || die "Could not download source archive from $ARCHIVE_URL"
   elif command -v wget >/dev/null 2>&1; then
-    wget -qO "$ARCHIVE" "$ARCHIVE_URL" || die "Could not download source archive from $ARCHIVE_URL"
+    wget -q --timeout=180 -O "$ARCHIVE" "$ARCHIVE_URL" || die "Could not download source archive from $ARCHIVE_URL"
   else
     die "curl or wget is required to download source"
   fi
@@ -365,12 +365,20 @@ PLIST
 
 start_background() {
   local log_file="$BINDIR/alphaway.log"
-  (
-    cd "$APPDIR"
+
+  # Change directory in the installer shell and detach the executable
+  # directly; never put a background child inside a command-substitution or
+  # subshell, which can keep a piped installer alive until the child exits.
+  pushd "$BINDIR" >/dev/null
+  if command -v setsid >/dev/null 2>&1; then
+    setsid env PORT="$PORT" HOST="$HOST" ALPHAWAY_STATE_DIR="$BINDIR" \
+      "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
+  else
     nohup env PORT="$PORT" HOST="$HOST" ALPHAWAY_STATE_DIR="$BINDIR" \
       "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
-    echo $! > "$BINDIR/alphaway.pid"
-  )
+  fi
+  echo $! > "$BINDIR/alphaway.pid"
+  popd >/dev/null
 }
 
 if [ "$NO_START" = "1" ]; then
