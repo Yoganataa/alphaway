@@ -106,7 +106,7 @@ describe("AlphaWay SQLite Database Engine", () => {
     expect(list[0].id).toBe("deepseek-test");
     expect(list[0].name).toBe("DeepSeek Provider");
     expect(list[0].apiKey).toBe("sk-test-key");
-    const stored = db.prepare("SELECT api_key FROM custom_providers WHERE id = ?").get("deepseek-test") as { api_key: string };
+    const stored = getDatabase().prepare("SELECT api_key FROM custom_providers WHERE id = ?").get("deepseek-test") as { api_key: string };
     expect(stored.api_key).toMatch(/^awenc:v1:/);
     expect(stored.api_key).not.toContain("sk-test-key");
     expect(list[0].models).toContain("deepseek-chat");
