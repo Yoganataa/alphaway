@@ -104,7 +104,7 @@ describe("legacy JSON import", () => {
     });
 
     writeJson(stateDir, "tokensaver.json", { rtkEnabled: true, soulMode: "preset" });
-    writeJson(legacyDir, "tokensaver.json", { rtkEnabled: true, soulMode: "auto" });
+    writeJson(legacyDir!, "tokensaver.json", { rtkEnabled: true, soulMode: "auto" });
     writeJson(stateDir, "proxy.json", {
       url: "http://user:secret@127.0.0.1:3128",
       strategy: "failover",
@@ -113,7 +113,7 @@ describe("legacy JSON import", () => {
       maxCooldownMs: 900000,
     });
 
-    const first = importLegacyJson(db, stateDir, [legacyDir]);
+    const first = importLegacyJson(db, stateDir, [legacyDir!]);
     expect(first).toHaveLength(5);
     expect(first.every((report) => report.status === "imported")).toBe(true);
 
@@ -131,14 +131,14 @@ describe("legacy JSON import", () => {
     expect(provider.api_key).toBe("sk-legacy-deepseek");
     expect(JSON.parse(provider.models)).toEqual(["deepseek-chat"]);
 
-    const usage = readSetting(db, "usage_stats_snapshot");
+    const usage = readSetting("usage_stats_snapshot");
     expect(usage.totalRequests).toBe(4);
     expect(usage.dailyHistory["2026-10-31"].tokens).toBe(200);
     expect(db.prepare("SELECT id FROM request_logs WHERE id = ?").get("req_legacy_001")).toBeDefined();
 
     // Pre-existing SQLite state wins over either JSON source.
-    expect(readSetting(db, "tokensaver_config")).toEqual({ rtkEnabled: false, soulMode: "custom" });
-    expect(readSetting(db, "proxy_config")).toEqual({
+    expect(readSetting("tokensaver_config")).toEqual({ rtkEnabled: false, soulMode: "custom" });
+    expect(readSetting("proxy_config")).toEqual({
       url: "http://user:secret@127.0.0.1:3128",
       strategy: "failover",
       pool: [{ id: "egress-1", label: "primary", url: "http://user:secret@127.0.0.1:3128", enabled: true, weight: 1 }],
@@ -157,7 +157,7 @@ describe("legacy JSON import", () => {
     expect(fs.existsSync(path.join(stateDir, "tokensaver.json"))).toBe(true);
     expect(fs.existsSync(path.join(stateDir, "proxy.json"))).toBe(true);
 
-    const second = importLegacyJson(db, stateDir, [legacyDir]);
+    const second = importLegacyJson(db, stateDir, [legacyDir!]);
     expect(second.every((report) => report.status === "already-imported")).toBe(true);
     expect(db.prepare("SELECT COUNT(*) AS count FROM custom_providers").get().count).toBe(1);
     expect(db.prepare("SELECT COUNT(*) AS count FROM request_logs").get().count).toBe(1);
@@ -253,7 +253,7 @@ describe("legacy JSON import", () => {
     const report = importLegacyJson(db, stateDir, []);
     expect(report).toHaveLength(1);
     expect(report[0].details).toContain("Existing SQLite usage snapshot was retained");
-    expect(readSetting(db, "usage_stats_snapshot")).toEqual({
+    expect(readSetting("usage_stats_snapshot")).toEqual({
       totalRequests: 9,
       totalTokens: 900,
       recentLogs: [],
@@ -262,7 +262,7 @@ describe("legacy JSON import", () => {
   }));
   it("imports from the legacy bridge directory when the current state has no source file", () => withSandbox(true, ({ db, stateDir, legacyDir, readSetting }) => {
 
-    writeJson(legacyDir, "custom_providers.json", [
+    writeJson(legacyDir!, "custom_providers.json", [
       {
         id: "old-root-provider",
         name: "Old root provider",
@@ -272,7 +272,7 @@ describe("legacy JSON import", () => {
       },
     ]);
 
-    const report = importLegacyJson(db, stateDir, [legacyDir]);
+    const report = importLegacyJson(db, stateDir, [legacyDir!]);
     expect(report).toHaveLength(1);
     expect(report[0].status).toBe("imported");
     expect(db.prepare("SELECT id FROM custom_providers WHERE id = ?").get("old-root-provider")).toBeDefined();
