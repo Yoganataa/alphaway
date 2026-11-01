@@ -3,8 +3,11 @@
  */
 
 import { describe, it, expect, beforeEach } from "bun:test";
+import os from "node:os";
+import path from "node:path";
 import {
   getDatabase,
+  resolveDbDir,
   closeDatabase,
   dbLoadCustomProviders,
   dbSaveCustomProvider,
@@ -22,6 +25,29 @@ import {
 } from "../src/core/database";
 
 describe("AlphaWay SQLite Database Engine", () => {
+  it("keeps the existing SQLite root when ALPHAWAY_HOME only identifies legacy JSON state", () => {
+    const previous = {
+      home: process.env.ALPHAWAY_HOME,
+      stateDir: process.env.ALPHAWAY_STATE_DIR,
+      legacyStateDir: process.env.OPENCODE_BRIDGE_STATE_DIR,
+    };
+
+    try {
+      process.env.ALPHAWAY_HOME = path.join(os.tmpdir(), "alphaway-legacy-json-home");
+      delete process.env.ALPHAWAY_STATE_DIR;
+      delete process.env.OPENCODE_BRIDGE_STATE_DIR;
+
+      expect(resolveDbDir()).toBe(path.join(os.homedir(), ".alphaway"));
+    } finally {
+      if (previous.home === undefined) delete process.env.ALPHAWAY_HOME;
+      else process.env.ALPHAWAY_HOME = previous.home;
+      if (previous.stateDir === undefined) delete process.env.ALPHAWAY_STATE_DIR;
+      else process.env.ALPHAWAY_STATE_DIR = previous.stateDir;
+      if (previous.legacyStateDir === undefined) delete process.env.OPENCODE_BRIDGE_STATE_DIR;
+      else process.env.OPENCODE_BRIDGE_STATE_DIR = previous.legacyStateDir;
+    }
+  });
+
   beforeEach(() => {
     // Clean tables for each test
     const db = getDatabase();
@@ -37,6 +63,13 @@ describe("AlphaWay SQLite Database Engine", () => {
     expect(tables).toContain("custom_providers");
     expect(tables).toContain("request_logs");
     expect(tables).toContain("app_settings");
+    expect(tables).toContain("schema_migrations");
+    expect(tables).toContain("legacy_imports");
+
+    const schemaVersion = db
+      .prepare("SELECT MAX(version) AS version FROM schema_migrations")
+      .get()?.version;
+    expect(schemaVersion).toBe(1);
   });
 
   it("performs CRUD operations on custom providers", () => {

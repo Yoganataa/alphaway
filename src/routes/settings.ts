@@ -28,6 +28,118 @@ const DEFAULT_KEY: APIKeyRecord = {
   status: "active",
 };
 
+export interface SecurityKeywordRule {
+  id: string;
+  pattern: string;
+  action: "mask" | "block";
+  description: string;
+  enabled: boolean;
+}
+
+const DEFAULT_SECURITY_RULES: SecurityKeywordRule[] = [
+  {
+    id: "rule-1",
+    pattern: "browser_cookies_db",
+    action: "block",
+    description: "Anti-Infostealer: Protect browser cookies and login databases",
+    enabled: true,
+  },
+  {
+    id: "rule-2",
+    pattern: "dpapi_masterkey",
+    action: "block",
+    description: "Anti-Infostealer: Protect Windows DPAPI credentials and vault",
+    enabled: true,
+  },
+  {
+    id: "rule-3",
+    pattern: "keychain_access",
+    action: "block",
+    description: "Anti-Infostealer: Protect macOS Keychain database",
+    enabled: true,
+  },
+  {
+    id: "rule-4",
+    pattern: "openai_secret_token",
+    action: "mask",
+    description: "DLP: Redact provider API keys before forwarding",
+    enabled: true,
+  },
+  {
+    id: "rule-5",
+    pattern: "aws_credentials",
+    action: "mask",
+    description: "DLP: Redact AWS access keys and session secrets",
+    enabled: true,
+  },
+];
+
+function validateSecurityRules(input: unknown): SecurityKeywordRule[] | null {
+  if (!Array.isArray(input) || input.length > 100) return null;
+
+  const ids = new Set<string>();
+  const rules: SecurityKeywordRule[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const value = item as Record<string, unknown>;
+    if (
+      typeof value.id !== "string" ||
+      !/^[a-zA-Z0-9_-]{1,64}$/.test(value.id) ||
+      ids.has(value.id) ||
+      typeof value.pattern !== "string" ||
+      !value.pattern.trim() ||
+      value.pattern.trim().length > 128 ||
+      (value.action !== "mask" && value.action !== "block") ||
+      typeof value.description !== "string" ||
+      value.description.length > 256 ||
+      typeof value.enabled !== "boolean"
+    ) {
+      return null;
+    }
+
+    ids.add(value.id);
+    rules.push({
+      id: value.id,
+      pattern: value.pattern.trim(),
+      action: value.action,
+      description: value.description.trim(),
+      enabled: value.enabled,
+    });
+  }
+  return rules;
+}
+
+// GET /api/security/rules
+settingsRoute.get("/api/security/rules", (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+
+  const rules = dbGetSetting<SecurityKeywordRule[]>(
+    "security_rules",
+    DEFAULT_SECURITY_RULES
+  );
+  return c.json({ rules });
+});
+
+// PUT /api/security/rules
+settingsRoute.put("/api/security/rules", async (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+
+  const body = await c.req.json().catch(() => null);
+  const rules = validateSecurityRules(body?.rules);
+  if (!rules) {
+    return c.json(
+      { error: "Invalid security rules. Provide up to 100 unique rules with valid IDs, patterns, actions, descriptions, and enabled flags." },
+      400
+    );
+  }
+
+  dbSetSetting("security_rules", rules);
+  pushLog("info", `[Security] Persisted ${rules.length} custom DLP rule(s)`);
+  return c.json({ ok: true, rules });
+});
+
 // GET /api/keys
 settingsRoute.get("/api/keys", (c) => {
   const denied = adminRequestError(c);

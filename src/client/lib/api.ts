@@ -67,6 +67,37 @@ export async function fetchTokenSaverConfig(): Promise<TokenSaverConfig> {
   return res.json();
 }
 
+export interface SecurityKeywordRule {
+  id: string;
+  pattern: string;
+  action: "mask" | "block";
+  description: string;
+  enabled: boolean;
+}
+
+export async function fetchSecurityRules(): Promise<SecurityKeywordRule[]> {
+  const res = await fetch(`${BASE_URL}/api/security/rules`);
+  if (!res.ok) throw new Error(`Fetch security rules failed: ${res.statusText}`);
+  const data = await res.json();
+  return data.rules || [];
+}
+
+export async function saveSecurityRules(
+  rules: SecurityKeywordRule[]
+): Promise<SecurityKeywordRule[]> {
+  const res = await fetch(`${BASE_URL}/api/security/rules`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rules }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || `Save security rules failed: ${res.statusText}`);
+  }
+  const data = await res.json();
+  return data.rules || [];
+}
+
 export async function fetchSoulConfig(): Promise<SoulInfoResponse> {
   const res = await fetch(`${BASE_URL}/api/soul`);
   if (!res.ok) throw new Error(`Fetch soul failed: ${res.statusText}`);

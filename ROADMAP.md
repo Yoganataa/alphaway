@@ -3,8 +3,8 @@
 > Canonical engineering roadmap for AlphaWay. Update this file when scope, sequencing, or acceptance criteria change.
 >
 > **Last updated:** 2026-11-01  
-> **Planning baseline:** `main` at `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **Current state:** Phase 0 acceptance criteria passed on `chore/phase-0-ci-distribution` in GitHub Actions run `41325262197`. The installer legacy-service retirement review finding is fixed and its thread is resolved; PR #1 is ready for merge.
+> **Planning baseline:** `main` at `9805d2335293539424fd66af3c047b493edad630`  
+> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 is complete for all existing persistence-backed features and passed GitHub Actions run `41328662898` on current code HEAD `cc6eaf7bfa42993300757725cb0ec728fda48bbd`. PR #3 is open, non-draft, and mergeable. Plans and Persona/Jailbreak persistence are introduced with their domain features in Phases 3 and 4.
 
 ## 1. Product Direction
 
@@ -142,23 +142,31 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 
-**Status:** Not started  
+**Status:** Implementation complete for existing persistence-backed features; CI verified on Bun 1.4.4; PR #3 ready for review.  
 **Priority:** P1
 
-- [ ] Introduce a versioned SQLite migration mechanism with ordered, idempotent migrations and a recorded schema version.
-- [ ] Add migration tests for fresh databases, existing databases, interrupted upgrades, and repeated startup.
-- [ ] Make SQLite the source of truth for application settings, API keys, custom providers, proxy pools, security rules, usage events, plans, and persona configuration.
-- [ ] Convert JSON fallback/mirror behavior into one-time, idempotent legacy import paths where applicable.
-- [ ] Define backup and recovery behavior before destructive migrations or schema changes.
-- [ ] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
-- [ ] Review credential storage separately: caller API keys should be verifiable without storing raw secrets; upstream credentials that must be replayed need recoverable encryption and a documented key-management strategy.
+- [x] Introduce a versioned SQLite migration mechanism with ordered migrations, a `schema_migrations` ledger, registry validation, and transactional DDL/history writes.
+- [x] Add tests for fresh databases, adoption of pre-migration databases without data loss, repeated startup, rollback after a failed migration, retry, invalid registry versions, and destructive-migration backup guards.
+- [x] Make SQLite canonical for custom providers, TokenSaver configuration, usage snapshots/events, and proxy pool configuration. Proxy health remains a credential-free runtime cache.
+- [x] Convert legacy custom-provider, usage, TokenSaver, and proxy JSON files into one-time imports tracked by checksums and `legacy_imports`; retain source files as backups.
+- [x] Preserve `ALPHAWAY_HOME` as a legacy JSON import location without changing the existing SQLite database root; add regression coverage to prevent apparent database loss on upgrade.
+- [x] Persist each usage request event and its aggregate snapshot atomically in one SQLite transaction.
+- [x] Add a pre-destructive-migration backup hook using SQLite `VACUUM INTO` and owner-only backup permissions.
+- [x] Retain API key configuration in SQLite `app_settings` (credential-verification and secret-at-rest hardening remain Phase 2 work).
+- [x] Persist custom DLP/security rule configuration in SQLite `app_settings` and connect Security page CRUD to the backend. Runtime enforcement of custom rules remains a separate Security phase.
+- [x] Add an end-to-end file-backed backup and restore test: create a `VACUUM INTO` backup, simulate destructive data change, restore the saved snapshot, and preserve the pre-restore database copy.
+- [x] Keep all existing application settings and API key records in SQLite `app_settings` as the canonical store.
+- [ ] Credential storage hardening is intentionally Phase 2: caller API keys must be verifiable without storing raw secrets; upstream credentials that must be replayed need authenticated encryption and a documented key-management strategy.
+
+**Scope boundary:** AlphaWay does not yet implement Plans or Persona/Jailbreak domain models. Their schemas and persistence are intentionally added alongside their feature implementations in Phases 3 and 4 rather than creating unused tables in Phase 1. Existing SOUL configuration is persisted with the TokenSaver settings.
+- [x] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
 
 **Acceptance criteria**
 
-- A new install and an existing install converge to the same schema.
-- Migrations are safe to rerun and preserve existing user data.
-- No feature silently reads from one source and writes to another.
-- Migration and rollback/recovery behavior is covered by tests and documented.
+- [x] A fresh database and an existing pre-migration database converge to the initial schema without losing existing rows.
+- [x] Migrations are safe to rerun; failed DDL/history transactions roll back together.
+- [x] All existing persistence-backed features use SQLite as the canonical source, including API key records and Security rule configuration. Plans and Persona/Jailbreak are not yet implemented and will add persistence with their own domain models.
+- [x] File-backed backup/restore and recovery behavior is verified end to end, including integrity validation and preservation of the pre-restore database.
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
@@ -215,7 +223,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [ ] Preserve the existing SOUL.md engine, built-in presets, local/global discovery, and SOUL Studio editor/preview.
 - [ ] Provide one canonical prompt-transformation pipeline so SOUL, Persona, TokenSaver, and security processing do not inject or rewrite the same request unpredictably.
 - [ ] Add a preview/explain mode that shows which transformations and presets will apply without forwarding a request upstream.
-- [ ] Persist custom DLP/keyword rules in SQLite and use the same backend rule engine for both dashboard testing and live gateway traffic.
+- [ ] Use one backend DLP/keyword rule engine for dashboard sandbox testing and live gateway traffic; custom-rule persistence is completed in Phase 1.
 - [ ] If remote persona/Markdown import is added, enforce SSRF protections, redirect revalidation, private/link-local IP blocking, response-size limits, and timeouts. Prefer local Markdown import for the first implementation.
 
 **Acceptance criteria**
@@ -236,7 +244,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [ ] Consolidate usage event persistence in SQLite and remove inconsistent JSON summary/history mirrors after migration.
 - [ ] Correct streaming token accounting. Do not substitute fixed completion-token counts for unknown usage.
 - [ ] Label estimated metrics and savings separately from actual request usage and provider-reported cost.
-- [ ] Persist Security custom rules and route both sandbox testing and live requests through the same backend implementation.
+- [ ] Route Security sandbox testing and live gateway requests through the same backend DLP implementation; do not maintain divergent frontend-only rule logic.
 - [ ] Add typed frontend API contracts and consistent error responses for every dashboard action.
 - [ ] Verify Console Log streaming, filtering, and export against actual server events.
 - [ ] Verify Cloudflare Tunnel, daemon lifecycle, provider OAuth, and custom provider management end-to-end.

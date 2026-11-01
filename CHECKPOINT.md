@@ -4,15 +4,16 @@
 >
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active branch:** `chore/phase-0-ci-distribution`  
-> **Last implementation HEAD before this checkpoint update:** `337cea4287ebc1710c9821c6d1b3315b96686d0a`  
-> **Base main HEAD:** `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`  
+> **Active branch:** `feat/phase-1-sqlite-migrations` (based on merged Phase 0 main)  
+> **Latest CI-verified implementation HEAD:** `cc6eaf7bfa42993300757725cb0ec728fda48bbd`  
+> **Base main HEAD:** `9805d2335293539424fd66af3c047b493edad630`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
+> **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
+> **Active Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3) (open, non-draft, mergeable)
 
 ## 1. Current Status
 
-**Phase 0 is complete and verified on the implementation branch.** All required GitHub Actions jobs passed on Bun 1.4.4 in run `41325262197`. The P1 legacy-systemd retirement finding has been fixed, the review thread resolved, and PR #1 is ready for merge.
+**Phase 0 is complete and merged into `main` at `9805d2335293539424fd66af3c047b493edad630`.** Final GitHub Actions run `41325472514` passed on Bun 1.4.4. The P1 legacy-systemd retirement finding was fixed and the review thread resolved. PR #1 is merged.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
@@ -20,7 +21,7 @@
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
-- [ ] Phase 1 — Database Migrations and Canonical Persistence (implementation started on `feat/phase-1-sqlite-migrations`; rebase onto Phase 0 after merge before opening its PR).
+- [x] Phase 1 — Database Migrations and Canonical Persistence for existing AlphaWay persistence-backed features (CI verified; PR #3 ready for review).
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
@@ -28,7 +29,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Phase 1 implementation has begun on a separate feature branch, but it was created before the final Phase 0 installer review fix and must be rebased onto the merged Phase 0 commit before its own PR is opened. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so verification comes from GitHub Actions. Baseline `main` run `41317617602` failed on stale `.test.js` paths and the absent `test:node` script. The final Phase 0 run `41325262197` completed successfully with Bun 1.4.4: 271 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed (17 ciphers, 12 extensions), and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The installer also disables and retires both legacy systemd service names before replacing the application. The prior P1 review finding is resolved. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
+Phase 1 is complete for the persistence-backed domains that already exist in AlphaWay on `feat/phase-1-sqlite-migrations`, based on merged `main` at `9805d2335293539424fd66af3c047b493edad630`. PR #3 is open, non-draft, mergeable, and targets `main`. It includes ordered SQLite migrations, checksummed/idempotent legacy JSON imports, canonical SQLite persistence for custom providers, TokenSaver/SOUL, API key records, proxy settings, and custom Security rule configuration; atomic usage event/snapshot persistence; and a backup/restore utility with file-backed recovery tests. Custom Security rule persistence is complete, but the dashboard sandbox and live request pipeline still need to use the same backend rule engine in a later security phase. Plans and Persona/Jailbreak do not yet have domain models; their persistence will be added alongside those features in Phases 3 and 4. Credential verification, hashing, and authenticated encryption remain Phase 2 work. GitHub Actions run `41328662898` passed on Bun 1.4.4 at code HEAD `cc6eaf7bfa42993300757725cb0ec728fda48bbd`: 292 unit/protocol tests passed (0 failed) across 29 files, 8 dashboard E2E tests passed (0 failed), standalone build and installer/embedded-dashboard smoke passed, and the transport fingerprint matched 17 ciphers / 12 extensions. The Codex P2 finding about `ALPHAWAY_HOME` changing the SQLite path was fixed: SQLite path resolution remains backward-compatible, while JSON from `ALPHAWAY_HOME` is imported as legacy state; its regression test passed. The optional live upstream gate drill was skipped intentionally. Verification was on Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
 
 ## 2. Agreed Product Direction
 
@@ -138,7 +139,7 @@ Also inspect the current `9router-go` frontend and pin the exact upstream commit
 ### Implementation summary
 
 - Repaired `.github/workflows/ci.yml` for the current Bun + TypeScript project. CI has separate unit/protocol, build, installer/embedded-dashboard smoke, and Playwright E2E jobs. The live upstream gate drill is manual only.
-- Set Bun support floor and CI runtime to 1.4.3, with the matching OpenCode TLS fingerprint check.
+- Set Bun support floor and CI runtime to 1.4.4, with the matching OpenCode TLS fingerprint check.
 - Made the dashboard build output deterministic, embedded `dist/` into the standalone executable, and made Hono serve the embedded assets from the standalone module root.
 - Removed the legacy root-level JavaScript self-updater and replaced it with a safe manual-install-required compatibility shim.
 - Replaced `install.sh` with a staged install/upgrade flow for the current Bun + TypeScript source tree. Configuration and SQLite state remain outside the replaceable app directory.
@@ -148,11 +149,11 @@ Also inspect the current `9router-go` frontend and pin the exact upstream commit
 
 ### Final verification evidence
 
-GitHub Actions [run `41322403767`](https://github.com/Yoganataa/alphaway/actions/runs/41322403767), branch HEAD `e1d8fbbe2a8f0a360109e48f476d9745cdefda4a`:
+GitHub Actions [run `41325472514`](https://github.com/Yoganataa/alphaway/actions/runs/41325472514), final Phase 0 PR head `bbad49140818abc340e0aef3203c317c2e77e173`:
 
 | Job / check | Result |
 |---|---|
-| Unit and protocol tests | **270 passed, 0 failed**, 25 files |
+| Unit and protocol tests | **271 passed, 0 failed**, 25 files |
 | OpenCode transport fingerprint | Bun 1.4.4 matched baseline: 17 ciphers, 12 extensions |
 | UI and standalone binary build | Passed |
 | Installer and embedded dashboard smoke | Passed |
@@ -191,13 +192,13 @@ test/verify-quick.test.ts
 
 - Branch: `chore/phase-0-ci-distribution`
 - PR: [#1 — Stabilize CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
-- PR state: open, mergeable, no merge performed.
-- Base: `main` at `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`.
-- Branch is ahead of main. Review the complete PR diff before merging.
+- PR state: merged.
+- Merge commit: `9805d2335293539424fd66af3c047b493edad630`.
+- `main` includes the Phase 0 CI, Bun 1.4.4 runtime, installer, and standalone distribution baseline.
 
 ### Next phase
 
-Phase 0 acceptance criteria are met for the tested Linux x86_64 path. After reviewing/merging PR #1, proceed to **Phase 1 — Database Migrations and Canonical Persistence** in ROADMAP.md. Do not start Plans or Persona implementation before the database migration foundation is designed and tested.
+Phase 0 acceptance criteria are met for the tested Linux x86_64 path and PR #1 is merged. Phase 1 is now implemented and CI-verified; review and merge PR #3 before beginning Phase 2 — Authentication, API Keys, and Administrative Access. Do not merge PR #3 without reviewing its diff.
 
 ## 6. Working Rules for the Next Session
 
@@ -211,6 +212,20 @@ Phase 0 acceptance criteria are met for the tested Linux x86_64 path. After revi
 - If work is interrupted, leave the repository in a clean, committed state where practical and update this checkpoint before stopping.
 
 ## 7. Prompt to Resume in a New Chat
+
+Current Phase 1 implementation files:
+- `src/core/migrations/{types.ts,index.ts,001_initial_schema.ts}`: versioned migration runner and initial schema.
+- `src/core/legacy-imports.ts`: idempotent JSON import ledger with checksums.
+- `src/core/database.ts`: migration startup, backup hook, canonical SQLite queries and atomic usage writes.
+- `src/core/custom-providers.ts`, `src/features/tokensaver.ts`, `src/core/usage-tracker.ts`, `src/core/proxy.ts`: SQLite canonical persistence.
+- Tests: `test/migrations.test.ts`, `test/legacy-imports.test.ts`, plus database/proxy/usage regression coverage.
+
+Next actions:
+1. Review PR #3 diff and address any reviewer feedback. PR #3 has passing CI but has not been merged.
+2. Once PR #3 is merged, create Phase 2 branch from the updated `main`.
+3. Implement API-key verification/hashing, recoverable encryption for upstream credentials, and authenticated administrator sessions/authorization.
+4. Implement Plans and Persona/Jailbreak models in Phases 3 and 4; persist them in SQLite from their first implementation.
+5. Implement one shared backend DLP rule engine used by both Security sandbox preview and the live request pipeline.
 
 Copy this prompt into the next session:
 
@@ -227,9 +242,9 @@ Target produk yang sudah diputuskan:
 - Tambahkan Plans serta Persona/Jailbreak.
 - Ikuti struktur TypeScript idiomatis; jangan membuat struktur ala Go secara menyeluruh.
 
-Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 selesai, semua CI job hijau, temuan P1 legacy systemd sudah ditangani, dan PR #1 siap merge. Setelah Phase 0 masuk ke main, rebase `feat/phase-1-sqlite-migrations` pada main terbaru, verifikasi ulang semua test, lalu lanjut Phase 1 — Database Migrations and Canonical Persistence sesuai ROADMAP.md. Jangan membuka PR Phase 1 sebelum branch sinkron dengan main. Kerjakan bertahap, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
+Phase 0 PR #1 sudah merged ke main pada `9805d2335293539424fd66af3c047b493edad630`. Phase 1 berada pada branch `feat/phase-1-sqlite-migrations`, PR #3 terbuka dan non-draft, serta CI run `41328142025` lulus pada HEAD `cad5d8cea0e81221f46d23f484e2f66651a54a7c` dengan Bun 1.4.4. Baca diff PR #3 sebelum memutuskan merge. Setelah Phase 1 merged, mulai Phase 2 — Authentication, API Keys, and Administrative Access sesuai ROADMAP.md. Pertahankan Bun 1.4.4, jangan melemahkan tes, dan update CHECKPOINT.md setiap blok kerja bermakna.
 ```
 
 ---
 
-**Reminder:** This checkpoint captures the state of the planning/audit session, not a verified runtime test report.
+**Verification boundary:** CI evidence is from GitHub Actions on Linux x86_64 with Bun 1.4.4. The local execution environment did not run Bun tests directly; macOS launchd and Windows runtime remain unverified.

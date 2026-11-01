@@ -23,17 +23,19 @@
  * `UnsupportedProxyProtocol`, so it is refused here with a message that says so
  * instead of failing later inside a request.
  *
- * Credentials live in `<state dir>/proxy.json` and never leave the process:
- * `describe()` is the only view the HTTP panel and `/health` get, and it carries
- * host:port only.
+ * Proxy credentials and pool intent live in SQLite `app_settings.proxy_config`.
+ * Runtime health remains a separate, credential-free cache file. `describe()`
+ * is the only public view and carries host:port only.
  */
 
 const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("./database");
 
-const CONFIG_FILE_NAME = "proxy.json";
+const CONFIG_SETTING_KEY = "proxy_config";
+const CONFIG_SETTING_LABEL = `SQLite app_settings.${CONFIG_SETTING_KEY}`;
 const HEALTH_FILE_NAME = "pool-health.json";
 const HEALTH_VERSION = 1;
 const ENV_OVERRIDE = "UPSTREAM_PROXY_URL";
@@ -49,10 +51,6 @@ function stateDir() {
   const raw = process.env.ALPHAWAY_STATE_DIR || process.env.OPENCODE_BRIDGE_STATE_DIR;
   if (raw !== undefined && String(raw).trim()) return String(raw).trim();
   return path.join(os.homedir(), ".alphaway");
-}
-
-function configFile() {
-  return path.join(stateDir(), CONFIG_FILE_NAME);
 }
 
 /**
@@ -484,25 +482,13 @@ function loadFromDisk() {
     return pool;
   }
 
-  let raw = null;
-  try {
-    raw = fs.readFileSync(configFile(), "utf8");
-  } catch {
-    current = { url: "", source: "none", error: null };
-    pool = { entries: [], errors: [], strategy: DEFAULT_STRATEGY, source: "none", error: null };
-    pruneHealth([]);
-    restoreHealth([]);
-    return pool;
-  }
-
-  let json = null;
-  try {
-    json = JSON.parse(raw);
-  } catch (err) {
-    // A corrupt file must not stop the bridge from starting. Direct egress is
-    // the safe fallback, and `error` surfaces the reason in the panel.
-    current = { url: "", source: "none", error: `proxy.json could not be read: ${err.message}` };
-    pool = { entries: [], errors: [], strategy: DEFAULT_STRATEGY, source: "none", error: current.error };
+  const json = dbGetSetting(CONFIG_SETTING_KEY, null);
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    const error = json === null
+      ? null
+      : `${CONFIG_SETTING_LABEL} has an invalid value; using direct egress.`;
+    current = { url: "", source: "none", error };
+    pool = { entries: [], errors: [], strategy: DEFAULT_STRATEGY, source: "none", error };
     pruneHealth([]);
     restoreHealth([]);
     return pool;
@@ -520,14 +506,14 @@ function loadFromDisk() {
 
   const single = parseProxyUrl(json?.url);
   current = single.ok
-    ? { url: single.url, source: single.url ? "file" : "none", error: null }
+    ? { url: single.url, source: single.url ? "database" : "none", error: null }
     : { url: "", source: "none", error: single.error };
 
   pool = {
     entries,
     errors,
     strategy: normalizeStrategy(json?.strategy),
-    source: entries.length > 0 ? "file" : "none",
+    source: entries.length > 0 ? "database" : "none",
     error: errors.length > 0 ? errors.join(" ") : null,
   };
   cooldowns = normalizeCooldowns(json);
@@ -725,37 +711,29 @@ function describe(now = Date.now()) {
         : false,
     source: poolActive ? pool.source : current.source,
     locked: (poolActive ? pool.source : current.source) === "env",
-    configPath: configFile(),
+    configPath: CONFIG_SETTING_LABEL,
     error: current.error || pool.error || null,
     pool: poolView,
   };
 }
 
-/** Write the whole config atomically-ish: one file, owner-only. */
+/** Persist the complete proxy configuration as one SQLite setting. */
 function writeConfig(next) {
   try {
-    fs.mkdirSync(path.dirname(configFile()), { recursive: true });
-    fs.writeFileSync(configFile(), `${JSON.stringify(next, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    // A file created earlier keeps its old mode; chmod so credentials created by
-    // an older release are not left readable by every local user.
-    fs.chmodSync(configFile(), 0o600);
+    dbSetSetting(CONFIG_SETTING_KEY, next);
     return { ok: true };
-  } catch (err) {
-    return { ok: false, error: `Failed to write ${configFile()}: ${err.message}` };
+  } catch (error) {
+    return {
+      ok: false,
+      error: `Failed to write ${CONFIG_SETTING_LABEL}: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
 }
 
-/** Current on-disk shape, so one setter never drops the other's fields. */
+/** Current SQLite value, so one setter never drops the other's fields. */
 function readConfigObject() {
-  try {
-    const json = JSON.parse(fs.readFileSync(configFile(), "utf8"));
-    return json && typeof json === "object" ? json : {};
-  } catch {
-    return {};
-  }
+  const json = dbGetSetting(CONFIG_SETTING_KEY, null);
+  return json && typeof json === "object" && !Array.isArray(json) ? json : {};
 }
 
 function refuseWhenLocked() {
@@ -786,14 +764,16 @@ function setProxyUrl(raw) {
   if (!parsed.url) {
     delete config.url;
     if (Array.isArray(config.pool) && config.pool.length > 0) {
-      if (!writeConfig(config).ok) return { ok: false, error: `Failed to write ${configFile()}` };
+      const written = writeConfig(config);
+      if (!written.ok) return written;
     } else {
       try {
-        fs.unlinkSync(configFile());
-      } catch (err) {
-        if (err.code !== "ENOENT") {
-          return { ok: false, error: `Failed to delete ${configFile()}: ${err.message}` };
-        }
+        dbDeleteSetting(CONFIG_SETTING_KEY);
+      } catch (error) {
+        return {
+          ok: false,
+          error: `Failed to delete ${CONFIG_SETTING_LABEL}: ${error instanceof Error ? error.message : String(error)}`,
+        };
       }
     }
     current = { url: "", source: "none", error: null };
@@ -804,7 +784,7 @@ function setProxyUrl(raw) {
   config.url = parsed.url;
   const written = writeConfig(config);
   if (!written.ok) return written;
-  current = { url: parsed.url, source: "file", error: null };
+  current = { url: parsed.url, source: "database", error: null };
   return { ok: true, ...describe() };
 }
 
@@ -854,9 +834,12 @@ function setPool(raw) {
 
   if (!config.url && !config.pool) {
     try {
-      fs.unlinkSync(configFile());
-    } catch (err) {
-      if (err.code !== "ENOENT") return { ok: false, error: `Failed to delete ${configFile()}: ${err.message}` };
+      dbDeleteSetting(CONFIG_SETTING_KEY);
+    } catch (error) {
+      return {
+        ok: false,
+        error: `Failed to delete ${CONFIG_SETTING_LABEL}: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
   } else {
     const written = writeConfig(config);
@@ -1029,7 +1012,7 @@ module.exports = {
   ENV_OVERRIDE,
   POOL_ENV,
   STRATEGY_ENV,
-  configFile,
+  configStore: () => CONFIG_SETTING_LABEL,
   healthFile,
   parseProxyUrl,
   parsePoolEntry,
