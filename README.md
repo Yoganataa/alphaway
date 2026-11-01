@@ -206,9 +206,7 @@ curl -s http://127.0.0.1:20129/response \
 
 AlphaWay enforces a strict **Zero Weakened Tests Policy**:
 ```bash
-bun test test/
-```
-Run deterministic unit/integration tests and browser E2E tests separately: 
+Run deterministic unit/integration tests and browser E2E tests separately:
 
 ```bash
 bun run test:unit
