@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { runMigrations } from "./migrations";
+import { createMigrationBackup } from "./migrations/backup";
 import { importLegacyJson } from "./legacy-imports";
 
 export interface CustomProviderRow {
@@ -64,27 +65,6 @@ export function getDbFilePath(): string {
 }
 
 let dbInstance: any = null;
-
-function createMigrationBackup(db: any, databasePath: string, migrationName: string): string {
-  if (databasePath === ":memory:") {
-    throw new Error("Cannot run a destructive migration against an in-memory database without an explicit backup");
-  }
-
-  const backupDir = path.join(path.dirname(databasePath), "backups");
-  fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
-  if (process.platform !== "win32") fs.chmodSync(backupDir, 0o700);
-
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const safeName = migrationName.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 48);
-  const backupPath = path.join(backupDir, `alphaway-before-${safeName}-${stamp}.sqlite`);
-
-  // Checkpoint WAL first, then let SQLite create a consistent standalone copy.
-  db.exec("PRAGMA wal_checkpoint(FULL)");
-  const escapedPath = backupPath.replace(/'/g, "''");
-  db.exec(`VACUUM INTO '${escapedPath}'`);
-  if (process.platform !== "win32") fs.chmodSync(backupPath, 0o600);
-  return backupPath;
-}
 
 export function getDatabase(): any {
   if (dbInstance) return dbInstance;
