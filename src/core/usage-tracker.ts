@@ -4,17 +4,22 @@
  * Tracks requests, tokens (prompt, completion, total), TokenSaver savings,
  * protocol and model breakdowns, hourly/daily trend buckets, activity heatmap,
  * and recent request audit log.
- * Persists data to ~/.alphaway/usage_stats.json.
+ * Persists request events and aggregate snapshots in native SQLite.
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
+import { randomUUID } from "node:crypto";
 import {
-  dbInsertRequestLog,
-  dbClearRequestLogs,
+  dbInsertRequestLogWithSnapshot,
+  dbClearRequestLogsWithSnapshot,
   dbGetRequestLogById,
   dbGetRecentRequestLogs,
+  dbGetSummaryMetrics,
+  dbGetModelSummaries,
+  dbGetProviderSummaries,
+  dbGetProtocolSummaries,
+  dbGetDailyUsageHistory,
+  dbGetHourlyUsageHistory,
+  dbGetSetting,
 } from "./database";
 
 export interface RequestLogEntry {
@@ -94,24 +99,6 @@ export interface UsageStats {
   recentLogs: RequestLogEntry[];
 }
 
-function resolveConfigDir(): string {
-  const dir = process.env.ALPHAWAY_STATE_DIR || process.env.ALPHAWAY_HOME || path.join(os.homedir(), ".alphaway");
-  const legacyDir = path.join(os.homedir(), ".opencode-free-bridge");
-  if (!fs.existsSync(dir) && fs.existsSync(legacyDir)) {
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-      const legacyFile = path.join(legacyDir, "usage_stats.json");
-      const targetFile = path.join(dir, "usage_stats.json");
-      if (fs.existsSync(legacyFile) && !fs.existsSync(targetFile)) {
-        fs.copyFileSync(legacyFile, targetFile);
-      }
-    } catch {}
-  }
-  return dir;
-}
-
-const CONFIG_DIR = resolveConfigDir();
-const USAGE_FILE = path.join(CONFIG_DIR, "usage_stats.json");
 const MAX_RECENT_LOGS = 100;
 
 function createEmptyStats(): UsageStats {
@@ -141,49 +128,44 @@ function createEmptyStats(): UsageStats {
   };
 }
 
-let inMemoryStats: UsageStats = loadStatsFromDisk();
+let inMemoryStats: UsageStats = loadStatsFromDatabase();
 
-function ensureConfigDir(): void {
-  try {
-    if (!fs.existsSync(CONFIG_DIR)) {
-      fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    }
-  } catch {}
+function normalizeStats(parsed: Partial<UsageStats> | null | undefined): UsageStats {
+  const defaults = createEmptyStats();
+  if (!parsed || typeof parsed !== "object") return defaults;
+
+  return {
+    ...defaults,
+    ...parsed,
+    byModel: parsed.byModel && typeof parsed.byModel === "object" ? parsed.byModel : {},
+    byProtocol: { ...defaults.byProtocol, ...(parsed.byProtocol || {}) },
+    byProvider: { ...defaults.byProvider, ...(parsed.byProvider || {}) },
+    dailyHistory: parsed.dailyHistory && typeof parsed.dailyHistory === "object" ? parsed.dailyHistory : {},
+    hourlyHistory: parsed.hourlyHistory && typeof parsed.hourlyHistory === "object" ? parsed.hourlyHistory : {},
+    recentLogs: Array.isArray(parsed.recentLogs) ? parsed.recentLogs.slice(0, MAX_RECENT_LOGS) : [],
+  };
 }
 
-function loadStatsFromDisk(): UsageStats {
-  ensureConfigDir();
-  if (!fs.existsSync(USAGE_FILE)) {
-    return createEmptyStats();
-  }
-  try {
-    const raw = fs.readFileSync(USAGE_FILE, "utf-8");
-    const parsed = JSON.parse(raw);
-    return {
-      ...createEmptyStats(),
-      ...parsed,
-      byModel: parsed.byModel || {},
-      byProtocol: { ...createEmptyStats().byProtocol, ...(parsed.byProtocol || {}) },
-      byProvider: { ...createEmptyStats().byProvider, ...(parsed.byProvider || {}) },
-      dailyHistory: parsed.dailyHistory || {},
-      hourlyHistory: parsed.hourlyHistory || {},
-      recentLogs: Array.isArray(parsed.recentLogs) ? parsed.recentLogs : [],
-    };
-  } catch {
-    return createEmptyStats();
-  }
-}
+function loadStatsFromDatabase(): UsageStats {
+  const stored = dbGetSetting<Partial<UsageStats> | null>("usage_stats_snapshot", null);
+  if (stored) return normalizeStats(stored);
 
-let saveTimeout: any = null;
-function persistStatsDebounced(): void {
-  if (saveTimeout) return;
-  saveTimeout = setTimeout(() => {
-    saveTimeout = null;
-    try {
-      ensureConfigDir();
-      fs.writeFileSync(USAGE_FILE, JSON.stringify(inMemoryStats, null, 2), "utf-8");
-    } catch {}
-  }, 1000);
+  // Rebuild the projection from canonical request events when an older SQLite
+  // database has request rows but no aggregate snapshot yet.
+  const stats = createEmptyStats();
+  Object.assign(stats, dbGetSummaryMetrics());
+  stats.estimatedSavingsUsd = calculateSavingsUsd(
+    stats.totalPromptTokens,
+    stats.totalCompletionTokens,
+    stats.savedTokens
+  );
+  stats.byModel = dbGetModelSummaries();
+  stats.byProvider = dbGetProviderSummaries();
+  stats.byProtocol = dbGetProtocolSummaries();
+  stats.dailyHistory = dbGetDailyUsageHistory();
+  stats.hourlyHistory = dbGetHourlyUsageHistory();
+  stats.recentLogs = dbGetRecentRequestLogs(MAX_RECENT_LOGS) as RequestLogEntry[];
+  return stats;
 }
 
 export function calculateSavingsUsd(promptTokens: number, completionTokens: number, savedTokens: number): number {
@@ -216,7 +198,7 @@ export function recordRequestUsage(entry: {
   const saved = Math.max(0, entry.savedTokens || 0);
   const nowDate = new Date();
   const now = nowDate.toISOString();
-  const id = "req_" + Math.random().toString(36).slice(2, 10);
+  const id = `req_${randomUUID()}`;
 
   const logEntry: RequestLogEntry = {
     id,
@@ -233,9 +215,8 @@ export function recordRequestUsage(entry: {
     stream: Boolean(entry.stream),
   };
 
-  try {
-    dbInsertRequestLog(logEntry);
-  } catch {}
+  const previousStats = inMemoryStats;
+  inMemoryStats = structuredClone(inMemoryStats);
 
   // Update summary totals
   inMemoryStats.totalRequests += 1;
@@ -320,7 +301,12 @@ export function recordRequestUsage(entry: {
     inMemoryStats.recentLogs.length = MAX_RECENT_LOGS;
   }
 
-  persistStatsDebounced();
+  try {
+    dbInsertRequestLogWithSnapshot(logEntry, inMemoryStats);
+  } catch (error) {
+    inMemoryStats = previousStats;
+    throw error;
+  }
   return logEntry;
 }
 
@@ -332,22 +318,22 @@ export function getUsageStats(): UsageStats {
 }
 
 export function resetUsageStats(): void {
-  inMemoryStats = createEmptyStats();
-  try {
-    dbClearRequestLogs();
-  } catch {}
-  try {
-    ensureConfigDir();
-    fs.writeFileSync(USAGE_FILE, JSON.stringify(inMemoryStats, null, 2), "utf-8");
-  } catch {}
+  const nextStats = createEmptyStats();
+  dbClearRequestLogsWithSnapshot(nextStats);
+  inMemoryStats = nextStats;
 }
 
 export function clearRecentLogs(): void {
-  inMemoryStats.recentLogs = [];
+  const previousStats = inMemoryStats;
+  const nextStats = structuredClone(inMemoryStats);
+  nextStats.recentLogs = [];
   try {
-    dbClearRequestLogs();
-  } catch {}
-  persistStatsDebounced();
+    dbClearRequestLogsWithSnapshot(nextStats);
+    inMemoryStats = nextStats;
+  } catch (error) {
+    inMemoryStats = previousStats;
+    throw error;
+  }
 }
 
 export function getRequestLogDetail(id: string): RequestLogEntry | null {
