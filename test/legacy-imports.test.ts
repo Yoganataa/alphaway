@@ -119,11 +119,12 @@ describe("legacy JSON import", () => {
     expect(first.every((report) => report.status === "imported")).toBe(true);
 
     const proxyImport = first.find((report) => report.sourceKey === `proxy:${path.resolve(stateDir!, "proxy.json")}`);
-    expect(proxyImport).toEqual({
+    expect(proxyImport).toMatchObject({
       sourceKey: `proxy:${path.resolve(stateDir, "proxy.json")}`,
       status: "imported",
       rowCount: 1,
     });
+    expect(proxyImport?.details).toContain("Encrypted rollback copy retained");
 
     const provider = db.prepare(
       "SELECT id, base_url, api_key, models FROM custom_providers WHERE id = ?"
