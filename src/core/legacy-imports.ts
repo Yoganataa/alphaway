@@ -213,14 +213,28 @@ function importSetting(key: string): ImportHandler {
 }
 
 function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksum: string, expectedStat?: fs.Stats): boolean {
-  const currentStat = fs.lstatSync(filePath);
-  if (currentStat.isSymbolicLink() || !currentStat.isFile()) return false;
-  if (expectedStat && (currentStat.dev !== expectedStat.dev || currentStat.ino !== expectedStat.ino)) return false;
-  if (process.platform !== "win32") {
-    try { fs.chmodSync(filePath, 0o600); } catch {}
+  let sourceFd: number;
+  try {
+    const pathStat = fs.lstatSync(filePath);
+    if (pathStat.isSymbolicLink() || !pathStat.isFile()) return false;
+    const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+    sourceFd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    const currentStat = fs.fstatSync(sourceFd);
+    if (currentStat.dev !== pathStat.dev || currentStat.ino !== pathStat.ino) {
+      fs.closeSync(sourceFd);
+      return false;
+    }
+    if (expectedStat && (currentStat.dev !== expectedStat.dev || currentStat.ino !== expectedStat.ino)) {
+      fs.closeSync(sourceFd);
+      return false;
+    }
+    if (process.platform !== "win32") fs.fchmodSync(sourceFd, 0o600);
+    const current = fs.readFileSync(sourceFd, "utf8");
+    fs.closeSync(sourceFd);
+    if (sha256(current) !== expectedChecksum) return false;
+  } catch {
+    return false;
   }
-  const current = fs.readFileSync(filePath, "utf8");
-  if (sha256(current) !== expectedChecksum) return false;
 
   const encrypted = encryptSecret(plaintext);
   const tempPath = path.join(path.dirname(filePath), "." + path.basename(filePath) + "." + randomUUID() + ".tmp");
