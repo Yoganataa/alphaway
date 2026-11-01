@@ -3,8 +3,8 @@
 > Canonical engineering roadmap for AlphaWay. Update this file when scope, sequencing, or acceptance criteria change.
 >
 > **Last updated:** 2026-11-01  
-> **Planning baseline:** `main` at `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **Current state:** Phase 0 acceptance criteria passed on `chore/phase-0-ci-distribution` in GitHub Actions run `41325262197`. The installer legacy-service retirement review finding is fixed and its thread is resolved; PR #1 is ready for merge.
+> **Planning baseline:** `main` at `9805d2335293539424fd66af3c047b493edad630`  
+> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. GitHub Actions run `41325472514` passed on the final PR head; the legacy-service retirement review finding is fixed and resolved. Phase 1 is in progress on `feat/phase-1-sqlite-migrations`.
 
 ## 1. Product Direction
 
@@ -142,7 +142,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 
-**Status:** In progress (feature branch is stacked on Phase 0 PR #1; do not open/merge Phase 1 until Phase 0 is merged).  
+**Status:** In progress (branch is based on merged Phase 0 `main`; Phase 1 PR will be opened after its CI verification).  
 **Priority:** P1
 
 - [x] Introduce a versioned SQLite migration mechanism with ordered migrations, a `schema_migrations` ledger, registry validation, and transactional DDL/history writes.
