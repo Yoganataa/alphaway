@@ -201,16 +201,17 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- GitHub Actions run `41338584108` passed on Bun 1.4.4 for commit `b6980cec177f22f0f16306b1b4f63059a23595bc`: **311 passed, 0 failed** across 31 test files; the 17-cipher/12-extension transport fingerprint, standalone build, installer/embedded-dashboard smoke, and browser E2E jobs passed. The optional live upstream drill was skipped as designed.
-- Run `41338441043` also passed on commit `2eb3d54d95e79ca30244dbd01a2575908563821b`, including direct AES-GCM tests (310 passed, 0 failed). The login throttle test passed in run `41338584108`. The latest successful run includes API-key control-character validation, bounded login throttling, and installer-upgrade master-key preservation. All functional code and installer changes through commit `2178342…` were covered by run `41339302362`.
-- Do not begin Phase 3 until Phase 2 CI, security review, and merge acceptance criteria are satisfied.
+- GitHub Actions run `41339302362` passed on Bun 1.4.4 for commit `217834209035f147e640fdfe473e8ed3eee0381f`: **312 passed, 0 failed** across 31 test files; transport fingerprint passed (17 ciphers/12 extensions), standalone build passed, installer/embedded-dashboard smoke passed including SHA-256 verification that `secret-encryption.key` survives upgrade unchanged, and browser E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
+- The CI failure in runs `41339060686` and `41339200556` was in installer smoke only: the digest variable was written to `GITHUB_ENV` and read in the same step, where it is not yet exported. This was corrected by retaining `key_digest_before` as a same-shell variable; run `41339302362` confirms the installer smoke fix.
+- Older full passing runs: `41338584108` (311 unit tests) and `41338441043` (310 unit tests including AES-GCM tests). The current branch has documentation-only commits after the successfully verified functional head; verify the newest head's routine CI rerun before merge.
+- Do not begin Phase 3 until Phase 2 security review and merge acceptance criteria are satisfied.
 
 **Acceptance criteria**
 
 - Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; latest functional code/installer CI passed in run `41339302362`; documentation-only checkpoint updates followed).
 - The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; latest functional code/installer CI passed in run `41339302362`; documentation-only checkpoint updates followed).
-- Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; CI passed on prior branch heads; latest-head rerun pending).
-- Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter tests committed; CI passed on prior branch heads; latest-head rerun pending).
+- Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; latest functional CI run `41339302362` passed).
+- Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter and AES-GCM tests committed; latest functional CI run `41339302362` passed).
 ### Phase 3 — Plans, Limits, and Request Enforcement
 
 **Status:** Not started  
