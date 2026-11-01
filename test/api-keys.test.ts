@@ -91,7 +91,7 @@ describe("administrator authentication and managed gateway API keys", () => {
     const created = await adminRequest("/api/keys", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Client\\nForged log entry" }),
+      body: JSON.stringify({ name: "Client\nForged log entry" }),
     });
     expect(created.status).toBe(400);
 
@@ -99,7 +99,7 @@ describe("administrator authentication and managed gateway API keys", () => {
     const renamed = await adminRequest(`/api/keys/${issued.record.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Changed\\rLabel" }),
+      body: JSON.stringify({ name: "Changed\rLabel" }),
     });
     expect(renamed.status).toBe(400);
   });
