@@ -109,7 +109,7 @@ describe("current AlphaWay installer and distribution contract", () => {
     const pkg = JSON.parse(read("package.json"));
     const ci = read(".github/workflows/ci.yml");
 
-    expect(pkg.scripts["test:unit"]).toBe("bun run build:ui && bun test test/*.test.ts");
+    expect(pkg.scripts["test:unit"]).toBe("bun run build:ui && bun test --preload ./test/setup.ts test/*.test.ts");
     expect(pkg.scripts["test:e2e"]).toBe("bun test test/e2e/");
     expect(ci).toContain("bun run test:unit");
     expect(ci).toContain("bun run test:e2e");
