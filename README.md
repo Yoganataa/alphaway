@@ -25,7 +25,7 @@
   - **Cascading Auto-Discovery**: Automatic hierarchical resolution: Local Project (`./SOUL.md`) → Global Default (`~/.alphaway/SOUL.md`) → Built-in Presets (`Atlas`, `Minimalist`, `Socratic`).
   - **Interactive Soul Studio**: Dashboard markdown editor with live token estimation and interactive prompt framing preview sandbox.
 - **Comprehensive 9Router-Go UI/UX Architecture (Svelte 5 + Tailwind CSS v4)**:
-  - **Endpoint View (`/dashboard/endpoint`)**: Origin endpoint (`http://127.0.0.1:20129/v1`), Cloudflare Named & Quick Tunnel status, API key gate switch, API key table management (issue, reveal, copy, revoke), and multi-client snippet tabs (Cursor, Continue, Claude Code, Roo-Code, Python, Node, cURL).
+  - **Endpoint View (`/dashboard/endpoint`)**: Origin endpoint (`http://127.0.0.1:20129/v1`), Cloudflare Named & Quick Tunnel status, API key gate switch, API key management (create, one-time display, copy, rotate, revoke), and multi-client snippet tabs (Cursor, Continue, Claude Code, Roo-Code, Python, Node, cURL).
   - **Providers & Custom Engines (`/dashboard/providers`)**: Dedicated control panels for OpenCode Free-Tier (8 models, dual-lane, BoringSSL 17 ciphers), CodeBuddy International (WorkBuddy 5.8.4 OAuth device login), and 3rd-Party Custom Providers (DeepSeek, Groq, Ollama, etc.).
   - **Usage & Token Analytics (`/dashboard/usage`)**: 5 KPI summary cards, pure SVG stacked area trend charts (24h, 7d, 30d), 3D breakdown table, 12-week GitHub-style heatmap, and request audit log table with clickable **Inspect Drawer Modal**.
   - **Quota & Rate Limit Tracker (`/dashboard/quota`)**: Real-time RPM/TPM capacity gauges, color-coded capacity progress bars, rolling session reset countdowns, and 30-second auto-refresh timer.
@@ -127,14 +127,24 @@ alphaway.exe
 ## ⚙️ Environment Configuration (`.env`)
 
 ```ini
-# Standard API Key (default: sk-alphaway-free)
-API_KEY=sk-alphaway-free
+# Optional legacy environment-managed inference key. Prefer dashboard-issued keys.
+API_KEY=
+BRIDGE_API_KEY=
 
-# CodeBuddy International Credentials (optional, or login via OAuth)
+# Optional 32-byte AES-256-GCM master key (64 hex characters or base64).
+# When unset, AlphaWay creates ~/.alphaway/secret-encryption.key with mode 0600 on POSIX.
+# Back up this key separately from alphaway.sqlite.
+ALPHAWAY_ENCRYPTION_KEY=
+
+# Enable only behind a trusted reverse proxy that overwrites X-Forwarded-Proto.
+TRUST_PROXY=0
+
+# Optional legacy/environment override for the CodeBuddy upstream credential.
+# Dashboard/CLI OAuth tokens are stored encrypted in SQLite.
 CODEBUDDY_API_KEY=
 
-# Cloudflare Named Tunnel (optional for secure public access)
-PUBLIC_URL=https://gateway.example.com
+# Cloudflare Named Tunnel (optional)
+PUBLIC_URL=
 CLOUDFLARE_TUNNEL_TOKEN=
 CLOUDFLARE_TUNNEL_ID=
 CLOUDFLARE_ACCOUNT_TAG=
@@ -152,20 +162,35 @@ PORT=20129
 HOST=127.0.0.1
 ```
 
----
+## 🔐 First-Run Administrator Setup
 
+On first start, AlphaWay creates a one-time administrator bootstrap token in its state directory. In a second local terminal, print it with:
+
+```bash
+bun src/index.ts --show-admin-bootstrap-token
+```
+
+For a standalone executable, run the equivalent command with the executable path, for example `./alphaway --show-admin-bootstrap-token`. Enter the token in the dashboard, then create an administrator username and password (minimum 12 characters). The token is deleted after successful bootstrap; it is not available from an HTTP endpoint.
+
+All `/api/*` management endpoints require an administrator session. The session cookie is HttpOnly and SameSite=Strict. Gateway inference credentials are separate: create them in **Endpoint & Key**. A full API key is shown only once at creation or rotation; store it securely. Existing `API_KEY` and `BRIDGE_API_KEY` environment credentials remain supported for compatibility.
+
+CodeBuddy upstream credentials are separate from the AlphaWay gateway key. The dashboard OAuth flow and CLI OAuth login store the CodeBuddy token encrypted in SQLite; the HTTP polling response never returns the access token. `CODEBUDDY_API_KEY` remains an optional environment override for existing deployments. An explicit `x-codebuddy-api-key` may be sent per request when no server-side credential is configured. AlphaWay never forwards its gateway `Authorization` token as the CodeBuddy upstream credential.
+
+Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encrypted at rest with AES-256-GCM. When `ALPHAWAY_ENCRYPTION_KEY` is unset, AlphaWay generates `~/.alphaway/secret-encryption.key`. Back up that file together with the database; losing the encryption key makes encrypted credentials unrecoverable. POSIX key-file permissions are restricted to the owner.
+
+---
 ## 🔌 Client Integration Guide (Tri-Protocol)
 
 ### 1. OpenAI Chat Completions Format
 Use the following settings in Cursor, Continue.dev, Cline, Roo-Code, or OpenAI SDKs:
 - **Base URL:** `http://127.0.0.1:20129/v1`
-- **API Key:** `sk-alphaway-free` (or match `API_KEY` in `.env`)
+- **API Key:** the key created in the authenticated dashboard
 - **Endpoint:** `POST http://127.0.0.1:20129/v1/chat/completions`
 
 ```bash
 curl -s http://127.0.0.1:20129/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-alphaway-free" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "model": "mimo-v2.6-flash-free",
     "messages": [{"role": "user", "content": "Hello AlphaWay!"}]
@@ -175,12 +200,12 @@ curl -s http://127.0.0.1:20129/v1/chat/completions \
 ### 2. Anthropic Claude Messages Format
 Can be invoked directly from Claude Code or Anthropic SDK:
 - **Endpoint:** `POST http://127.0.0.1:20129/v1/messages`
-- **Headers:** `x-api-key: sk-alphaway-free`, `anthropic-version: 2023-06-01`
+- **Headers:** `x-api-key: YOUR_API_KEY`, `anthropic-version: 2023-06-01`
 
 ```bash
 curl -s http://127.0.0.1:20129/v1/messages \
   -H "Content-Type: application/json" \
-  -H "x-api-key: sk-alphaway-free" \
+  -H "x-api-key: YOUR_API_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
     "model": "claude-3-7-sonnet",
@@ -191,12 +216,12 @@ curl -s http://127.0.0.1:20129/v1/messages \
 
 ### 3. OpenAI Codex Responses Format
 - **Endpoint:** `POST http://127.0.0.1:20129/response`
-- **Headers:** `Authorization: Bearer sk-alphaway-free`
+- **Headers:** `Authorization: Bearer YOUR_API_KEY`
 
 ```bash
 curl -s http://127.0.0.1:20129/response \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-alphaway-free" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "model": "mimo-v2.6-flash-free",
     "prompt": "Write a TypeScript function to reverse a string"

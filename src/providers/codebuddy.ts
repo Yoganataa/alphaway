@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const { getCodeBuddyApiKey, setCodeBuddyApiKey } = require("../core/codebuddy-credentials");
 
 /**
  * CodeBuddy International (WorkBuddy AI) upstream integration for AlphaWay.
@@ -653,7 +654,7 @@ async function loginCodebuddyCli() {
   console.log("            CodeBuddy.ai / WorkBuddy OAuth Login Helper          ");
   console.log("=".repeat(65) + "\n");
 
-  const currentKey = process.env.CODEBUDDY_API_KEY || "";
+  const currentKey = getCodeBuddyApiKey();
   if (currentKey) {
     const sub = extractJwtSub(currentKey);
     console.log(`ℹ️  Token saat ini terdeteksi untuk user: ${sub || "Authenticated"}`);
@@ -712,25 +713,10 @@ async function loginCodebuddyCli() {
           console.log(`👤 User ID (sub): ${sub}`);
         }
 
-        // Simpan ke .env
-        const fs = require("fs");
-        const path = require("path");
-        const envPath = path.join(process.cwd(), ".env");
-        try {
-          let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
-          if (/^CODEBUDDY_API_KEY=/m.test(envContent)) {
-            envContent = envContent.replace(/^CODEBUDDY_API_KEY=.*$/m, `CODEBUDDY_API_KEY=${pollRes.accessToken}`);
-          } else {
-            envContent = (envContent.trimEnd() ? envContent.trimEnd() + "\n" : "") + `CODEBUDDY_API_KEY=${pollRes.accessToken}\n`;
-          }
-          fs.writeFileSync(envPath, envContent, "utf8");
-          console.log(`💾 Token successfully saved to .env as CODEBUDDY_API_KEY`);
-        } catch (err) {
-          console.warn(`⚠️ Failed to automatically save to .env: ${err.message}`);
-          console.log(`👉 Silakan set manual di .env:\nCODEBUDDY_API_KEY=${pollRes.accessToken}`);
-        }
-
+        // Keep the OAuth-issued provider credential encrypted in canonical SQLite state.
+        setCodeBuddyApiKey(pollRes.accessToken);
         process.env.CODEBUDDY_API_KEY = pollRes.accessToken;
+        console.log("💾 CodeBuddy credential saved encrypted in AlphaWay SQLite state.");
 
         // Uji coba model langsung
         console.log("\n🧪 Melakukan uji coba model deepseek-v4.1-flash ke upstream...");

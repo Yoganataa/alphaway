@@ -170,26 +170,42 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Not started  
+**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; CI and final review pending.  
 **Priority:** P1 — security-critical
 
-- [ ] Separate gateway caller authentication from dashboard/admin authentication.
-- [ ] Implement a real authenticated administrative session/bootstrap mechanism. Origin, Host, and CSRF checks remain additional protections, not the identity mechanism.
-- [ ] Protect all administrative read/write routes consistently, including settings, keys, providers, proxy pools, security, plans, personas, usage exports, logs, and maintenance operations.
-- [ ] Store caller API keys as strong hashes with a non-secret lookup prefix; show the raw key only at issuance time.
-- [ ] Add key lifecycle operations: create, list metadata, revoke, rotate, label, status, and last-used metadata.
-- [ ] Replace predictable `Math.random()` key generation and timestamp-only IDs with cryptographically secure generation and collision-resistant identifiers.
-- [ ] Add per-key metadata and policy/plan assignment without coupling dashboard sessions to inference credentials.
-- [ ] Add negative tests for missing, malformed, revoked, wrong-scope, and unauthorized credentials.
-- [ ] Ensure administrative secrets and API key material never appear in logs, error messages, or analytics payloads.
+- [x] Separate gateway caller authentication from dashboard/admin authentication.
+- [x] Implement one-time first-admin bootstrap, password hashing, login throttling, hashed database sessions, expiry, logout, and HttpOnly/SameSite cookies.
+- [x] Protect administrative `/api/*` routes by default; retain only the narrow unauthenticated admin-auth bootstrap/login/status/session endpoints. Origin/Host checks remain defense-in-depth.
+- [x] Store managed caller API keys as salted SHA-256 hashes with a non-secret lookup prefix; raw keys are returned only on issuance/rotation.
+- [x] Implement key lifecycle operations: create, list metadata, revoke, rotate, rename, scopes, last-used time, and request counts.
+- [x] Replace predictable `Math.random()` API key generation with CSPRNG keys and UUID identifiers.
+- [ ] Add policy/plan assignment to individual keys. The current implementation has inference scopes; plan enforcement remains Phase 3 work.
+- [x] Add negative tests for missing, invalid, revoked, wrong-scope, and unauthenticated admin credentials.
+- [ ] Finish the full secret-flow audit across logs, upstream errors, analytics, backups, and platform-specific storage permissions. Current coverage includes hashed API keys, provider/proxy/relay/CodeBuddy OAuth encryption, response redaction, and one-time bootstrap/session tests.
+- [x] Encrypt custom-provider credentials at the SQLite adapter boundary, proxy/relay credentials in the egress store, legacy JSON imports, and CodeBuddy OAuth credentials.
+- [x] Separate AlphaWay gateway bearer credentials from CodeBuddy upstream credentials; use server-side CodeBuddy configuration or the explicit `x-codebuddy-api-key` override.
+- [x] Keep the CodeBuddy OAuth access/refresh token out of HTTP responses and persist the upstream access token encrypted in SQLite.
+- [x] Align the dashboard CodeBuddy OAuth client with the provider's actual `state`/`authUrl` polling contract.
+- [x] Isolate Bun unit-test SQLite state using a preload before application modules are imported.
+
+**Implementation notes**
+
+- Migration v2 adds `api_keys`, `admin_users`, and `admin_sessions`; converts legacy API-key JSON records to hashes; encrypts existing custom-provider/proxy credentials as part of the migration.
+- The master encryption key is supplied by `ALPHAWAY_ENCRYPTION_KEY` or generated in the AlphaWay state directory. Back it up separately from SQLite; losing it makes encrypted provider credentials unrecoverable.
+- `API_KEY` and `BRIDGE_API_KEY` remain supported as legacy environment-managed inference keys. `CODEBUDDY_API_KEY` remains an environment override; OAuth-created CodeBuddy credentials are encrypted in SQLite.
+- The OAuth UI no longer treats the provider's `state` value as a user verification code.
+
+**Verification state**
+
+- The feature branch has not yet been verified by GitHub Actions. Create a draft PR to run the repository CI on Bun 1.4.4, inspect all failing job logs, and resolve findings before marking Phase 2 complete.
+- Do not begin Phase 3 until Phase 2 CI, security review, and merge acceptance criteria are satisfied.
 
 **Acceptance criteria**
 
-- Newly issued keys authenticate gateway requests; revoked keys immediately stop working.
-- The dashboard cannot perform admin operations without an authenticated admin session.
-- Existing documented gateway protocols continue to accept their expected authorization headers.
-- Secrets are not retrievable from persisted records or logs.
-
+- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; CI pending).
+- The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; CI pending).
+- Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; CI pending).
+- Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter tests committed; CI pending).
 ### Phase 3 — Plans, Limits, and Request Enforcement
 
 **Status:** Not started  

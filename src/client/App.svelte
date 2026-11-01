@@ -19,9 +19,11 @@
   import ProfileSettingsView from "./components/ProfileSettingsView.svelte";
   import CommandPalette from "./components/CommandPalette.svelte";
   import Toasts from "./lib/ui/Toasts.svelte";
-  import { fetchHealth } from "./lib/api";
+  import { fetchHealth, fetchAdminAuthStatus, fetchAdminSession, logoutAdmin, setActiveApiKey } from "./lib/api";
+  import AdminAccessView from "./components/AdminAccessView.svelte";
   import type { HealthResponse } from "./lib/types";
 
+  let authMode = $state<"loading" | "bootstrap" | "login" | "authenticated">("loading");
   let activeTab = $state<string>("overview");
   let health = $state<HealthResponse | null>(null);
   let pollTimer: any = null;
@@ -32,6 +34,35 @@
     try {
       health = await fetchHealth();
     } catch {}
+  }
+
+  async function refreshAdminAuth() {
+    try {
+      const status = await fetchAdminAuthStatus();
+      if (!status.configured) {
+        authMode = "bootstrap";
+        return;
+      }
+      const session = await fetchAdminSession();
+      if (!session.authenticated) {
+        authMode = "login";
+        return;
+      }
+      authMode = "authenticated";
+      await loadHealth();
+      if (!pollTimer) pollTimer = setInterval(loadHealth, 10000);
+    } catch {
+      authMode = "login";
+    }
+  }
+
+  async function handleLogout() {
+    try { await logoutAdmin(); } catch {}
+    setActiveApiKey("");
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    health = null;
+    authMode = "login";
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -52,8 +83,7 @@
       document.documentElement.classList.remove("light");
     }
 
-    loadHealth();
-    pollTimer = setInterval(loadHealth, 10000);
+    void refreshAdminAuth();
     window.addEventListener("keydown", handleKeydown);
 
     return () => {
@@ -63,6 +93,7 @@
   });
 </script>
 
+{#if authMode === "authenticated"}
 <div class="min-h-screen bg-bg text-text-main font-sans flex selection:bg-brand-500/30 selection:text-white relative">
   <!-- Left Sidebar (9Router-Go Architecture) -->
   <Sidebar
@@ -84,6 +115,7 @@
       onRefresh={loadHealth}
       onOpenSearch={() => (isPaletteOpen = true)}
       onToggleMobileMenu={() => (isMobileMenuOpen = !isMobileMenuOpen)}
+      onLogout={handleLogout}
     />
 
     <!-- Scrollable Main View -->
@@ -122,3 +154,10 @@
   <!-- Global Toast Notifications -->
   <Toasts />
 </div>
+{:else if authMode === "loading"}
+  <div class="min-h-screen bg-bg text-text-main flex items-center justify-center">
+    <p class="text-sm text-text-muted">Checking administrator session…</p>
+  </div>
+{:else}
+  <AdminAccessView mode={authMode} onAuthenticated={refreshAdminAuth} />
+{/if}

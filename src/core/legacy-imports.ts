@@ -85,7 +85,7 @@ function importCustomProviders(db: any, payload: any): ImportOutcome {
       provider.id.trim(),
       provider.name,
       provider.baseUrl,
-      provider.apiKey,
+      encryptSecret(provider.apiKey.includes("xxxxxxxx") ? "" : provider.apiKey),
       provider.protocol === "anthropic" ? "anthropic" : "openai",
       JSON.stringify(models),
       provider.enabled === false ? 0 : 1,
@@ -168,6 +168,32 @@ function importUsageStats(db: any, payload: any): ImportOutcome {
   return { status: "imported", rowCount };
 }
 
+function importProxyConfig(db: any, payload: any): ImportOutcome {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { status: "skipped", rowCount: 0, details: "Expected a proxy configuration object." };
+  }
+
+  const config = { ...payload };
+  if (typeof config.url === "string") config.url = encryptSecret(config.url);
+  if (Array.isArray(config.pool)) {
+    config.pool = config.pool.map((entry: any) => {
+      if (typeof entry === "string") return encryptSecret(entry);
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+      const safe = { ...entry };
+      for (const field of ["url", "token", "auth"]) {
+        if (typeof safe[field] === "string") safe[field] = encryptSecret(safe[field]);
+      }
+      return safe;
+    });
+  }
+
+  const inserted = insertAppSettingIfMissing(db, "proxy_config", config);
+  return {
+    status: "imported",
+    rowCount: inserted,
+    details: inserted === 0 ? "Existing SQLite setting was retained." : undefined,
+  };
+}
 function importSetting(key: string): ImportHandler {
   return (database, payload) => {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -301,7 +327,7 @@ export function importLegacyJson(
     { file: "custom_providers.json", name: "custom_providers", handler: importCustomProviders },
     { file: "usage_stats.json", name: "usage_stats", handler: importUsageStats },
     { file: "tokensaver.json", name: "tokensaver", handler: importSetting("tokensaver_config") },
-    { file: "proxy.json", name: "proxy", handler: importSetting("proxy_config") },
+    { file: "proxy.json", name: "proxy", handler: importProxyConfig },
   ];
 
   for (const source of sources) {

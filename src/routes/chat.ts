@@ -31,6 +31,7 @@ import { findCustomProviderForModel, forwardToCustomProvider } from "../core/cus
 const identity = require("../core/identity");
 import * as tokensaver from "../features/tokensaver";
 import { recordRequestUsage, estimateTokensFromText } from "../core/usage-tracker";
+import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
 
 function computePromptChars(messages: any[]): number {
   if (!Array.isArray(messages)) return 0;
@@ -72,7 +73,11 @@ async function dispatchToUpstream(
 
     if (!upstreamRes.ok) {
       const errText = await upstreamRes.text();
-      return new Response(errText, {
+      const providerSecret = String(customMatch.provider.apiKey || "");
+      const safeError = providerSecret
+        ? errText.replaceAll(providerSecret, "[REDACTED]")
+        : errText;
+      return new Response(safeError, {
         status: upstreamRes.status,
         headers: { "Content-Type": "application/json" },
       });
@@ -222,13 +227,9 @@ async function dispatchToUpstream(
   // 2. Dispatch to CodeBuddy
   const isCodebuddy = codebuddy.isCodebuddyModel(targetModel);
   if (isCodebuddy) {
-    const apiKey =
-      rawReq.headers.get("x-codebuddy-api-key") ||
-      (rawReq.headers.get("authorization")?.startsWith("Bearer ")
-        ? rawReq.headers.get("authorization")!.slice(7).trim()
-        : "") ||
-      process.env.CODEBUDDY_API_KEY ||
-      "";
+    // AlphaWay gateway credentials are authenticated by app middleware and must
+    // never be reused as upstream CodeBuddy credentials.
+    const apiKey = getCodeBuddyApiKey() || rawReq.headers.get("x-codebuddy-api-key") || "";
 
     if (!apiKey) {
       return Response.json(

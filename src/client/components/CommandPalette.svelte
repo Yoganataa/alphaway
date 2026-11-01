@@ -170,19 +170,7 @@
         isOpen = false;
       },
     },
-    {
-      id: "copy-apikey",
-      label: "Copy Default API Key",
-      description: "sk-alphaway-free",
-      icon: "key",
-      category: "Actions",
-      action: () => {
-        if (typeof navigator !== "undefined") {
-          navigator.clipboard.writeText("sk-alphaway-free");
-          notifications.success("API Key copied to clipboard");
-        }
-        isOpen = false;
-      },
+
     },
   ];
 

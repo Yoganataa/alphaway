@@ -12,7 +12,20 @@ import {
 } from "../core/custom-providers";
 import { adminRequestError } from "../core/admin-guard";
 
+function publicProvider(provider: CustomProvider) {
+  const { apiKey, ...safe } = provider;
+  return { ...safe, apiKey: "", hasApiKey: Boolean(apiKey) };
+}
+
 export const customProvidersRoute = new Hono();
+
+function redactUpstreamError(value: string, secrets: string[]): string {
+  let sanitized = String(value || "").slice(0, 300);
+  for (const secret of secrets) {
+    if (secret && secret.length >= 8) sanitized = sanitized.replaceAll(secret, "[REDACTED]");
+  }
+  return sanitized;
+}
 
 // CSRF & Host header protection for admin routes
 customProvidersRoute.use("*", async (c, next) => {
@@ -27,7 +40,7 @@ customProvidersRoute.use("*", async (c, next) => {
 
 // List all registered custom providers
 customProvidersRoute.get("/api/custom-providers", (c) => {
-  const providers = loadCustomProviders();
+  const providers = loadCustomProviders().map(publicProvider);
   return c.json({ providers });
 });
 
@@ -40,7 +53,7 @@ customProvidersRoute.post("/api/custom-providers", async (c) => {
     }
 
     const saved = addOrUpdateCustomProvider(body);
-    return c.json({ ok: true, provider: saved });
+    return c.json({ ok: true, provider: publicProvider(saved) });
   } catch (err: any) {
     return c.json({ error: err.message || "Failed to save custom provider" }, 500);
   }
@@ -61,12 +74,15 @@ customProvidersRoute.post("/api/custom-providers/test", async (c) => {
   try {
     const body = await c.req.json();
     const { baseUrl, apiKey, protocol, model } = body;
+    const savedProvider = typeof body.id === "string" ? getCustomProvider(body.id) : undefined;
     if (!baseUrl) {
       return c.json({ ok: false, error: "baseUrl is required" }, 400);
     }
 
     const cleanUrl = baseUrl.trim().replace(/\/+$/, "");
-    const cleanKey = apiKey ? (apiKey.startsWith("sk-") ? apiKey : `sk-${apiKey}`) : "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+    const suppliedKey = typeof apiKey === "string" ? apiKey.trim() : "";
+    const rawKey = suppliedKey || savedProvider?.apiKey || "";
+    const cleanKey = rawKey ? (rawKey.startsWith("sk-") ? rawKey : `sk-${rawKey}`) : "";
     const testModel = model || (protocol === "anthropic" ? "claude-3-5-sonnet-20241022" : "gpt-4o-mini");
 
     if (protocol === "anthropic") {
@@ -75,7 +91,7 @@ customProvidersRoute.post("/api/custom-providers/test", async (c) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": cleanKey,
+          ...(cleanKey ? { "x-api-key": cleanKey } : {}),
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
@@ -87,7 +103,7 @@ customProvidersRoute.post("/api/custom-providers/test", async (c) => {
 
       if (!res.ok) {
         const text = await res.text();
-        return c.json({ ok: false, status: res.status, error: text.slice(0, 300) });
+        return c.json({ ok: false, status: res.status, error: redactUpstreamError(text, [cleanKey, rawKey]) });
       }
       return c.json({ ok: true, status: res.status, message: "Anthropic endpoint reachable!" });
     } else {
@@ -96,7 +112,7 @@ customProvidersRoute.post("/api/custom-providers/test", async (c) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${cleanKey}`,
+          ...(cleanKey ? { Authorization: `Bearer ${cleanKey}` } : {}),
         },
         body: JSON.stringify({
           model: testModel,
@@ -107,11 +123,12 @@ customProvidersRoute.post("/api/custom-providers/test", async (c) => {
 
       if (!res.ok) {
         const text = await res.text();
-        return c.json({ ok: false, status: res.status, error: text.slice(0, 300) });
+        return c.json({ ok: false, status: res.status, error: redactUpstreamError(text, [cleanKey, rawKey]) });
       }
       return c.json({ ok: true, status: res.status, message: "OpenAI endpoint reachable!" });
     }
-  } catch (err: any) {
-    return c.json({ ok: false, error: err.message || "Connection failed" }, 500);
+  } catch {
+    // Fetch errors may contain a URL with embedded credentials; never echo it.
+    return c.json({ ok: false, error: "Connection failed. Verify the endpoint and credentials." }, 500);
   }
 });

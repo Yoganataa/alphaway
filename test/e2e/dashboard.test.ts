@@ -20,7 +20,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
       try {
         await fetch(`${dashboard.baseURL}/api/tokensaver`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Cookie: dashboard.adminCookie },
           body: JSON.stringify({ cavemanEnabled: false, adhdEnabled: false }),
         });
       } catch {}

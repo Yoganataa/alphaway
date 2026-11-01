@@ -41,33 +41,30 @@ export function getCustomProvider(id: string): CustomProvider | undefined {
 export function addOrUpdateCustomProvider(provider: Partial<CustomProvider> & { name: string; baseUrl: string }): CustomProvider {
   const providers = loadCustomProviders();
   const id = provider.id || provider.name.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 32);
+  const existingIndex = providers.findIndex((p) => p.id === id);
+  const existing = existingIndex >= 0 ? providers[existingIndex] : undefined;
 
-  // Normalize API Key with sk- prefix if provided
-  let apiKey = (provider.apiKey || "").trim();
+  // An empty API key on an edit means "keep the current credential".
+  let apiKey = typeof provider.apiKey === "string" ? provider.apiKey.trim() : "";
   if (apiKey && !apiKey.startsWith("sk-") && apiKey !== "none") {
     apiKey = `sk-${apiKey}`;
   }
+  if (!apiKey || apiKey === "none") apiKey = existing?.apiKey || "";
 
-  // Normalize Base URL (strip trailing slashes)
-  let baseUrl = (provider.baseUrl || "").trim().replace(/\/+$/, "");
-
-  const existingIndex = providers.findIndex((p) => p.id === id);
+  const baseUrl = (provider.baseUrl || "").trim().replace(/\/+$/, "");
   const updated: CustomProvider = {
     id,
     name: provider.name.trim(),
     baseUrl,
-    apiKey: apiKey || "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    apiKey,
     protocol: provider.protocol === "anthropic" ? "anthropic" : "openai",
     models: Array.isArray(provider.models) && provider.models.length > 0 ? provider.models : ["default-model"],
     enabled: provider.enabled !== false,
-    createdAt: existingIndex >= 0 ? providers[existingIndex].createdAt : Date.now(),
+    createdAt: existing?.createdAt || Date.now(),
   };
 
-  if (existingIndex >= 0) {
-    providers[existingIndex] = updated;
-  } else {
-    providers.push(updated);
-  }
+  if (existingIndex >= 0) providers[existingIndex] = updated;
+  else providers.push(updated);
 
   saveCustomProviders(providers);
   return updated;

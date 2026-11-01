@@ -31,20 +31,30 @@ export function getActiveApiKey(): string {
       const k = window.__BRIDGE_API_KEY__.trim();
       return k.startsWith("sk-") ? k : `sk-${k}`;
     }
-    const stored = localStorage.getItem("alphaway_api_key") || localStorage.getItem("oc_bridge_api_key");
+    const stored = sessionStorage.getItem("alphaway_api_key")
+      || localStorage.getItem("alphaway_api_key")
+      || localStorage.getItem("oc_bridge_api_key");
     if (stored && stored.trim() && stored !== "public") {
       const k = stored.trim();
       return k.startsWith("sk-") ? k : `sk-${k}`;
     }
   }
-  return "sk-alphaway-free";
+  return "";
 }
 
 export function setActiveApiKey(key: string): void {
   if (typeof window !== "undefined") {
     const trimmed = key.trim();
-    const normalized = trimmed ? (trimmed.startsWith("sk-") ? trimmed : `sk-${trimmed}`) : "sk-alphaway-free";
-    localStorage.setItem("alphaway_api_key", normalized);
+    if (!trimmed) {
+      sessionStorage.removeItem("alphaway_api_key");
+      localStorage.removeItem("alphaway_api_key");
+      localStorage.removeItem("oc_bridge_api_key");
+      return;
+    }
+    const normalized = trimmed.startsWith("sk-") ? trimmed : `sk-${trimmed}`;
+    // Managed credentials are short-lived browser state, not durable local storage.
+    sessionStorage.setItem("alphaway_api_key", normalized);
+    localStorage.removeItem("alphaway_api_key");
   }
 }
 
@@ -55,7 +65,10 @@ export async function fetchHealth(): Promise<HealthResponse> {
 }
 
 export async function fetchModels(): Promise<ModelItem[]> {
-  const res = await fetch(`${BASE_URL}/v1/models`);
+  const key = getActiveApiKey();
+  const res = await fetch(`${BASE_URL}/v1/models`, {
+    headers: key ? { Authorization: `Bearer ${key}` } : {},
+  });
   if (!res.ok) throw new Error(`Fetch models failed: ${res.statusText}`);
   const json = await res.json();
   return json.data || [];
@@ -189,15 +202,12 @@ export async function startCodeBuddyOAuth(): Promise<CodeBuddyOAuthStart> {
 }
 
 export async function pollCodeBuddyOAuth(
-  deviceCode: string
-): Promise<{ status: "pending" | "success" | "expired"; message?: string }> {
-  const res = await fetch(`${BASE_URL}/api/codebuddy/oauth/poll`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ deviceCode }),
-  });
-  if (!res.ok) throw new Error(`OAuth poll failed: ${res.statusText}`);
-  return res.json();
+  state: string
+): Promise<{ status: "pending" | "success" | "error"; message?: string }> {
+  const res = await fetch(`${BASE_URL}/api/codebuddy/oauth/poll?state=${encodeURIComponent(state)}`);
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `OAuth poll failed: ${res.statusText}`);
+  return data;
 }
 
 export async function fetchCustomProviders(): Promise<CustomProviderConfig[]> {
@@ -347,13 +357,63 @@ export async function* streamChatCompletion(params: {
   }
 }
 
+export interface AdminAuthStatus {
+  configured: boolean;
+  setupRequired: boolean;
+}
+
+async function adminAuthRequest(path: string, options: RequestInit = {}): Promise<any> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    credentials: "same-origin",
+    headers: { ...(options.headers || {}) },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Administrator request failed: ${res.statusText}`);
+  return data;
+}
+
+export function fetchAdminAuthStatus(): Promise<AdminAuthStatus> {
+  return adminAuthRequest("/api/admin/auth/status");
+}
+
+export function fetchAdminSession(): Promise<{ authenticated: boolean; user: { username: string } | null }> {
+  return adminAuthRequest("/api/admin/auth/session");
+}
+
+export function bootstrapAdmin(input: { bootstrapToken: string; username: string; password: string }): Promise<any> {
+  return adminAuthRequest("/api/admin/auth/bootstrap", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function loginAdmin(username: string, password: string): Promise<any> {
+  return adminAuthRequest("/api/admin/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function logoutAdmin(): Promise<{ ok: boolean }> {
+  return adminAuthRequest("/api/admin/auth/logout", { method: "POST" });
+}
+
 export interface APIKeyRecord {
   id: string;
   name: string;
-  secret: string;
+  prefix: string;
+  scopes: string[];
   createdAt: number;
-  lastUsedAt?: number;
+  lastUsedAt: number | null;
+  requestsCount: number;
   status: "active" | "revoked";
+}
+
+export interface IssuedAPIKey extends APIKeyRecord {
+  secret: string;
 }
 
 export interface ConsoleLogItem {
@@ -379,22 +439,39 @@ export async function fetchApiKeys(): Promise<APIKeyRecord[]> {
   return data.keys || [];
 }
 
-export async function createApiKey(name: string): Promise<APIKeyRecord> {
+export async function createApiKey(name: string): Promise<IssuedAPIKey> {
   const res = await fetch(`${BASE_URL}/api/keys`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   });
-  if (!res.ok) throw new Error(`Failed to create API key: ${res.statusText}`);
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Failed to create API key: ${res.statusText}`);
+  return data.key;
+}
+
+export async function updateApiKeyLabel(id: string, name: string): Promise<APIKeyRecord> {
+  const res = await fetch(`${BASE_URL}/api/keys/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Failed to update API key: ${res.statusText}`);
+  return data.key;
+}
+
+export async function rotateApiKey(id: string): Promise<IssuedAPIKey> {
+  const res = await fetch(`${BASE_URL}/api/keys/${encodeURIComponent(id)}/rotate`, { method: "POST" });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Failed to rotate API key: ${res.statusText}`);
   return data.key;
 }
 
 export async function deleteApiKey(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/keys/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error(`Failed to delete API key: ${res.statusText}`);
+  const res = await fetch(`${BASE_URL}/api/keys/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Failed to revoke API key: ${res.statusText}`);
 }
 
 export async function fetchConsoleLogs(): Promise<ConsoleLogItem[]> {

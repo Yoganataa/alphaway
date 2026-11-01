@@ -1,8 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import * as http from "http";
 import { app } from "../src/app";
+import { issueAPIKey } from "../src/core/api-keys";
+import { getDatabase } from "../src/core/database";
+import { getCodeBuddyApiKey } from "../src/core/codebuddy-credentials";
 import * as codebuddy from "../src/providers/codebuddy";
 import * as opencode from "../src/providers/opencode";
+import { adminHeaders } from "./helpers/admin";
 
 describe("codebuddy server integration tests", () => {
   let mockUpstream: any;
@@ -13,11 +17,15 @@ describe("codebuddy server integration tests", () => {
   let mockResponseBody = "";
   let mockIsSSE = true;
   const originalApiKey = process.env.API_KEY;
+  const originalCodeBuddyApiKey = process.env.CODEBUDDY_API_KEY;
+  let gatewayApiKey = "";
 
   beforeAll((done: any) => {
-    // Disable bridge API_KEY for these tests to test CodeBuddy auth directly
-    delete process.env.API_KEY;
+    // Gateway identity and provider identity are separate credentials.
+    gatewayApiKey = issueAPIKey("CodeBuddy integration test").secret;
+    process.env.API_KEY = "sk-test-codebuddy-gateway-key";
     delete process.env.BRIDGE_API_KEY;
+    process.env.CODEBUDDY_API_KEY = "test-codebuddy-jwt-token";
     mockUpstream = http.createServer((req: any, res: any) => {
       capturedHeaders = { ...req.headers };
       let data = "";
@@ -50,9 +58,11 @@ describe("codebuddy server integration tests", () => {
   });
 
   afterAll((done: any) => {
-    process.env.API_KEY = originalApiKey;
+    if (originalApiKey === undefined) delete process.env.API_KEY;
+    else process.env.API_KEY = originalApiKey;
+    if (originalCodeBuddyApiKey === undefined) delete process.env.CODEBUDDY_API_KEY;
+    else process.env.CODEBUDDY_API_KEY = originalCodeBuddyApiKey;
     delete process.env.CODEBUDDY_INTL_URL;
-    delete process.env.CODEBUDDY_API_KEY;
     mockUpstream.close(done);
   });
 
@@ -78,7 +88,9 @@ describe("codebuddy server integration tests", () => {
     const port = testServer.port;
 
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/v1/models`);
+      const res = await fetch(`http://127.0.0.1:${port}/v1/models`, {
+        headers: { Authorization: `Bearer ${gatewayApiKey}` },
+      });
       expect(res.status).toBe(200);
       const data: any = await res.json();
       const ids = data.data.map((m: any) => m.id);
@@ -90,7 +102,7 @@ describe("codebuddy server integration tests", () => {
     }
   });
 
-  it("rejects CodeBuddy request with 401 when no API key is provided", async () => {
+  it("requires an AlphaWay key before dispatching a CodeBuddy request", async () => {
     const testServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: app.fetch });
     const port = testServer.port;
 
@@ -105,8 +117,36 @@ describe("codebuddy server integration tests", () => {
       });
       expect(res.status).toBe(401);
       const json: any = await res.json();
+      expect(json.error.code).toBe("invalid_api_key");
+    } finally {
+      testServer.stop();
+    }
+  });
+
+  it("requires a separate CodeBuddy upstream credential after gateway authentication", async () => {
+    const testServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: app.fetch });
+    const port = testServer.port;
+    const previousProviderKey = process.env.CODEBUDDY_API_KEY;
+    delete process.env.CODEBUDDY_API_KEY;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${gatewayApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "cbai/deepseek-v4.1-flash",
+          messages: [{ role: "user", content: "Halo" }],
+        }),
+      });
+      expect(res.status).toBe(401);
+      const json: any = await res.json();
       expect(json.error.code).toBe("codebuddy_auth_required");
     } finally {
+      if (previousProviderKey === undefined) delete process.env.CODEBUDDY_API_KEY;
+      else process.env.CODEBUDDY_API_KEY = previousProviderKey;
       testServer.stop();
     }
   });
@@ -123,7 +163,7 @@ describe("codebuddy server integration tests", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer test-codebuddy-jwt-token",
+          Authorization: `Bearer ${gatewayApiKey}`,
         },
         body: JSON.stringify({
           model: "cbai/deepseek-v4.1-flash",
@@ -136,6 +176,9 @@ describe("codebuddy server integration tests", () => {
       const json: any = await res.json();
       expect(json.choices[0].message.content).toBe("Halo dari CodeBuddy!");
 
+      // Gateway Authorization is not reused as the upstream CodeBuddy credential.
+      expect(capturedHeaders["authorization"]).toBe("Bearer test-codebuddy-jwt-token");
+      expect(capturedHeaders["authorization"]).not.toBe(`Bearer ${gatewayApiKey}`);
       // Verify captured headers sent to upstream
       expect(capturedHeaders["user-agent"]).toBe("WorkBuddy/5.8.4 workbuddy-ai/5.8.4 CLI/2.161.0");
       expect(capturedHeaders["x-ide-type"]).toBe("WorkBuddy");
@@ -177,7 +220,7 @@ describe("codebuddy server integration tests", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer test-token",
+          Authorization: `Bearer ${gatewayApiKey}`,
         },
         body: JSON.stringify({
           model: "glm-5.2",
@@ -196,6 +239,40 @@ describe("codebuddy server integration tests", () => {
     }
   });
 
+
+  it("stores OAuth tokens encrypted and never returns the upstream credential", async () => {
+    const accessToken = "codebuddy-oauth-secret-that-must-not-leak";
+    const previousProviderKey = process.env.CODEBUDDY_API_KEY;
+    delete process.env.CODEBUDDY_API_KEY;
+    (codebuddy as any).__setPollCodebuddyOAuth(async () => ({
+      status: "authorized",
+      accessToken,
+      refreshToken: "codebuddy-refresh-secret",
+    }));
+
+    try {
+      const headers = await adminHeaders();
+      const response = await app.request("/api/codebuddy/oauth/poll?state=authorized-test", { headers });
+      expect(response.status).toBe(200);
+      const body: any = await response.json();
+      expect(body.status).toBe("success");
+      expect(body.accessToken).toBeUndefined();
+      expect(JSON.stringify(body)).not.toContain(accessToken);
+
+      const row = getDatabase().prepare("SELECT value FROM app_settings WHERE key = ?")
+        .get("codebuddy_api_key") as { value: string };
+      const stored = JSON.parse(row.value);
+      expect(stored).toMatch(/^awenc:v1:/);
+      expect(stored).not.toContain(accessToken);
+      expect(getCodeBuddyApiKey()).toBe(accessToken);
+    } finally {
+      getDatabase().prepare("DELETE FROM app_settings WHERE key = ?").run("codebuddy_api_key");
+      if (previousProviderKey === undefined) delete process.env.CODEBUDDY_API_KEY;
+      else process.env.CODEBUDDY_API_KEY = previousProviderKey;
+      (codebuddy as any).__setPollCodebuddyOAuth(null);
+    }
+  });
+
   it("handles CodeBuddy OAuth endpoints", async () => {
     (codebuddy as any).__setPollCodebuddyOAuth(async () => ({ status: "pending" }));
 
@@ -203,7 +280,8 @@ describe("codebuddy server integration tests", () => {
     const port = testServer.port;
 
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/codebuddy/oauth/poll?state=test-state`);
+      const headers = await adminHeaders();
+      const res = await fetch(`http://127.0.0.1:${port}/api/codebuddy/oauth/poll?state=test-state`, { headers });
       expect(res.status).toBe(200);
       const json: any = await res.json();
       expect(json.status).toBe("pending");

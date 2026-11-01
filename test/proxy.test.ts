@@ -7,12 +7,17 @@ const http = require("node:http");
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ofb-proxy-test-"));
 process.env.OPENCODE_BRIDGE_STATE_DIR = tmpDir;
+process.env.ALPHAWAY_STATE_DIR = tmpDir;
+process.env.ALPHAWAY_DB_PATH = path.join(tmpDir, "alphaway.sqlite");
 delete process.env.UPSTREAM_PROXY_URL;
 
 const proxy = require("../src/core/proxy");
 const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("../src/core/database");
+const { decryptSecret } = require("../src/core/secrets");
 const panel = require("../src/core/panel");
 const { app } = require("../src/app");
+const { getAdminCookie } = require("./helpers/admin.ts");
+let adminCookie = "";
 
 function request(port, method, urlPath, body, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -25,6 +30,7 @@ function request(port, method, urlPath, body, headers = {}) {
         method,
         headers: {
           ...(payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}),
+          ...(urlPath.startsWith("/api/") && adminCookie ? { Cookie: adminCookie } : {}),
           ...headers,
         },
       },
@@ -50,7 +56,7 @@ function emptyStateDir() {
   // the directory instead of assuming an earlier suite left it in place.
   fs.mkdirSync(tmpDir, { recursive: true });
   for (const f of fs.readdirSync(tmpDir)) {
-    if (f.endsWith(".sqlite") || f.endsWith(".sqlite-wal") || f.endsWith(".sqlite-shm")) continue;
+    if (f.endsWith(".sqlite") || f.endsWith(".sqlite-wal") || f.endsWith(".sqlite-shm") || f === "secret-encryption.key") continue;
     try {
       fs.rmSync(path.join(tmpDir, f), { force: true });
     } catch {}
@@ -64,11 +70,6 @@ describe("egress proxy", () => {
     proxy.__reload();
   });
 
-  after(() => {
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
-  });
 
   it("accepts http and https proxies with optional percent-encoded credentials", () => {
     assert.deepEqual(proxy.parseProxyUrl("http://127.0.0.1:8080"), { ok: true, url: "http://127.0.0.1:8080" });
@@ -105,7 +106,9 @@ describe("egress proxy", () => {
     assert.equal(proxy.configStore(), "SQLite app_settings.proxy_config");
 
     const stored = dbGetSetting("proxy_config", null);
-    assert.equal(stored.url, "http://user:secret@10.0.0.5:8080");
+    assert.match(stored.url, /^awenc:v1:/);
+    assert.equal(JSON.stringify(stored).includes("user:secret"), false);
+    assert.equal(decryptSecret(stored.url), "http://user:secret@10.0.0.5:8080");
 
     // A fresh runtime reload reads the same canonical SQLite setting.
     proxy.__restart();
@@ -214,6 +217,7 @@ describe("proxy HTTP surface", () => {
   let server;
 
   before(async () => {
+    adminCookie = await getAdminCookie();
     emptyStateDir();
     proxy.__reload();
     const testServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: app.fetch });
@@ -228,6 +232,7 @@ describe("proxy HTTP surface", () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   });
 
   it("serves the panel at / and keeps /health as JSON", async () => {
@@ -413,6 +418,8 @@ describe("egress pool", () => {
     assert.equal(stored.pool.length, 2);
     assert.equal(stored.strategy, "failover");
     expectNoSecretValue(stored);
+    assert.match(stored.pool[0].url, /^awenc:v1:/);
+    assert.equal(decryptSecret(stored.pool[0].url), "http://u:secret@a:1");
 
     // A fresh process reads the same pool.
     proxy.__reload();

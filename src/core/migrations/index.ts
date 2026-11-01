@@ -1,9 +1,10 @@
 import { initialSchemaMigration } from "./001_initial_schema";
+import { authSecurityMigration } from "./002_auth_security";
 import type { Migration, MigrationRunOptions, MigrationRunResult } from "./types";
 
 export type { Migration, MigrationRunOptions, MigrationRunResult } from "./types";
 
-export const MIGRATIONS: readonly Migration[] = [initialSchemaMigration];
+export const MIGRATIONS: readonly Migration[] = [initialSchemaMigration, authSecurityMigration];
 
 export class MigrationError extends Error {
   constructor(message: string) {

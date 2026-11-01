@@ -4,8 +4,7 @@
  */
 
 import { Hono } from "hono";
-import fs from "fs";
-import path from "path";
+import { setCodeBuddyApiKey } from "../core/codebuddy-credentials";
 import * as codebuddy from "../providers/codebuddy";
 
 export const authRoute = new Hono();
@@ -27,21 +26,17 @@ authRoute.get("/api/codebuddy/oauth/poll", async (c) => {
 
   try {
     const res = await codebuddy.pollCodebuddyOAuth(state);
+    if (res.status === "pending") return c.json({ status: "pending" });
     if (res.status === "authorized" && res.accessToken) {
+      setCodeBuddyApiKey(res.accessToken);
       process.env.CODEBUDDY_API_KEY = res.accessToken;
-      // Persist to .env
-      try {
-        const envPath = path.join(process.cwd(), ".env");
-        let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
-        if (/^CODEBUDDY_API_KEY=/m.test(content)) {
-          content = content.replace(/^CODEBUDDY_API_KEY=.*$/m, `CODEBUDDY_API_KEY=${res.accessToken}`);
-        } else {
-          content += `\nCODEBUDDY_API_KEY=${res.accessToken}\n`;
-        }
-        fs.writeFileSync(envPath, content, "utf8");
-      } catch {}
+      // Access and refresh tokens remain server-side and are never returned to the browser.
+      return c.json({ status: "success", message: "CodeBuddy credential saved securely." });
     }
-    return c.json(res);
+    return c.json({
+      status: "error",
+      message: res.message || "CodeBuddy authorization failed.",
+    });
   } catch (err: any) {
     return c.json({ ok: false, error: err.message }, 500);
   }

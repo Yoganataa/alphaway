@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach } from "bun:test";
 import os from "node:os";
+import fs from "node:fs";
 import path from "node:path";
 import {
   getDatabase,
@@ -25,26 +26,36 @@ import {
 } from "../src/core/database";
 
 describe("AlphaWay SQLite Database Engine", () => {
-  it("keeps the existing SQLite root when ALPHAWAY_HOME only identifies legacy JSON state", () => {
+  it("keeps the SQLite root stable when ALPHAWAY_HOME only identifies legacy JSON state", () => {
     const previous = {
-      home: process.env.ALPHAWAY_HOME,
+      alphaWayHome: process.env.ALPHAWAY_HOME,
       stateDir: process.env.ALPHAWAY_STATE_DIR,
       legacyStateDir: process.env.OPENCODE_BRIDGE_STATE_DIR,
+      home: process.env.HOME,
+      userProfile: process.env.USERPROFILE,
     };
+    const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-homedir-test-"));
 
     try {
-      process.env.ALPHAWAY_HOME = path.join(os.tmpdir(), "alphaway-legacy-json-home");
+      process.env.HOME = isolatedHome;
+      process.env.USERPROFILE = isolatedHome;
+      process.env.ALPHAWAY_HOME = path.join(isolatedHome, "legacy-json");
       delete process.env.ALPHAWAY_STATE_DIR;
       delete process.env.OPENCODE_BRIDGE_STATE_DIR;
 
-      expect(resolveDbDir()).toBe(path.join(os.homedir(), ".alphaway"));
+      expect(resolveDbDir()).toBe(path.join(isolatedHome, ".alphaway"));
     } finally {
-      if (previous.home === undefined) delete process.env.ALPHAWAY_HOME;
-      else process.env.ALPHAWAY_HOME = previous.home;
+      fs.rmSync(isolatedHome, { recursive: true, force: true });
+      if (previous.alphaWayHome === undefined) delete process.env.ALPHAWAY_HOME;
+      else process.env.ALPHAWAY_HOME = previous.alphaWayHome;
       if (previous.stateDir === undefined) delete process.env.ALPHAWAY_STATE_DIR;
       else process.env.ALPHAWAY_STATE_DIR = previous.stateDir;
       if (previous.legacyStateDir === undefined) delete process.env.OPENCODE_BRIDGE_STATE_DIR;
       else process.env.OPENCODE_BRIDGE_STATE_DIR = previous.legacyStateDir;
+      if (previous.home === undefined) delete process.env.HOME;
+      else process.env.HOME = previous.home;
+      if (previous.userProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previous.userProfile;
     }
   });
 
@@ -54,6 +65,7 @@ describe("AlphaWay SQLite Database Engine", () => {
     db.exec("DELETE FROM custom_providers;");
     db.exec("DELETE FROM request_logs;");
     db.exec("DELETE FROM app_settings;");
+    db.exec("DELETE FROM api_keys;");
   });
 
   it("initializes SQLite database with WAL mode and tables", () => {
@@ -65,11 +77,14 @@ describe("AlphaWay SQLite Database Engine", () => {
     expect(tables).toContain("app_settings");
     expect(tables).toContain("schema_migrations");
     expect(tables).toContain("legacy_imports");
+    expect(tables).toContain("api_keys");
+    expect(tables).toContain("admin_users");
+    expect(tables).toContain("admin_sessions");
 
     const schemaVersion = db
       .prepare("SELECT MAX(version) AS version FROM schema_migrations")
       .get()?.version;
-    expect(schemaVersion).toBe(1);
+    expect(schemaVersion).toBe(2);
   });
 
   it("performs CRUD operations on custom providers", () => {
@@ -90,6 +105,10 @@ describe("AlphaWay SQLite Database Engine", () => {
     expect(list.length).toBe(1);
     expect(list[0].id).toBe("deepseek-test");
     expect(list[0].name).toBe("DeepSeek Provider");
+    expect(list[0].apiKey).toBe("sk-test-key");
+    const stored = db.prepare("SELECT api_key FROM custom_providers WHERE id = ?").get("deepseek-test") as { api_key: string };
+    expect(stored.api_key).toMatch(/^awenc:v1:/);
+    expect(stored.api_key).not.toContain("sk-test-key");
     expect(list[0].models).toContain("deepseek-chat");
 
     const deleted = dbDeleteCustomProvider("deepseek-test");

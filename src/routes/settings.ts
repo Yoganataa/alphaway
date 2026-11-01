@@ -7,26 +7,9 @@ import fs from "fs";
 import { getDatabase, getDbFilePath, dbGetSetting, dbSetSetting } from "../core/database";
 import { getConsoleLogs, clearConsoleLogs, pushLog } from "../core/console-buffer";
 import { adminRequestError } from "../core/admin-guard";
+import { listAPIKeys, issueAPIKey, renameAPIKey, revokeAPIKey, rotateAPIKey } from "../core/api-keys";
 
 export const settingsRoute = new Hono();
-
-export interface APIKeyRecord {
-  id: string;
-  name: string;
-  secret: string;
-  createdAt: number;
-  lastUsedAt?: number;
-  requestsCount?: number;
-  status: "active" | "revoked";
-}
-
-const DEFAULT_KEY: APIKeyRecord = {
-  id: "key-default",
-  name: "Default Bridge Master Key",
-  secret: (process.env.BRIDGE_API_KEY || process.env.API_KEY || "sk-alphaway-free").trim(),
-  createdAt: Date.now() - 86400000 * 7,
-  status: "active",
-};
 
 export interface SecurityKeywordRule {
   id: string;
@@ -140,52 +123,68 @@ settingsRoute.put("/api/security/rules", async (c) => {
   return c.json({ ok: true, rules });
 });
 
-// GET /api/keys
+// GET /api/keys — metadata only; the raw secret is never stored or returned.
 settingsRoute.get("/api/keys", (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
-
-  const keys = dbGetSetting<APIKeyRecord[]>("alphaway_api_keys", [DEFAULT_KEY]);
-  return c.json({ keys });
+  return c.json({ keys: listAPIKeys() });
 });
 
-// POST /api/keys
+// POST /api/keys — return the generated secret exactly once.
 settingsRoute.post("/api/keys", async (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
-
-  const body = await c.req.json().catch(() => ({}));
-  const name = (body.name || "API Key").trim();
-  const randomSuffix = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
-  const secret = `sk-aw-${randomSuffix}`;
-  const newKey: APIKeyRecord = {
-    id: `key-${Date.now()}`,
-    name,
-    secret,
-    createdAt: Date.now(),
-    status: "active",
-  };
-
-  const keys = dbGetSetting<APIKeyRecord[]>("alphaway_api_keys", [DEFAULT_KEY]);
-  keys.unshift(newKey);
-  dbSetSetting("alphaway_api_keys", keys);
-  pushLog("info", `[Security] Issued new API key '${name}' (${secret.slice(0, 7)}...)`);
-
-  return c.json({ ok: true, key: newKey });
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return c.json({ error: "A JSON object is required" }, 400);
+  }
+  try {
+    const issued = issueAPIKey(typeof body.name === "string" ? body.name : "API Key");
+    pushLog("info", `[Security] Issued API key '${issued.record.name}' (${issued.record.prefix}…)`);
+    return c.json({ ok: true, key: { ...issued.record, secret: issued.secret } }, 201);
+  } catch (error: any) {
+    return c.json({ error: error.message || "API key creation failed" }, 400);
+  }
 });
 
-// DELETE /api/keys/:id
+// PATCH /api/keys/:id — change the operator-facing label.
+settingsRoute.patch("/api/keys/:id", async (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body.name !== "string") return c.json({ error: "A key name is required" }, 400);
+  try {
+    const key = renameAPIKey(c.req.param("id"), body.name);
+    if (!key) return c.json({ error: "Active API key not found" }, 404);
+    return c.json({ ok: true, key });
+  } catch (error: any) {
+    return c.json({ error: error.message || "API key update failed" }, 400);
+  }
+});
+
+// POST /api/keys/:id/rotate — atomically replace the secret; old credentials stop working.
+settingsRoute.post("/api/keys/:id/rotate", (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+  try {
+    const issued = rotateAPIKey(c.req.param("id"));
+    if (!issued) return c.json({ error: "Active API key not found" }, 404);
+    pushLog("warn", `[Security] Rotated API key id: ${issued.record.id}`);
+    return c.json({ ok: true, key: { ...issued.record, secret: issued.secret } });
+  } catch (error: any) {
+    return c.json({ error: error.message || "API key rotation failed" }, 500);
+  }
+});
+
+// DELETE /api/keys/:id — revocation is durable and immediately invalidates requests.
 settingsRoute.delete("/api/keys/:id", (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
-
   const id = c.req.param("id");
-  const keys = dbGetSetting<APIKeyRecord[]>("alphaway_api_keys", [DEFAULT_KEY]);
-  const filtered = keys.filter((k) => k.id !== id);
-  dbSetSetting("alphaway_api_keys", filtered);
+  const revoked = revokeAPIKey(id);
+  if (!revoked) return c.json({ error: "Active API key not found" }, 404);
   pushLog("warn", `[Security] Revoked API key id: ${id}`);
-
-  return c.json({ ok: true, remaining: filtered.length });
+  return c.json({ ok: true });
 });
 
 // GET /api/console-logs

@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from "bun:test";
 import { app } from "../src/app";
+import { adminRequest } from "./helpers/admin";
 import {
   addOrUpdateCustomProvider,
   loadCustomProviders,
@@ -49,7 +50,7 @@ describe("3rd-Party Custom Providers Engine", () => {
   });
 
   it("lists custom providers via REST API", async () => {
-    const res = await app.request("/api/custom-providers");
+    const res = await adminRequest("/api/custom-providers");
     expect(res.status).toBe(200);
     const json: any = await res.json();
     expect(Array.isArray(json.providers)).toBe(true);

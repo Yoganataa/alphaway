@@ -6,6 +6,7 @@ import path from "node:path";
 import * as soulEngine from "../src/features/soul-engine";
 import tokensaver from "../src/features/tokensaver";
 import { app } from "../src/app";
+import { adminRequest } from "./helpers/admin";
 
 describe("SoulSpec & Personality Engine (soul-engine)", () => {
   const tempSoulPath = path.join(process.cwd(), "SOUL.md");
@@ -106,7 +107,7 @@ describe("SoulSpec & Personality Engine (soul-engine)", () => {
 
 describe("SoulSpec REST API Endpoints (/api/soul)", () => {
   it("GET /api/soul returns current configuration and presets", async () => {
-    const res = await app.request("/api/soul");
+    const res = await adminRequest("/api/soul");
     expect(res.status).toBe(200);
 
     const json = await res.json();
@@ -119,7 +120,7 @@ describe("SoulSpec REST API Endpoints (/api/soul)", () => {
   });
 
   it("POST /api/soul/preview tests prompt framing and token estimation", async () => {
-    const res = await app.request("/api/soul/preview", {
+    const res = await adminRequest("/api/soul/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -138,7 +139,7 @@ describe("SoulSpec REST API Endpoints (/api/soul)", () => {
   });
 
   it("POST /api/soul updates configuration", async () => {
-    const res = await app.request("/api/soul", {
+    const res = await adminRequest("/api/soul", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

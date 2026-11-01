@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runMigrations } from "../src/core/migrations";
+import { decryptSecret } from "../src/core/secrets";
 import { importLegacyJson } from "../src/core/legacy-imports";
 
 describe("legacy JSON import", () => {
@@ -128,7 +129,9 @@ describe("legacy JSON import", () => {
       "SELECT id, api_key, models FROM custom_providers WHERE id = ?"
     ).get("legacy-deepseek") as { id: string; api_key: string; models: string };
     expect(provider.id).toBe("legacy-deepseek");
-    expect(provider.api_key).toBe("sk-legacy-deepseek");
+    expect(provider.api_key).toMatch(/^awenc:v1:/);
+    expect(provider.api_key).not.toContain("sk-legacy-deepseek");
+    expect(decryptSecret(provider.api_key)).toBe("sk-legacy-deepseek");
     expect(JSON.parse(provider.models)).toEqual(["deepseek-chat"]);
 
     const usage = readSetting("usage_stats_snapshot");
@@ -139,13 +142,16 @@ describe("legacy JSON import", () => {
     // Pre-existing SQLite state wins over either JSON source.
     expect(readSetting("tokensaver_config")).toEqual({ rtkEnabled: false, soulMode: "custom" });
     expect(db.prepare("SELECT COUNT(*) AS count FROM app_settings WHERE key IS NULL").get().count).toBe(0);
-    expect(readSetting("proxy_config")).toEqual({
-      url: "http://user:secret@127.0.0.1:3128",
-      strategy: "failover",
-      pool: [{ id: "egress-1", label: "primary", url: "http://user:secret@127.0.0.1:3128", enabled: true, weight: 1 }],
-      cooldownMs: 180000,
-      maxCooldownMs: 900000,
-    });
+    const importedProxy = readSetting("proxy_config");
+    expect(importedProxy.url).toMatch(/^awenc:v1:/);
+    expect(importedProxy.pool[0].url).toMatch(/^awenc:v1:/);
+    expect(JSON.stringify(importedProxy)).not.toContain("user:secret");
+    expect(decryptSecret(importedProxy.url)).toBe("http://user:secret@127.0.0.1:3128");
+    expect(decryptSecret(importedProxy.pool[0].url)).toBe("http://user:secret@127.0.0.1:3128");
+    expect(importedProxy.strategy).toBe("failover");
+    expect(importedProxy.pool[0]).toMatchObject({ id: "egress-1", label: "primary", enabled: true, weight: 1 });
+    expect(importedProxy.cooldownMs).toBe(180000);
+    expect(importedProxy.maxCooldownMs).toBe(900000);
 
     const importedCount = db.prepare(
       "SELECT COUNT(*) AS count FROM legacy_imports WHERE status = 'imported'"

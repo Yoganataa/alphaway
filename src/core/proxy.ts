@@ -33,6 +33,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("./database");
+const { encryptSecret, decryptSecret } = require("./secrets");
 
 const CONFIG_SETTING_KEY = "proxy_config";
 const CONFIG_SETTING_LABEL = `SQLite app_settings.${CONFIG_SETTING_KEY}`;
@@ -482,7 +483,10 @@ function loadFromDisk() {
     return pool;
   }
 
-  const json = dbGetSetting(CONFIG_SETTING_KEY, null);
+  const storedConfig = dbGetSetting(CONFIG_SETTING_KEY, null);
+  const json = storedConfig && typeof storedConfig === "object" && !Array.isArray(storedConfig)
+    ? decryptProxyConfig(storedConfig)
+    : storedConfig;
   if (!json || typeof json !== "object" || Array.isArray(json)) {
     const error = json === null
       ? null
@@ -718,22 +722,46 @@ function describe(now = Date.now()) {
 }
 
 /** Persist the complete proxy configuration as one SQLite setting. */
+function mapConfigSecrets(input, transform) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const config = { ...input };
+  if (typeof config.url === "string") config.url = transform(config.url);
+  if (Array.isArray(config.pool)) {
+    config.pool = config.pool.map((entry) => {
+      if (typeof entry === "string") return transform(entry);
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+      const safe = { ...entry };
+      for (const field of ["url", "token", "auth"]) {
+        if (typeof safe[field] === "string") safe[field] = transform(safe[field]);
+      }
+      return safe;
+    });
+  }
+  return config;
+}
+
+function encryptProxyConfig(config) {
+  return mapConfigSecrets(config, encryptSecret);
+}
+
+function decryptProxyConfig(config) {
+  return mapConfigSecrets(config, decryptSecret);
+}
+
 function writeConfig(next) {
   try {
-    dbSetSetting(CONFIG_SETTING_KEY, next);
+    dbSetSetting(CONFIG_SETTING_KEY, encryptProxyConfig(next));
     return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: `Failed to write ${CONFIG_SETTING_LABEL}: ${error instanceof Error ? error.message : String(error)}`,
-    };
+  } catch {
+    // Never include serialized config or credential-bearing SQLite errors.
+    return { ok: false, error: "Failed to write proxy configuration." };
   }
 }
 
 /** Current SQLite value, so one setter never drops the other's fields. */
 function readConfigObject() {
   const json = dbGetSetting(CONFIG_SETTING_KEY, null);
-  return json && typeof json === "object" && !Array.isArray(json) ? json : {};
+  return json && typeof json === "object" && !Array.isArray(json) ? decryptProxyConfig(json) : {};
 }
 
 function refuseWhenLocked() {

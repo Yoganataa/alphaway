@@ -80,6 +80,6 @@ describe("auth & tunnel configuration", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("https://alphaway.mycustomdomain.com/v1");
-    expect(html).toContain("Wajib (dikonfigurasi via API_KEY)");
+    expect(html).toContain("Wajib — buat API key melalui dashboard");
   });
 });

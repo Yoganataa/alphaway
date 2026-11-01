@@ -26,7 +26,7 @@
   let copiedSnippet = $state(false);
 
   const localEndpoint = $derived(`${localOrigin}/v1`);
-  const apiKey = $derived(getActiveApiKey());
+  const apiKey = $derived(getActiveApiKey() || "<YOUR_API_KEY>");
 
   onMount(() => {
     if (typeof window !== "undefined") {

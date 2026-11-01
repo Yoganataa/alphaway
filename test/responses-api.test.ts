@@ -6,6 +6,9 @@ import { describe, it, expect } from "bun:test";
 import { app } from "../src/app";
 import { responsesToOpenAI, openAIToResponsesResponse } from "../src/core/protocol-translator";
 
+// Exercise protocol compatibility using the retained environment-key adapter.
+process.env.API_KEY = "sk-test-responses-compat-key";
+
 describe("OpenAI Responses / Codex Protocol Translator", () => {
   it("translates string input into OpenAI user message", () => {
     const responsesReq = {

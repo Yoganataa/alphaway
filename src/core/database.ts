@@ -12,6 +12,7 @@ import os from "node:os";
 import { runMigrations } from "./migrations";
 import { createMigrationBackup } from "./migrations/backup";
 import { importLegacyJson } from "./legacy-imports";
+import { decryptSecret, encryptSecret, isEncryptedSecret } from "./secrets";
 
 export interface CustomProviderRow {
   id: string;
@@ -166,16 +167,33 @@ export function closeDatabase(): void {
 export function dbLoadCustomProviders(): CustomProviderRow[] {
   const db = getDatabase();
   const rows = db.prepare("SELECT * FROM custom_providers ORDER BY created_at ASC").all();
-  return rows.map((r: any) => ({
-    id: r.id,
-    name: r.name,
-    baseUrl: r.base_url,
-    apiKey: r.api_key,
-    protocol: r.protocol === "anthropic" ? "anthropic" : "openai",
-    models: safeParseJson(r.models, ["default-model"]),
-    enabled: Boolean(r.enabled),
-    createdAt: r.created_at,
-  }));
+  const migrateKey = db.prepare("UPDATE custom_providers SET api_key = ? WHERE id = ?");
+
+  return rows.map((r: any) => {
+    let apiKey = String(r.api_key || "");
+    if (apiKey.includes("xxxxxxxx")) {
+      if (apiKey) migrateKey.run("", r.id);
+      apiKey = "";
+    } else if (apiKey && !isEncryptedSecret(apiKey)) {
+      // Defensive lazy upgrade for rows written by older importers or tools.
+      apiKey = encryptSecret(apiKey);
+      migrateKey.run(apiKey, r.id);
+      apiKey = decryptSecret(apiKey);
+    } else if (isEncryptedSecret(apiKey)) {
+      apiKey = decryptSecret(apiKey);
+    }
+
+    return {
+      id: r.id,
+      name: r.name,
+      baseUrl: r.base_url,
+      apiKey,
+      protocol: r.protocol === "anthropic" ? "anthropic" : "openai",
+      models: safeParseJson(r.models, ["default-model"]),
+      enabled: Boolean(r.enabled),
+      createdAt: r.created_at,
+    };
+  });
 }
 
 export function dbSaveCustomProvider(provider: CustomProviderRow): void {
@@ -196,7 +214,7 @@ export function dbSaveCustomProvider(provider: CustomProviderRow): void {
     provider.id,
     provider.name,
     provider.baseUrl,
-    provider.apiKey,
+    encryptSecret(String(provider.apiKey || "").includes("xxxxxxxx") ? "" : provider.apiKey),
     provider.protocol,
     JSON.stringify(provider.models || []),
     provider.enabled ? 1 : 0,
