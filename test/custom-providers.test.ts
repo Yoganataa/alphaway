@@ -106,6 +106,34 @@ describe("3rd-Party Custom Providers Engine", () => {
     deleteCustomProvider(id);
   });
 
+  it("redacts embedded URL credentials from provider connection-test errors", async () => {
+    const urlSecret = "provider-url-query-secret-123456789";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: `Rejected URL credential ${urlSecret}` }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    try {
+      const response = await adminRequest("/api/custom-providers/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: `https://provider.example.test/v1?api_key=${urlSecret}`,
+          apiKey: "",
+          protocol: "openai",
+          model: "redaction-test-model",
+        }),
+      });
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).not.toContain(urlSecret);
+      expect(body).toContain("[REDACTED]");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("redacts custom-provider API credentials from chat upstream error bodies", async () => {
     const providerId = "test-secret-redaction";
     const providerSecret = "sk-custom-provider-secret-123456789";
