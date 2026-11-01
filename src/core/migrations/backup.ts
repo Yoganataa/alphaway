@@ -84,6 +84,7 @@ export function createMigrationBackup(db: any, databasePath: string, migrationNa
   fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") fs.chmodSync(backupDir, 0o700);
   encryptExistingMigrationBackups(backupDir);
+  encryptExistingMigrationBackups(path.dirname(databasePath), path.basename(databasePath));
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const safeName = migrationName.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 48) || "migration";
