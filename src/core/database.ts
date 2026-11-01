@@ -40,9 +40,11 @@ export interface RequestLogRow {
 }
 
 export function resolveDbDir(): string {
+  // ALPHAWAY_HOME was a legacy JSON-config directory, not the SQLite database
+  // root in prior releases. Keep the database location stable; import legacy
+  // JSON from ALPHAWAY_HOME below instead of silently switching to a new DB.
   const customState =
     process.env.ALPHAWAY_STATE_DIR ||
-    process.env.ALPHAWAY_HOME ||
     process.env.OPENCODE_BRIDGE_STATE_DIR;
   if (customState && customState.trim()) {
     return customState.trim();
@@ -123,7 +125,11 @@ export function getDatabase(): any {
   // Import pre-SQLite JSON data exactly once. Each source file and all of
   // its row/settings writes are committed in one transaction with its ledger
   // record. Source files remain untouched as operator-readable backups.
-  const importReports = importLegacyJson(dbInstance, resolveDbDir());
+  const legacyDirs = [
+    process.env.ALPHAWAY_HOME,
+    path.join(os.homedir(), ".opencode-free-bridge"),
+  ].filter((dir): dir is string => typeof dir === "string" && dir.trim().length > 0);
+  const importReports = importLegacyJson(dbInstance, resolveDbDir(), legacyDirs);
   for (const report of importReports) {
     if (report.status === "skipped" || report.details) {
       console.warn(
