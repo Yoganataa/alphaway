@@ -76,7 +76,6 @@ jobs:
           head -c 32 /dev/urandom > "$ALPHAWAY_INSTALL_ROOT/secret-encryption.key"
           chmod 600 "$ALPHAWAY_INSTALL_ROOT/secret-encryption.key"
           key_digest_before="$(sha256sum "$ALPHAWAY_INSTALL_ROOT/secret-encryption.key" | cut -d ' ' -f 1)"
-          echo "ALPHAWAY_KEY_DIGEST=$key_digest_before" >> "$GITHUB_ENV"
           ALPHAWAY_DB_PATH="$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite" bun -e '
             import { Database } from "bun:sqlite";
             const db = new Database(process.env.ALPHAWAY_DB_PATH);
@@ -87,7 +86,7 @@ jobs:
           BINDIR="$ALPHAWAY_INSTALL_ROOT" SOURCE=local NO_START=1 bash install.sh
           grep -qx 'API_KEY=upgrade-preserved-key' "$ALPHAWAY_INSTALL_ROOT/.env"
           test -s "$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite"
-          test "$(sha256sum "$ALPHAWAY_INSTALL_ROOT/secret-encryption.key" | cut -d ' ' -f 1)" = "$ALPHAWAY_KEY_DIGEST"
+          test "$(sha256sum "$ALPHAWAY_INSTALL_ROOT/secret-encryption.key" | cut -d ' ' -f 1)" = "$key_digest_before"
           test -d "$ALPHAWAY_INSTALL_ROOT/app"
           find "$ALPHAWAY_INSTALL_ROOT" -maxdepth 1 -type d -name '.backup-app-*' | grep -q .
           ALPHAWAY_DB_PATH="$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite" bun -e '
