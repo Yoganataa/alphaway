@@ -53,6 +53,47 @@ jobs:
       - name: Verify standalone executable
         run: ./alphaway --version
 
+
+  install-smoke:
+    name: Installer and embedded dashboard smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Validate installer syntax
+        run: bash -n install.sh
+      - name: Install from the current checkout without starting a service
+        run: |
+          install_root="$(mktemp -d "$RUNNER_TEMP/alphaway-install.XXXXXX")"
+          echo "ALPHAWAY_INSTALL_ROOT=$install_root" >> "$GITHUB_ENV"
+          BINDIR="$install_root" SOURCE=local NO_START=1 bash install.sh
+      - name: Verify installed binary and embedded dashboard
+        run: |
+          test -s "$ALPHAWAY_INSTALL_ROOT/app/alphaway"
+          test -s "$ALPHAWAY_INSTALL_ROOT/app/dist/index.html"
+          "$ALPHAWAY_INSTALL_ROOT/app/alphaway" --version
+          mkdir -p "$ALPHAWAY_INSTALL_ROOT/state"
+          PORT=20261 HOST=127.0.0.1 ALPHAWAY_STATE_DIR="$ALPHAWAY_INSTALL_ROOT/state" \
+            "$ALPHAWAY_INSTALL_ROOT/app/alphaway" > "$ALPHAWAY_INSTALL_ROOT/server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:20261/health >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = "1"
+          curl --fail --silent http://127.0.0.1:20261/ > "$ALPHAWAY_INSTALL_ROOT/dashboard.html"
+          grep -q 'id="app"' "$ALPHAWAY_INSTALL_ROOT/dashboard.html"
+          asset="$(grep -oE 'src="/assets/[^"]+\.js"' "$ALPHAWAY_INSTALL_ROOT/dashboard.html" | head -n 1 | cut -d '"' -f 2)"
+          test -n "$asset"
+          curl --fail --silent "http://127.0.0.1:20261$asset" >/dev/null
+
   e2e:
     name: Dashboard browser tests
     runs-on: ubuntu-latest
