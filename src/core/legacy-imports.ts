@@ -272,8 +272,7 @@ export function restoreLegacyBackup(encryptedPath: string, outputPath: string): 
   if (!isEncryptedSecret(envelope)) throw new Error("File is not an AlphaWay encrypted legacy backup");
   const plaintext = decryptSecret(envelope);
   if (Buffer.byteLength(plaintext, "utf8") > MAX_LEGACY_JSON_BYTES) throw new Error("Restored JSON exceeds the legacy import size limit");
-  const parsed = JSON.parse(plaintext);
-  if (!parsed || typeof parsed !== "object") throw new Error("Restored backup must contain a JSON object or array");
+  if (path.extname(destination).toLowerCase() !== ".json") throw new Error("Restore output must use a .json extension");
   const outputDir = path.dirname(destination);
   const outputStat = fs.lstatSync(outputDir);
   if (outputStat.isSymbolicLink() || !outputStat.isDirectory()) throw new Error("Restore output directory must be a regular directory");
@@ -354,7 +353,11 @@ function importSourceFile(
   try {
     payload = JSON.parse(raw);
   } catch (error) {
-    const details = `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`;
+    const parseError = `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`;
+    const secured = secureLegacyBackup(filePath, raw, checksum);
+    const details = parseError + (secured
+      ? " Encrypted rollback copy retained; restore with --restore-legacy-backup before editing or retrying."
+      : " Source remains owner-restricted plaintext because it changed during backup; retry after resolving the file race.");
     const recordSkipped = db.transaction(() => {
       db.prepare(`
         INSERT INTO legacy_imports (source_key, checksum, status, imported_at, row_count, details)
