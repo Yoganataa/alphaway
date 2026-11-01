@@ -257,6 +257,7 @@ describe("codebuddy server integration tests", () => {
       const body: any = await response.json();
       expect(body.status).toBe("success");
       expect(body.accessToken).toBeUndefined();
+      expect(body.refreshToken).toBeUndefined();
       expect(JSON.stringify(body)).not.toContain(accessToken);
 
       const row = getDatabase().prepare("SELECT value FROM app_settings WHERE key = ?")
@@ -264,6 +265,7 @@ describe("codebuddy server integration tests", () => {
       const stored = JSON.parse(row.value);
       expect(stored).toMatch(/^awenc:v1:/);
       expect(stored).not.toContain(accessToken);
+      delete process.env.CODEBUDDY_API_KEY;
       expect(getCodeBuddyApiKey()).toBe(accessToken);
     } finally {
       getDatabase().prepare("DELETE FROM app_settings WHERE key = ?").run("codebuddy_api_key");
