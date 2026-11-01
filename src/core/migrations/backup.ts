@@ -48,14 +48,24 @@ function encryptPlainDatabaseBackup(plainPath: string, expectedBytes?: Buffer): 
 }
 
 /** Encrypt pre-Phase-2 plaintext migration backups when the database is opened. */
-export function encryptExistingMigrationBackups(backupDir: string): string[] {
+export function encryptExistingMigrationBackups(backupDir: string, legacyDatabaseName?: string): string[] {
+  if (!fs.existsSync(backupDir)) return [];
+  const directoryStat = fs.lstatSync(backupDir);
+  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) throw new Error("Migration backup directory must be a regular directory");
+  if (process.platform !== "win32") fs.chmodSync(backupDir, 0o700);
+  const legacyRestorePattern = legacyDatabaseName
+    ? new RegExp("^" + legacyDatabaseName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\export function encryptExistingMigrationBackups(backupDir: string): string[] {
   if (!fs.existsSync(backupDir)) return [];
   const directoryStat = fs.lstatSync(backupDir);
   if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) throw new Error("Migration backup directory must be a regular directory");
   if (process.platform !== "win32") fs.chmodSync(backupDir, 0o700);
   const encrypted: string[] = [];
   for (const name of fs.readdirSync(backupDir)) {
-    if (!/^alphaway-before-.+\.sqlite$/i.test(name)) continue;
+    if (!/^alphaway-before-.+\.sqlite$/i.test(name)) continue;") + "\\.pre-restore-.+\\.sqlite$", "i")
+    : null;
+  const encrypted: string[] = [];
+  for (const name of fs.readdirSync(backupDir)) {
+    if (!/^alphaway-before-.+\.sqlite$/i.test(name) && !legacyRestorePattern?.test(name)) continue;
     const source = path.join(backupDir, name);
     const target = source + ".awenc";
     if (fs.existsSync(target)) {
