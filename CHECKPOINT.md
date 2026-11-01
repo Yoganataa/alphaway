@@ -43,12 +43,11 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 
 - PR #4 is the only open PR, targets `main`, and remains **draft**. No review submissions or inline review threads were present at the last check.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- Latest verified Phase 2 code/test head: `aa9fd1bc81231996964a8fcbc4b095b0bbf58522`. A subsequent docs-only ROADMAP update is on the active branch; always re-fetch the actual live head before continuing.
-- GitHub Actions run `41340243880` passed on Bun 1.4.4 for that code/test head: **314 unit/protocol tests passed, 0 failed** across 31 files; transport fingerprint passed (17 ciphers/12 extensions), standalone binary build passed, installer/embedded-dashboard smoke passed including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged, and dashboard E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
-- This run includes the custom-provider chat error redaction test, legacy JSON symlink refusal, and POSIX owner-only mode assertions for retained JSON rollback backups.
-- Earlier installer-smoke failures were caused by reading a `GITHUB_ENV` value inside the same shell step; the check now uses the local `key_digest_before` variable. Runs `41339302362`, `41339526068`, `41339693714`, and `41340243880` all pass the corrected smoke test.
-- Reviews and inline review threads were empty at the last check. PR #4 remains draft and is mergeable with `main` (re-check current ahead/behind counts when resuming).
-
+- Latest CI-verified checkpoint head: `6a0bbf0b2c2958e41342e903eca64f46ca542890`. Re-fetch actual live feature-branch HEAD before making changes; a final documentation-only commit may follow this checkpoint.
+- GitHub Actions run `41340495437` passed on Bun 1.4.4 for this exact head: **314 unit/protocol tests passed, 0 failed** across 31 files; transport fingerprint passed (17 ciphers/12 extensions), standalone binary build passed, installer/embedded-dashboard smoke passed including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged, and dashboard E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
+- This run includes custom-provider chat error redaction, legacy JSON symlink refusal, and POSIX owner-only mode assertions for retained JSON rollback backups.
+- The earlier installer-smoke failures were caused by reading a `GITHUB_ENV` value in the same shell step. The check now uses a local `key_digest_before` variable; runs `41339302362`, `41339526068`, `41339693714`, `41340243880`, and `41340495437` all passed the corrected smoke test.
+- Reviews and inline review threads were empty at the last check. PR #4 remains draft; re-check mergeability/ahead-behind against live `main` when resuming.
 ### Remaining Phase 2 gaps / boundaries
 
 - Per-key Plan assignment is deferred to Phase 3 with the Plan model and enforcement semantics. Phase 2 API keys already have inference scope and lifecycle metadata.
@@ -225,19 +224,18 @@ test/verify-quick.test.ts
 
 ### Current Phase 2 work
 
-Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. Latest verified code/test head was `aa9fd1bc81231996964a8fcbc4b095b0bbf58522`; `main` was `e2492fb3a995677d24f3078b7925a2c48c877ca7`. A documentation-only ROADMAP commit followed; check the live branch SHA before making changes.
+Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. Latest CI-verified head was `6a0bbf0b2c2958e41342e903eca64f46ca542890`; `main` was `e2492fb3a995677d24f3078b7925a2c48c877ca7`. Re-fetch live refs, PR, and Actions before making changes.
 
 The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged until the remaining secret-flow audit and security review are complete. Do not create another PR or start Phase 3.
 
 Next exact actions:
 1. Complete the end-to-end secret audit across logs, diagnostics, analytics, backup/export, and persistence.
-2. Decide the lifecycle for retained plaintext legacy JSON rollback backups: encrypt them, relocate them to separately protected storage, or remove them after a verified rollback window. The importer now rejects symlink sources and applies POSIX mode `0600`, but does not encrypt file contents.
+2. Decide the lifecycle for retained plaintext legacy JSON rollback backups: encrypt, relocate to separately protected storage, or remove them after a verified rollback window. The importer refuses symlink sources and applies POSIX mode `0600`, but does not encrypt file contents.
 3. Keep Windows ACL verification marked as Phase 7 hardening unless a verified implementation is added.
 4. Update PR #4 with findings and request review/mark ready only after the secret audit is signed off.
 5. Do not merge PR #4 or start Phase 3 until all Phase 2 acceptance criteria and review findings are resolved.
 
 Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
-
 ## 6. Working Rules for the Next Session
 
 - Read `CHECKPOINT.md` first, then `ROADMAP.md`, then inspect live GitHub state.
@@ -257,9 +255,9 @@ Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Setelah itu periksa live ma
 
 Phase 2 mencakup admin bootstrap/login/session, default-deny admin API gate, managed inference keys hashed dan lifecycle/scopes, AES-256-GCM persistence untuk provider/proxy/relay/CodeBuddy OAuth secrets, pemisahan gateway dan CodeBuddy upstream credentials, OAuth state/authUrl flow, health/error redaction, isolated Bun test state, login rate limiting, API key label validation, dan installer master-key preservation. Importer legacy menolak symlink dan membatasi retained JSON backups ke POSIX 0600; backup contents tetap plaintext untuk rollback compatibility.
 
-CI run 41340243880 passed pada verified code/test head aa9fd1bc81231996964a8fcbc4b095b0bbf58522: 314 unit tests pass, 8 browser E2E pass, transport fingerprint, binary build, dan installer smoke semuanya lulus. Optional live upstream drill sengaja skipped.
+CI run 41340495437 passed pada head 6a0bbf0b2c2958e41342e903eca64f46ca542890: 314 unit tests pass, 8 browser E2E pass, transport fingerprint, binary build, dan installer smoke semuanya lulus. Optional live upstream drill sengaja skipped.
 
-Gap tersisa: audit secret-flow lengkap, keputusan lifecycle backup legacy plaintext (encrypt/relocate/remove after rollback window), Windows ACL verification (Phase 7), dan final PR security review. Assignment Plan ke key dilakukan pada Phase 3 bersama model Plan. Jangan merge PR #4 atau mulai Phase 3 sampai Phase 2 accepted.
+Gap tersisa: audit secret-flow lengkap, lifecycle backup legacy plaintext (encrypt/relocate/remove after rollback window), Windows ACL verification (Phase 7), dan final PR security review. Assignment Plan ke key dilakukan pada Phase 3 bersama model Plan. Jangan merge PR #4 atau mulai Phase 3 sampai Phase 2 accepted.
 
 Backend tetap Bun 1.4.4 + TypeScript + Hono; jangan port backend Go dari 9router-go dan jangan melemahkan test.
 ```
