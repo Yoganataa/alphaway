@@ -5,7 +5,8 @@
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Branch:** `main`  
-> **Last verified HEAD:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
+> **Last code-audited HEAD:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
+**Documentation commits added after that code audit:** `6a6d581f37ad1c3d742e5701af7b2d072ef8ee1d` (ROADMAP) and `267d2dbfb83738b5957ca1d6f502a029a9935fe4` (CHECKPOINT)  
 > **Commit:** `feat: initial release of AlphaWay v0.0.1 - Universal AI Gateway & Security Router`
 
 ## 1. Current Status
@@ -26,7 +27,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-No source code was changed and no test, build, installer, or CI command was executed as part of the planning/audit work that led to this checkpoint. Do not interpret the README's existing test-pass statement as a verification result from this session.
+The only repository changes in this session are these two documentation files. No application source code was changed and no test, build, installer, or CI command was executed as part of the planning/audit work that led to this checkpoint. Do not interpret the README's existing test-pass statement as a verification result from this session.
 
 ## 2. Agreed Product Direction
 
