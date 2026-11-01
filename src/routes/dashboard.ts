@@ -17,7 +17,7 @@ const configuredDist = process.env.ALPHAWAY_DASHBOARD_DIR?.trim();
 const isStandalone = typeof Bun !== "undefined" && Bun.isStandaloneExecutable;
 const DIST_DIR = configuredDist
   ? path.resolve(configuredDist)
-  : path.resolve(import.meta.dir, isStandalone ? "../dist" : "../../dist");
+  : path.resolve(import.meta.dir, isStandalone ? "dist" : "../../dist");
 
 if (process.env.ALPHAWAY_DEBUG_ASSETS === "1") {
   console.info("[AlphaWay] dashboard asset diagnostics", {
