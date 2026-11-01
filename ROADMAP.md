@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **Current state:** Phase 0 implementation in progress on `chore/phase-0-ci-distribution`; CI and installer verification are pending.
+> **Current state:** Phase 0 acceptance criteria passed on `chore/phase-0-ci-distribution` in GitHub Actions run `41320438608`. PR #1 remains open for review.
 
 ## 1. Product Direction
 
@@ -105,7 +105,7 @@ The phases are sequential. A phase is not complete until its acceptance criteria
 
 ### Phase 0 — Repository Baseline, CI, and Distribution Integrity
 
-**Status:** In progress  
+**Status:** Complete (Linux x86_64 CI verified)  
 **Priority:** P0 — unblock all further work
 
 - [x] Inspect the latest baseline CI run on `main`; the Bun test step and Node compatibility job failed because their commands were stale. A local clean install/test/build was not available in this environment.
@@ -114,17 +114,30 @@ The phases are sequential. A phase is not complete until its acceptance criteria
 - [x] Define separate CI jobs for unit/integration tests, dashboard/binary build, installer/embedded-dashboard smoke tests, browser E2E tests, and the transport fingerprint check. Keep the live upstream drill manual.
 - [x] Set the supported Bun floor to `>=1.4.3` and pin CI to Bun 1.4.3 pending a verified fingerprint-compatible upgrade.
 - [x] Align `build`, `build:ui`, `build:bin`, and `build:bin:win`; the host build emits `alphaway` and the explicit Windows x64 target emits `alphaway.exe`.
-- [ ] Verify the compiled binary serves embedded dashboard assets without an external `dist/` directory. A CI install smoke test has been added; its result is still pending.
-- [x] Rewrite `install.sh` for the current TypeScript source archive, frozen dependency install, fingerprint validation, embedded-asset build, staged replacement, persistent state/config, and service registration. Runtime install/upgrade smoke verification is pending.
+- [x] Verify the compiled binary serves embedded dashboard assets without an external `dist/` directory. CI removes the physical `app/dist/` directory after build, then verifies `/health`, dashboard HTML, and the generated JavaScript asset from the standalone executable.
+- [x] Rewrite `install.sh` for the current TypeScript source archive, frozen dependency install, fingerprint validation, embedded-asset build, staged replacement, persistent state/config, and service registration. CI verifies fresh install, upgrade preservation of `.env` and SQLite data, detached background startup, and HTTP health.
 - [x] Reconcile `README.md`, `AGENTS.md`, and `.env.example` with the current Bun build, installer, supported runtime, and test commands.
 - [x] Record the observed failing `main` CI run and disclose that local Bun/test/build/installer commands could not be executed in this environment.
 
 **Acceptance criteria**
 
-- CI runs valid commands against the current repository and fails on real regressions.
-- A clean checkout can install dependencies, run checks, build the UI, and produce the documented release artifact.
-- The installer installs/upgrades the current application layout safely, or is explicitly marked unsupported until a tested installer is ready.
-- No documentation claims that tests or packaging pass without recorded evidence.
+- [x] CI runs valid commands against the current repository and fails on real regressions.
+- [x] A clean Linux x86_64 checkout can install dependencies, run checks, build the UI, and produce the documented standalone executable.
+- [x] The installer installs/upgrades the current application layout safely while preserving `.env` and SQLite state.
+- [x] The executable serves its dashboard and built JS asset without an external `dist/` directory.
+- [x] No documentation claims that tests or packaging pass without recorded evidence.
+
+**Verification evidence (2026-11-01)**
+
+GitHub Actions [run `41320438608`](https://github.com/Yoganataa/alphaway/actions/runs/41320438608) completed successfully:
+- Unit and protocol tests: **270 passed, 0 failed** across 25 files.
+- Transport fingerprint: Bun 1.4.3 matched the 17-cipher / 12-extension baseline.
+- Dashboard and standalone binary build: passed.
+- Installer smoke: passed fresh install, upgrade preservation of `.env` and SQLite row, detached background startup, and embedded dashboard/JS asset serving after physical `dist/` removal.
+- Browser E2E: **8 passed, 0 failed**.
+- Live upstream gate drill: intentionally skipped; it is an explicit manual workflow action, not a deterministic CI check.
+
+**Platform boundary:** CI verified the Linux x86_64 path. The launchd/macOS service branch and Windows x64 cross-compiled binary are not exercised by this workflow yet; add platform-specific release checks before claiming those targets are verified.
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 
