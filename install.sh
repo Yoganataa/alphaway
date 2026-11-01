@@ -278,7 +278,7 @@ User=$(id -un)
 WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
-Environment=ALPHAWAY_STATE_DIR=$BINDIR
+Environment="ALPHAWAY_STATE_DIR=$BINDIR"
 ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
@@ -312,8 +312,8 @@ Type=simple
 WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
-Environment=ALPHAWAY_STATE_DIR=$BINDIR
-ExecStart=$APPDIR/alphaway
+Environment="ALPHAWAY_STATE_DIR=$BINDIR"
+ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
 
