@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Migration } from "./types";
-import { encryptSecret } from "../secrets";
+import { encryptSecret, isEncryptedSecret } from "../secrets";
+import { hasEmbeddedProviderUrlSecrets } from "../provider-url-secrets";
 
 function hashLegacyKey(secret: string, salt: string): string {
   return createHash("sha256").update(Buffer.from(salt, "hex")).update(secret, "utf8").digest("hex");
@@ -55,17 +56,28 @@ export const authSecurityMigration: Migration = {
     // Encrypt legacy provider credentials as part of the upgrade, in the same
     // transaction as the schema and API-key migration.
     const providerRows = db.prepare(
-      "SELECT id, api_key FROM custom_providers WHERE api_key IS NOT NULL AND api_key <> ''"
-    ).all() as Array<{ id: string; api_key: string }>;
-    const updateProviderKey = db.prepare("UPDATE custom_providers SET api_key = ? WHERE id = ?");
+      "SELECT id, api_key, base_url FROM custom_providers"
+    ).all() as Array<{ id: string; api_key: string; base_url: string }>;
+    const updateProviderCredentials = db.prepare(
+      "UPDATE custom_providers SET api_key = ?, base_url = ? WHERE id = ?"
+    );
     for (const provider of providerRows) {
-      const stored = String(provider.api_key || "");
-      if (stored.startsWith("awenc:v1:")) continue;
-      if (stored.includes("xxxxxxxx")) {
-        updateProviderKey.run("", provider.id);
-        continue;
+      const storedKey = String(provider.api_key || "");
+      let apiKey = storedKey;
+      if (storedKey.includes("xxxxxxxx")) {
+        apiKey = "";
+      } else if (storedKey && !isEncryptedSecret(storedKey)) {
+        apiKey = encryptSecret(storedKey);
       }
-      updateProviderKey.run(encryptSecret(stored), provider.id);
+
+      let baseUrl = String(provider.base_url || "");
+      if (!isEncryptedSecret(baseUrl) && hasEmbeddedProviderUrlSecrets(baseUrl)) {
+        baseUrl = encryptSecret(baseUrl);
+      }
+
+      if (apiKey !== storedKey || baseUrl !== String(provider.base_url || "")) {
+        updateProviderCredentials.run(apiKey, baseUrl, provider.id);
+      }
     }
 
     // Encrypt legacy proxy credentials, including relay tokens, as part of the
