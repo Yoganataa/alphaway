@@ -6,7 +6,7 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Current Phase 2 branch HEAD at this checkpoint edit:** `01b5b86df9b0674d7f6c376d58397724975a1142`  
+> **Latest verified Phase 2 branch HEAD:** `ca122b584886511a5d9d2ef4df39b04db43a6ee2`  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -18,7 +18,7 @@
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
-- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (latest branch-head CI passed; full secret-flow audit and final review remain).
+- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (current branch-head CI passed; full secret-flow audit and final review remain).
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
@@ -43,10 +43,10 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 
 - PR #4 is the only open PR, targets `main`, and remains **draft**. No review submissions or inline review threads were present at the last check.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- Phase 2 branch HEAD: `01b5b86df9b0674d7f6c376d58397724975a1142`.
-- GitHub Actions run `41339526068` passed on Bun 1.4.4 for this exact branch head: **312 unit/protocol tests passed, 0 failed** across 31 files; transport fingerprint passed (17 ciphers/12 extensions), standalone binary build passed, installer/embedded-dashboard smoke passed including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged, and dashboard E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
-- Runs `41339060686` and `41339200556` failed in the installer smoke assertion because the digest was written to `GITHUB_ENV` and read inside the same step. The test harness was corrected to compare against the local shell variable `key_digest_before`; run `41339526068` verifies the fix on the current head.
-- Reviews and inline review threads were empty at the last check. PR #4 remains draft and is mergeable with `main` (`ahead_by=28`, `behind_by=0`).
+- Latest verified Phase 2 branch HEAD: `ca122b584886511a5d9d2ef4df39b04db43a6ee2`.
+- GitHub Actions run `41339693714` passed on Bun 1.4.4 for this exact PR head: **312 unit/protocol tests passed, 0 failed** across 31 files; transport fingerprint passed (17 ciphers/12 extensions), standalone binary build passed, installer/embedded-dashboard smoke passed including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged, and dashboard E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
+- Runs `41339060686` and `41339200556` failed in installer smoke because `GITHUB_ENV` values are not visible in the same shell step. The test harness was corrected to compare against the local `key_digest_before` variable; runs `41339302362`, `41339526068`, and `41339693714` verify this fix.
+- Reviews and inline review threads were empty at the last check. PR #4 remains draft and is mergeable with `main` (`ahead_by=29`, `behind_by=0`).
 
 ### Remaining Phase 2 gaps / boundaries
 
@@ -224,7 +224,7 @@ test/verify-quick.test.ts
 
 ### Current Phase 2 work
 
-Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. At this checkpoint the branch head is `01b5b86df9b0674d7f6c376d58397724975a1142` and `main` is `e2492fb3a995677d24f3078b7925a2c48c877ca7`. Re-fetch branch/main/PR/Actions before making more changes.
+Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. Latest verified branch head was `ca122b584886511a5d9d2ef4df39b04db43a6ee2`; `main` is `e2492fb3a995677d24f3078b7925a2c48c877ca7`. Re-fetch live refs, PR, and Actions before making changes.
 
 The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged until the remaining secret-flow audit and security review are complete. Do not create another PR or start Phase 3.
 
@@ -255,9 +255,9 @@ Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Setelah itu periksa live ma
 
 Phase 2 mencakup admin bootstrap/login/session, default-deny admin API gate, managed inference keys hashed dan lifecycle/scopes, AES-256-GCM persistence untuk provider/proxy/relay/CodeBuddy OAuth secrets, pemisahan gateway dan CodeBuddy upstream credentials, OAuth state/authUrl flow, health/error redaction, isolated Bun test state, login rate limiting, API key label validation, dan installer master-key preservation.
 
-CI run 41339526068 passed pada head 01b5b86df9b0674d7f6c376d58397724975a1142: 312 unit tests pass, 8 browser E2E pass, transport fingerprint, binary build, dan installer smoke semuanya lulus. Optional live upstream drill sengaja skipped.
+CI run 41339693714 passed pada exact head ca122b584886511a5d9d2ef4df39b04db43a6ee2: 312 unit tests pass, 8 browser E2E pass, transport fingerprint, binary build, dan installer smoke semuanya lulus. Optional live upstream drill sengaja skipped.
 
-Gap tersisa: audit menyeluruh secret-flow di logs/diagnostics/analytics/backup-export, verifikasi Windows ACL (Phase 7), dan final PR security review. Assignment Plan ke key dilakukan pada Phase 3 bersama model Plan. Jangan merge PR #4 atau mulai Phase 3 sebelum Phase 2 accepted.
+Gap tersisa: audit menyeluruh secret-flow di logs/diagnostics/analytics/backup-export, verifikasi Windows ACL (Phase 7), dan final PR security review. Assignment Plan ke key dilakukan pada Phase 3 bersama model Plan. Jangan merge PR #4 atau mulai Phase 3 sampai Phase 2 accepted.
 
 Backend tetap Bun 1.4.4 + TypeScript + Hono; jangan port backend Go dari 9router-go dan jangan melemahkan test.
 ```
