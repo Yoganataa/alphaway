@@ -228,14 +228,16 @@ retire_legacy_systemd_services() {
     user_unit="$HOME/.config/systemd/user/$name"
 
     if [ -f "$system_unit" ] || systemctl cat "$name" >/dev/null 2>&1; then
-      # Disable and stop while the original unit is still discoverable.
-      systemctl disable --now "$name" >/dev/null 2>&1 || true
-
-      # Preserve local unit definitions for diagnostics/recovery, but move them
-      # outside systemd's active unit search path.
+      # A local /etc unit can be retired offline by moving it out of the
+      # systemd search path. A vendor unit has no local file to move, so failure
+      # to disable it is a hard stop rather than a silently unsafe upgrade.
       if [ -f "$system_unit" ]; then
+        systemctl disable --now "$name" >/dev/null 2>&1 || true
         mv "$system_unit" "$system_unit.retired-$stamp" \
           || die "Could not retire legacy system unit $system_unit; refusing to continue"
+      else
+        systemctl disable --now "$name" >/dev/null 2>&1 \
+          || die "Could not disable legacy system service $name; refusing to continue"
       fi
       rm -f "/etc/systemd/system/multi-user.target.wants/$name" \
         "/etc/systemd/system/default.target.wants/$name"
