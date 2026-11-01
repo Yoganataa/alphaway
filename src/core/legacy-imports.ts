@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { encryptSecret } from "./secrets";
+import { hasEmbeddedProviderUrlSecrets } from "./provider-url-secrets";
 
 type LegacyImportStatus = "imported" | "skipped";
 
@@ -85,7 +86,9 @@ function importCustomProviders(db: any, payload: any): ImportOutcome {
     const result = insert.run(
       provider.id.trim(),
       provider.name,
-      provider.baseUrl,
+      hasEmbeddedProviderUrlSecrets(provider.baseUrl)
+        ? encryptSecret(provider.baseUrl)
+        : provider.baseUrl,
       encryptSecret(provider.apiKey.includes("xxxxxxxx") ? "" : provider.apiKey),
       provider.protocol === "anthropic" ? "anthropic" : "openai",
       JSON.stringify(models),
