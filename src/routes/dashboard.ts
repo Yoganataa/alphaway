@@ -27,7 +27,7 @@ if (process.env.ALPHAWAY_DEBUG_ASSETS === "1") {
     distExists: fs.existsSync(DIST_DIR),
     distEntries: fs.existsSync(DIST_DIR) ? fs.readdirSync(DIST_DIR) : [],
     embeddedFiles: isStandalone
-      ? (Bun.embeddedFiles || []).map((asset: File) => ({ name: asset.name, size: asset.size }))
+      ? (Bun.embeddedFiles || []).map((asset: any) => ({ name: asset.name, size: asset.size }))
       : [],
   });
 }
