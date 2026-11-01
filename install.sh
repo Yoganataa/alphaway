@@ -217,8 +217,8 @@ stop_managed_background() {
 stop_existing_services() {
   stop_managed_background
   if command -v systemctl >/dev/null 2>&1; then
-    systemctl stop alphaway opencode-free-bridge opencode-bridge 2>/dev/null || true
-    systemctl --user stop alphaway opencode-free-bridge opencode-bridge 2>/dev/null || true
+    systemctl stop alphaway 2>/dev/null || true
+    systemctl --user stop alphaway 2>/dev/null || true
   fi
 
   if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
