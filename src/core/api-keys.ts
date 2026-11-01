@@ -72,7 +72,7 @@ export function listAPIKeys(): APIKeyRecord[] {
 
 export function issueAPIKey(nameInput: string): IssuedAPIKey {
   const name = String(nameInput || "").trim();
-  if (!name || name.length > 80) throw new Error("API key name must contain 1–80 characters");
+  if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error("API key name must contain 1–80 printable characters");
 
   const db = getDatabase();
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -126,7 +126,7 @@ export function recordAPIKeyUse(id: string): void {
 
 export function renameAPIKey(id: string, nameInput: string): APIKeyRecord | null {
   const name = String(nameInput || "").trim();
-  if (!name || name.length > 80) throw new Error("API key name must contain 1–80 characters");
+  if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error("API key name must contain 1–80 printable characters");
   const db = getDatabase();
   const result = db.prepare("UPDATE api_keys SET name = ? WHERE id = ? AND status = 'active'").run(name, id);
   if (!Number(result.changes || 0)) return null;
