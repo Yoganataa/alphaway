@@ -74,6 +74,7 @@ jobs:
           test -s "$ALPHAWAY_INSTALL_ROOT/app/alphaway"
           test -s "$ALPHAWAY_INSTALL_ROOT/app/dist/index.html"
           "$ALPHAWAY_INSTALL_ROOT/app/alphaway" --version
+          mv "$ALPHAWAY_INSTALL_ROOT/app/dist" "$ALPHAWAY_INSTALL_ROOT/dist-outside-app"
           mkdir -p "$ALPHAWAY_INSTALL_ROOT/state"
           PORT=20261 HOST=127.0.0.1 ALPHAWAY_STATE_DIR="$ALPHAWAY_INSTALL_ROOT/state" \
             "$ALPHAWAY_INSTALL_ROOT/app/alphaway" > "$ALPHAWAY_INSTALL_ROOT/server.log" 2>&1 &
