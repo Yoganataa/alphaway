@@ -112,7 +112,7 @@ The phases are sequential. A phase is not complete until its acceptance criteria
 - [x] Repair `.github/workflows/ci.yml`: use the actual TypeScript test paths and package scripts.
 - [x] Remove the Node compatibility job; Node is not a supported live runtime and the referenced `test:node` script does not exist.
 - [x] Define separate CI jobs for unit/integration tests, dashboard/binary build, installer/embedded-dashboard smoke tests, browser E2E tests, and the transport fingerprint check. Keep the live upstream drill manual.
-- [x] Set the supported Bun floor to `>=1.4.3` and pin CI to Bun 1.4.3 pending a verified fingerprint-compatible upgrade.
+- [x] Set the supported Bun floor to `>=1.4.4` and pin CI to Bun 1.4.4; its ClientHello matches the recorded 17-cipher / 12-extension baseline.
 - [x] Align `build`, `build:ui`, `build:bin`, and `build:bin:win`; the host build emits `alphaway` and the explicit Windows x64 target emits `alphaway.exe`.
 - [x] Verify the compiled binary serves embedded dashboard assets without an external `dist/` directory. CI removes the physical `app/dist/` directory after build, then verifies `/health`, dashboard HTML, and the generated JavaScript asset from the standalone executable.
 - [x] Rewrite `install.sh` for the current TypeScript source archive, frozen dependency install, fingerprint validation, embedded-asset build, staged replacement, persistent state/config, and service registration. CI verifies fresh install, upgrade preservation of `.env` and SQLite data, detached background startup, and HTTP health.
@@ -129,9 +129,9 @@ The phases are sequential. A phase is not complete until its acceptance criteria
 
 **Verification evidence (2026-11-01)**
 
-GitHub Actions [run `41320438608`](https://github.com/Yoganataa/alphaway/actions/runs/41320438608) completed successfully:
+GitHub Actions [run `41322403767`](https://github.com/Yoganataa/alphaway/actions/runs/41322403767) completed successfully on Bun 1.4.4:
 - Unit and protocol tests: **270 passed, 0 failed** across 25 files.
-- Transport fingerprint: Bun 1.4.3 matched the 17-cipher / 12-extension baseline.
+- Transport fingerprint: Bun 1.4.4 matched the 17-cipher / 12-extension baseline.
 - Dashboard and standalone binary build: passed.
 - Installer smoke: passed fresh install, upgrade preservation of `.env` and SQLite row, detached background startup, and embedded dashboard/JS asset serving after physical `dist/` removal.
 - Browser E2E: **8 passed, 0 failed**.
