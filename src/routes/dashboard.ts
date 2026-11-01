@@ -19,19 +19,6 @@ const DIST_DIR = configuredDist
   ? path.resolve(configuredDist)
   : path.resolve(import.meta.dir, isStandalone ? "dist" : "../../dist");
 
-if (process.env.ALPHAWAY_DEBUG_ASSETS === "1") {
-  console.info("[AlphaWay] dashboard asset diagnostics", {
-    standalone: isStandalone,
-    moduleDir: import.meta.dir,
-    distDir: DIST_DIR,
-    distExists: fs.existsSync(DIST_DIR),
-    distEntries: fs.existsSync(DIST_DIR) ? fs.readdirSync(DIST_DIR) : [],
-    embeddedFiles: isStandalone
-      ? (Bun.embeddedFiles || []).map((asset: any) => ({ name: asset.name, size: asset.size }))
-      : [],
-  });
-}
-
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
