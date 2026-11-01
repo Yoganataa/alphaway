@@ -11,6 +11,7 @@ import {
   type CustomProvider,
 } from "../core/custom-providers";
 import { adminRequestError } from "../core/admin-guard";
+import { embeddedProviderUrlSecrets, hasEmbeddedProviderUrlSecrets, redactProviderBaseUrl } from "../core/provider-url-secrets";
 
 function publicProvider(provider: CustomProvider) {
   const { apiKey, ...safe } = provider;
