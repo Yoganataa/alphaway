@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-02  
 > **Planning baseline:** `main` at `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final Phase 1 PR-head CI run `41328813739` passed on Bun 1.4.4. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4. The most recent completed CI run `41338584108` passed on commit `b6980cec177f22f0f16306b1b4f63059a23595bc` (311 unit/protocol tests, transport fingerprint, build, installer smoke, and dashboard E2E); a newer run for the current branch head was queued at the last check. The optional live upstream gate drill remains skipped by design.
+> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final Phase 1 PR-head CI run `41328813739` passed on Bun 1.4.4. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4. The most recent completed CI run `41338584108` passed on commit `b6980cec177f22f0f16306b1b4f63059a23595bc` (311 unit/protocol tests, transport fingerprint, build, installer smoke, and dashboard E2E). Latest branch head is `3531c33c53b17f61e23060bf631e1424e1d49196`; its run `41339060686` is pending/queued and has not produced job results yet. A stale older run `41338715045` remains stuck in the installer-smoke job after concurrency cancellation; do not use it as final evidence. The optional live upstream gate drill remains skipped by design.
 
 ## 1. Product Direction
 
@@ -179,7 +179,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [x] Store managed caller API keys as salted SHA-256 hashes with a non-secret lookup prefix; raw keys are returned only on issuance/rotation.
 - [x] Implement key lifecycle operations: create, list metadata, revoke, rotate, rename, scopes, last-used time, and request counts.
 - [x] Replace predictable `Math.random()` API key generation with CSPRNG keys and UUID identifiers.
-- [ ] Add policy/plan assignment to individual keys. The current implementation has inference scopes; plan enforcement remains Phase 3 work.
+- [x] Add per-key metadata, lifecycle state, inference scope, and usage counters without coupling gateway keys to administrator sessions. Plan assignment is intentionally a Phase 3 task and will be implemented with the Plan model and enforcement rules.
 - [x] Add negative tests for missing, invalid, revoked, wrong-scope, and unauthenticated admin credentials.
 - [ ] Finish the full secret-flow audit across logs, analytics, backup/export surfaces, and platform-specific storage permissions. Current coverage includes hashed API keys, encrypted provider/proxy/relay/CodeBuddy OAuth credentials, CodeBuddy/custom-provider upstream error redaction, and one-time bootstrap/session tests.
 - [x] Encrypt custom-provider credentials at the SQLite adapter boundary, proxy/relay credentials in the egress store, legacy JSON imports, and CodeBuddy OAuth credentials.
@@ -202,7 +202,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
 - GitHub Actions run `41338584108` passed on Bun 1.4.4 for commit `b6980cec177f22f0f16306b1b4f63059a23595bc`: **311 passed, 0 failed** across 31 test files; the 17-cipher/12-extension transport fingerprint, standalone build, installer/embedded-dashboard smoke, and browser E2E jobs passed. The optional live upstream drill was skipped as designed.
-- Run `41338441043` also passed on commit `2eb3d54d95e79ca30244dbd01a2575908563821b`, including direct AES-GCM tests (310 passed, 0 failed). CI must be rechecked on the latest branch head `a7ee2b123c77f2adb55588df5be2b5e62a6d298b` before treating the new login/key-label tests as verified.
+- Run `41338441043` also passed on commit `2eb3d54d95e79ca30244dbd01a2575908563821b`, including direct AES-GCM tests (310 passed, 0 failed). The login throttle test passed in run `41338584108`. The latest head additionally includes API-key control-character validation and installer-upgrade master-key preservation; run `41339060686` must pass before those newest changes are considered CI-verified.
 - Do not begin Phase 3 until Phase 2 CI, security review, and merge acceptance criteria are satisfied.
 
 **Acceptance criteria**
