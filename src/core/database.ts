@@ -65,7 +65,7 @@ export function getDbFilePath(): string {
 
 let dbInstance: any = null;
 
-function createMigrationBackup(db: any, databasePath: string, migrationName: string): string {
+export function createMigrationBackup(db: any, databasePath: string, migrationName: string): string {
   if (databasePath === ":memory:") {
     throw new Error("Cannot run a destructive migration against an in-memory database without an explicit backup");
   }
