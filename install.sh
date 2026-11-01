@@ -82,9 +82,14 @@ if ! "$BUN_BIN" -e '
   const [minMajor, minMinor, minPatch] = process.argv[2].split(".").map(Number);
   const current = [major || 0, minor || 0, patch || 0];
   const minimum = [minMajor, minMinor, minPatch];
-  const ok = current.some((v, i) => v !== minimum[i] && v > minimum[i]) ||
-    current.every((v, i) => v === minimum[i]);
-  if (!ok) process.exit(1);
+  let comparison = 0;
+  for (let i = 0; i < current.length; i++) {
+    if (current[i] !== minimum[i]) {
+      comparison = current[i] > minimum[i] ? 1 : -1;
+      break;
+    }
+  }
+  if (comparison < 0) process.exit(1);
 ' "$BUN_VERSION" "$MIN_BUN_VERSION"; then
   die "Bun >= $MIN_BUN_VERSION is required (found $BUN_VERSION)"
 fi
@@ -178,7 +183,39 @@ if [ ! -f "$BINDIR/.env" ]; then
 fi
 
 # --------------------------------------------------------- service stop ---
+stop_managed_background() {
+  local pid_file="$BINDIR/alphaway.pid"
+  [ -f "$pid_file" ] || return 0
+  local pid command_line
+  pid="$(cat "$pid_file" 2>/dev/null || true)"
+  [[ "$pid" =~ ^[0-9]+$ ]] || { rm -f "$pid_file"; return 0; }
+  kill -0 "$pid" 2>/dev/null || { rm -f "$pid_file"; return 0; }
+
+  command_line=""
+  if [ -r "/proc/$pid/cmdline" ]; then
+    command_line="$(tr '\\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+  else
+    command_line="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  fi
+
+  case "$command_line" in
+    *"$BINDIR/app/alphaway"*)
+      kill "$pid" 2>/dev/null || true
+      for _ in $(seq 1 20); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.25
+      done
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+      ;;
+    *)
+      warn "PID file does not point to the installed AlphaWay executable; leaving PID $pid untouched"
+      ;;
+  esac
+  rm -f "$pid_file"
+}
+
 stop_existing_services() {
+  stop_managed_background
   if command -v systemctl >/dev/null 2>&1; then
     systemctl stop alphaway opencode-free-bridge opencode-bridge 2>/dev/null || true
     systemctl --user stop alphaway opencode-free-bridge opencode-bridge 2>/dev/null || true
