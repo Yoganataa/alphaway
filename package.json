@@ -16,7 +16,7 @@
     "build": "bun run build:ui && bun run build:bin",
     "tunnel": "bun src/index.ts --tunnel",
     "test": "bun run test:unit && bun run test:e2e",
-    "test:unit": "bun test test/*.test.ts",
+    "test:unit": "bun run build:ui && bun test test/*.test.ts",
     "test:e2e": "bun test test/e2e/",
     "login:codebuddy": "bun src/providers/codebuddy.ts --login",
     "login:cb": "bun src/providers/codebuddy.ts --login",
