@@ -121,8 +121,8 @@ export function findCustomProviderForModel(modelName: string): {
  */
 function appendProviderEndpoint(baseUrl: string, endpoint: string): string {
   const url = new URL(baseUrl);
-  const suffix = `/${endpoint.replace(/^\\/+/, "")}`;
-  const currentPath = url.pathname.replace(/\\/+$/, "");
+  const suffix = `/${endpoint.replace(/^\/+/, "")}`;
+  const currentPath = url.pathname.replace(/\/+$/, "");
   if (!currentPath.endsWith(suffix)) url.pathname = `${currentPath}${suffix}`;
   return url.toString();
 }
