@@ -6,7 +6,7 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Current Phase 2 branch HEAD at this checkpoint edit:** `89d41209a9fbd40ec2ae96d7d393f919ca658013`  
+> **Current Phase 2 branch HEAD at this checkpoint edit:** `408b80ebebf5a9139b0bee12112bdb440f6f43b8`  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -14,11 +14,11 @@
 
 ## 1. Current Status
 
-**Phase 0 and Phase 1 are complete and merged into `main`. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4.** Do not begin Phase 3 or merge PR #4 until the latest-head CI and security review are complete.
+**Phase 0 and Phase 1 are complete and merged into `main`. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4.** Do not begin Phase 3 or merge PR #4 until the remaining security review is complete.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
-- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (implementation in PR #4; latest-head CI pending; security audit incomplete).
+- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (implementation and functional CI are in place; full secret-flow audit and final review remain).
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
@@ -29,7 +29,7 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 
 ### Phase 2 implementation on the active branch
 
-- First-admin bootstrap token, CLI-only token display, scrypt password hashes, login throttling, hashed admin sessions, expiry/revocation, HttpOnly/SameSite cookie, and dashboard login/logout.
+- First-admin bootstrap token, CLI-only token display, scrypt password hashes, bounded login throttling, hashed admin sessions, expiry/revocation, HttpOnly/SameSite cookie, and dashboard login/logout.
 - Default-deny administrator session gate for `/api/*`, with only status/session/bootstrap/login endpoints public; origin/host checks remain defense-in-depth.
 - Managed inference keys stored as salted SHA-256 hashes with prefix lookup; create/list metadata/rename/rotate/revoke, inference scopes, last-used timestamps, and request counts. Legacy `API_KEY` and `BRIDGE_API_KEY` remain supported.
 - Gateway inference authentication covers OpenAI, Anthropic, and Codex routes including aliases. Gateway caller credentials are not reused as upstream CodeBuddy credentials.
@@ -37,17 +37,16 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - CodeBuddy OAuth returns no upstream access/refresh token to the browser; the dashboard uses the provider's `state`/`authUrl` polling contract. The configured CodeBuddy token is read from encrypted SQLite or the documented environment override.
 - Upstream custom-provider and CodeBuddy error bodies redact provider credentials. `/health` recognizes an encrypted CodeBuddy credential without returning its value.
 - Bun test preload isolates SQLite state before importing app modules. Tests cover admin sessions, key lifecycle/scope/revocation, CodeBuddy credential separation/redaction, legacy imports, migration encryption, AES-GCM tamper rejection, nonce uniqueness, symlink refusal, and POSIX key-file permissions.
-- Login username/password length and failed-login memory are bounded; API-key labels reject control characters. Installer smoke now checks the encryption master-key file survives an upgrade unchanged.
+- Login username/password length and failed-login memory are bounded; API-key labels reject control characters. Installer smoke verifies the encryption master-key file survives an upgrade unchanged.
 
 ### GitHub / CI state at checkpoint
 
 - PR #4 is the only open PR, targets `main`, and remains **draft**. No review submissions or inline review threads were present at the last check.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- Phase 2 branch HEAD when this checkpoint was edited: `89d41209a9fbd40ec2ae96d7d393f919ca658013`. Subsequent checkpoint commit will move the branch head; re-check it on resume.
-- Latest completed full CI run at that point was `41338584108` on commit `b6980cec177f22f0f16306b1b4f63059a23595bc`: **311 passed, 0 failed** across 31 test files, transport fingerprint passed (Bun 1.4.4; 17 ciphers, 12 extensions), standalone build passed, installer smoke passed, dashboard E2E passed. The optional live upstream gate drill was skipped by design.
-- Earlier run `41338441043` passed on `2eb3d54d95e79ca30244dbd01a2575908563821b`, including dedicated AES-GCM tests (310 passed, 0 failed).
-- Run `41339060686` for branch head `3531c33c53b17f61e23060bf631e1424e1d49196` was pending/queued with no job results visible yet. A stale older run `41338715045` remained in progress on installer-smoke after its other jobs were cancelled; do not use it as final evidence.
-- CI must be checked again for the newest branch head after this checkpoint edit. Do not state that latest-head CI passes until the exact head SHA has a completed successful run and all four deterministic jobs are inspected.
+- Phase 2 branch HEAD at the time this checkpoint was updated: `408b80ebebf5a9139b0bee12112bdb440f6f43b8`. The latest verified functional code/installer commit is `217834209035f147e640fdfe473e8ed3eee0381f`; subsequent commits updated only `ROADMAP.md` and `CHECKPOINT.md`.
+- GitHub Actions run `41339302362` passed on Bun 1.4.4 for commit `217834209035f147e640fdfe473e8ed3eee0381f`: **312 unit/protocol tests passed, 0 failed** across 31 files; transport fingerprint passed (17 ciphers/12 extensions), standalone binary build passed, installer/embedded-dashboard smoke passed including SHA-256 verification that `secret-encryption.key` survives upgrade unchanged, and dashboard E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
+- Runs `41339060686` and `41339200556` failed only in installer smoke because the digest variable was written to `GITHUB_ENV` and read in the same shell step. This was fixed by comparing against a same-shell variable; run `41339302362` confirms the correction.
+- A workflow for an intermediate documentation head was cancelled by a subsequent commit. Re-check Actions for the newest branch head `408b80ebebf5a9139b0bee12112bdb440f6f43b8` on resume; do not state that this exact docs head has CI green until its own run completes.
 
 ### Remaining Phase 2 gaps / boundaries
 
@@ -225,16 +224,16 @@ test/verify-quick.test.ts
 
 ### Current Phase 2 work
 
-Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. At the checkpoint edit the branch head was `89d41209a9fbd40ec2ae96d7d393f919ca658013`, and `main` was `e2492fb3a995677d24f3078b7925a2c48c877ca7`. Re-fetch branch/main/PR/Actions before every new change because the checkpoint commit itself will move the branch head.
+Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. At the checkpoint edit the branch head was `408b80ebebf5a9139b0bee12112bdb440f6f43b8`, while the latest functionally verified commit was `217834209035f147e640fdfe473e8ed3eee0381f`. The docs-only commits after it changed ROADMAP/CHECKPOINT. Re-fetch branch/main/PR/Actions before further changes.
 
-The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged until latest-head CI and the security review are complete. Do not create a second PR or start Phase 3.
+The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged until a full secret-flow audit and review are complete. Do not create another PR or start Phase 3.
 
 Next exact actions:
-1. Re-check latest branch HEAD and the workflow triggered by the checkpoint commit. Inspect all Unit/protocol, build, installer-smoke, and dashboard E2E jobs. The current CI runner had shown delayed/pending setup and a stale installer job on an older cancelled run; confirm fresh run status.
-2. Fix any CI issue without weakening tests. In particular verify installer smoke preserves `secret-encryption.key` by SHA-256 across upgrade.
-3. Finish the end-to-end secret audit across logs, diagnostics, analytics, backup/export and verify there are no plaintext provider credentials.
-4. Keep Windows ACL verification marked as Phase 7 hardening unless a verified implementation is added.
-5. Update PR #4 body, ROADMAP.md and CHECKPOINT.md with the exact verified SHA/run. Only then request review/mark ready when appropriate; never merge without all acceptance criteria.
+1. Re-check the workflow for the newest branch HEAD `408b80ebebf5a9139b0bee12112bdb440f6f43b8`; the last full green run was `41339302362` on the functionally identical code/installer head `2178342…`. Inspect Unit/protocol, build, installer-smoke, and dashboard E2E.
+2. Finish the end-to-end secret audit across logs, diagnostics, analytics, backup/export, and persistence; capture findings and tests in PR #4.
+3. Keep Windows ACL verification marked as Phase 7 hardening unless a verified implementation is added.
+4. Update PR #4 body with the verified CI evidence and the remaining Phase 2 security gaps. Request review/mark ready only after the secret audit and current-head CI are complete.
+5. Do not merge PR #4 or start Phase 3 until all Phase 2 acceptance criteria and review findings are resolved.
 
 Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
 
@@ -255,9 +254,9 @@ Lanjutkan AlphaWay dari repository https://github.com/Yoganataa/alphaway.
 
 Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Setelah itu periksa live main, branch feat/phase-2-auth-admin-security, PR #4, dan GitHub Actions. Jangan mengulang Phase 0 atau Phase 1 yang sudah merged. Main saat checkpoint: e2492fb3a995677d24f3078b7925a2c48c877ca7. PR #4 adalah satu-satunya PR aktif, open dan draft, target main.
 
-Phase 2 mencakup admin bootstrap/login/session, default-deny admin API gate, managed inference keys hashed dan lifecycle, scope checks, AES-256-GCM untuk provider/proxy/relay/CodeBuddy OAuth secrets, pemisahan gateway dan CodeBuddy upstream credentials, OAuth state/authUrl flow, health/error redaction, isolated Bun test state, login rate limiting, and installer master-key preservation smoke. Periksa hasil CI terbaru pada head SHA live; hanya run lama yang sudah berhasil dengan 311 tests, build, installer smoke, fingerprint dan E2E. Jangan claim newest head passed tanpa run sukses yang tepat.
+Phase 2 mencakup admin bootstrap/login/session, default-deny admin API gate, managed inference keys hashed dan lifecycle/scopes, AES-256-GCM persistence untuk provider/proxy/relay/CodeBuddy OAuth secrets, pemisahan gateway dan CodeBuddy upstream credentials, OAuth state/authUrl flow, health/error redaction, isolated Bun test state, login rate limiting, API key label validation, dan installer master-key preservation. CI run 41339302362 passed pada functional head 217834209035f147e640fdfe473e8ed3eee0381f: 312 unit tests pass, 8 browser E2E pass, transport fingerprint, binary build dan installer smoke seluruhnya lulus. Docs-only commits setelah itu mengubah ROADMAP/CHECKPOINT; verifikasi CI pada branch head live.
 
-Gap: audit menyeluruh secret-flow di logs/diagnostics/analytics/backup-export, verifikasi Windows ACL (Phase 7), dan final PR review. Assignment Plan ke key dilakukan pada Phase 3 bersama model Plan. Jangan merge PR #4 atau mulai Phase 3 sampai Phase 2 accepted.
+Gap yang tersisa: audit menyeluruh secret-flow di logs/diagnostics/analytics/backup-export, verifikasi Windows ACL (Phase 7), dan final PR review. Assignment Plan ke key dilakukan pada Phase 3 bersama model Plan. Jangan merge PR #4 atau mulai Phase 3 sampai Phase 2 diterima.
 
 Backend tetap Bun 1.4.4 + TypeScript + Hono; jangan port backend Go dari 9router-go dan jangan melemahkan test.
 ```
