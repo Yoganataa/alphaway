@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `9805d2335293539424fd66af3c047b493edad630`  
-> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 is complete for all existing persistence-backed features and passed GitHub Actions run `41328142025` on current HEAD `cad5d8cea0e81221f46d23f484e2f66651a54a7c`. PR #3 is open, non-draft, and mergeable. Plans and Persona/Jailbreak persistence are introduced with their domain features in Phases 3 and 4.
+> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 is complete for all existing persistence-backed features and passed GitHub Actions run `41328662898` on current code HEAD `cc6eaf7bfa42993300757725cb0ec728fda48bbd`. PR #3 is open, non-draft, and mergeable. Plans and Persona/Jailbreak persistence are introduced with their domain features in Phases 3 and 4.
 
 ## 1. Product Direction
 
@@ -149,6 +149,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [x] Add tests for fresh databases, adoption of pre-migration databases without data loss, repeated startup, rollback after a failed migration, retry, invalid registry versions, and destructive-migration backup guards.
 - [x] Make SQLite canonical for custom providers, TokenSaver configuration, usage snapshots/events, and proxy pool configuration. Proxy health remains a credential-free runtime cache.
 - [x] Convert legacy custom-provider, usage, TokenSaver, and proxy JSON files into one-time imports tracked by checksums and `legacy_imports`; retain source files as backups.
+- [x] Preserve `ALPHAWAY_HOME` as a legacy JSON import location without changing the existing SQLite database root; add regression coverage to prevent apparent database loss on upgrade.
 - [x] Persist each usage request event and its aggregate snapshot atomically in one SQLite transaction.
 - [x] Add a pre-destructive-migration backup hook using SQLite `VACUUM INTO` and owner-only backup permissions.
 - [x] Retain API key configuration in SQLite `app_settings` (credential-verification and secret-at-rest hardening remain Phase 2 work).
