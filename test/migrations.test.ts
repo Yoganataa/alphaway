@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createMigrationBackup } from "../src/core/database";
 import { MIGRATIONS, MigrationError, runMigrations } from "../src/core/migrations";
 import type { Migration } from "../src/core/migrations";
 
@@ -167,6 +171,38 @@ describe("SQLite migration runner", () => {
 
     expect(backupWasCreated).toBe(true);
     expect(result.currentVersion).toBe(2);
+  });
+
+  it("creates a consistent standalone SQLite backup before destructive schema changes", () => {
+    const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-backup-test-"));
+    const databasePath = path.join(backupDir, "alphaway.sqlite");
+    const source = new Database(databasePath);
+
+    try {
+      source.exec("PRAGMA journal_mode = WAL");
+      source.exec("CREATE TABLE preserved_data (value TEXT NOT NULL)");
+      source.prepare("INSERT INTO preserved_data (value) VALUES (?)").run("keep-this-row");
+
+      const backupPath = createMigrationBackup(source, databasePath, "test destructive migration");
+
+      expect(fs.existsSync(backupPath)).toBe(true);
+      expect(path.dirname(backupPath)).toBe(path.join(backupDir, "backups"));
+      if (process.platform !== "win32") {
+        expect(fs.statSync(backupPath).mode & 0o777).toBe(0o600);
+      }
+
+      const backup = new Database(backupPath, { readonly: true });
+      try {
+        expect(backup.prepare("SELECT value FROM preserved_data").get()).toEqual({
+          value: "keep-this-row",
+        });
+      } finally {
+        backup.close();
+      }
+    } finally {
+      source.close();
+      fs.rmSync(backupDir, { recursive: true, force: true });
+    }
   });
 
   it("rejects a database created by a newer application schema", () => {
