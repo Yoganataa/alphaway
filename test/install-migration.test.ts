@@ -42,6 +42,25 @@ describe("current AlphaWay installer and distribution contract", () => {
     expect(installer).toContain('MIN_BUN_VERSION="1.4.4"');
   });
 
+  it("retires legacy system and user services before replacing the installed app", () => {
+    const installer = read("install.sh");
+    const definitionAt = installer.indexOf("retire_legacy_systemd_services() {");
+    const callAt = installer.lastIndexOf("    retire_legacy_systemd_services");
+    const portCheckAt = installer.indexOf('if port_is_listening; then');
+    const swapAt = installer.indexOf('mv "$STAGED_APP" "$APPDIR"');
+
+    expect(definitionAt).toBeGreaterThan(-1);
+    expect(callAt).toBeGreaterThan(definitionAt);
+    expect(installer).toContain("opencode-bridge.service");
+    expect(installer).toContain("opencode-free-bridge.service");
+    expect(installer).toContain('systemctl disable --now "$name"');
+    expect(installer).toContain('systemctl --user disable --now "$name"');
+    expect(installer).toContain('.retired-$stamp');
+    expect(installer).toContain("Could not disable legacy system service");
+    expect(callAt).toBeLessThan(portCheckAt);
+    expect(callAt).toBeLessThan(swapAt);
+  });
+
   it("supports install-only smoke tests without starting a service", () => {
     const installer = read("install.sh");
     expect(installer).toContain("NO_START=");
