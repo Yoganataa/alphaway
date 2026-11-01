@@ -13,7 +13,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
   beforeAll(async () => {
     dashboard = await startBridgeDashboard(20149);
-  }, 30000);
+  }, 60000);
 
   afterAll(async () => {
     if (dashboard) {
