@@ -6,15 +6,14 @@
   import Toggle from "../lib/ui/Toggle.svelte";
   import Modal from "../lib/ui/Modal.svelte";
   import { notifications } from "../lib/notifications";
-  import { fetchTokenSaverConfig, updateTokenSaverConfig, type TokenSaverConfig } from "../lib/api";
-
-  interface KeywordRule {
-    id: string;
-    pattern: string;
-    action: "mask" | "block";
-    description: string;
-    enabled: boolean;
-  }
+  import {
+    fetchTokenSaverConfig,
+    updateTokenSaverConfig,
+    fetchSecurityRules,
+    saveSecurityRules,
+    type SecurityKeywordRule,
+    type TokenSaverConfig,
+  } from "../lib/api";
 
   let config = $state<TokenSaverConfig>({
     dlpEnabled: true,
@@ -24,43 +23,7 @@
     blockDangerousCommands: true,
   });
 
-  let rules = $state<KeywordRule[]>([
-    {
-      id: "rule-1",
-      pattern: "browser_cookies_db",
-      action: "block",
-      description: "Anti-Infostealer: Protect Chrome/Edge/Brave Cookies & Login Data",
-      enabled: true,
-    },
-    {
-      id: "rule-2",
-      pattern: "dpapi_masterkey",
-      action: "block",
-      description: "Anti-Infostealer: Protect Windows DPAPI Credentials & Vault",
-      enabled: true,
-    },
-    {
-      id: "rule-3",
-      pattern: "keychain_access",
-      action: "block",
-      description: "Anti-Infostealer: Protect macOS ~/Library/Keychains database",
-      enabled: true,
-    },
-    {
-      id: "rule-4",
-      pattern: "openai_secret_token",
-      action: "mask",
-      description: "DLP: Redact OpenAI, Anthropic, DeepSeek sk- keys before forwarding",
-      enabled: true,
-    },
-    {
-      id: "rule-5",
-      pattern: "aws_credentials",
-      action: "mask",
-      description: "DLP: Redact AWS Access Key and Session secrets",
-      enabled: true,
-    },
-  ]);
+  let rules = $state<SecurityKeywordRule[]>([]);
 
   let isAddModalOpen = $state(false);
   let newPattern = $state("");
@@ -82,7 +45,14 @@
   onMount(async () => {
     try {
       config = await fetchTokenSaverConfig();
-    } catch {}
+    } catch {
+      notifications.error("Failed to load security settings");
+    }
+    try {
+      rules = await fetchSecurityRules();
+    } catch {
+      notifications.error("Failed to load custom security rules");
+    }
     runSecurityTest();
   });
 
@@ -95,27 +65,36 @@
     }
   }
 
-  function handleAddRule() {
+  async function handleAddRule() {
     if (!newPattern.trim()) return;
-    const rule: KeywordRule = {
-      id: `rule-${Date.now()}`,
+    const rule: SecurityKeywordRule = {
+      id: `rule-${crypto.randomUUID()}`,
       pattern: newPattern.trim(),
       action: newAction,
       description: newDesc.trim() || `Custom rule: ${newPattern.trim()}`,
       enabled: true,
     };
-    rules.push(rule);
-    isAddModalOpen = false;
-    newPattern = "";
-    newDesc = "";
-    notifications.success("Added security rule");
-    runSecurityTest();
+
+    try {
+      rules = await saveSecurityRules([...rules, rule]);
+      isAddModalOpen = false;
+      newPattern = "";
+      newDesc = "";
+      notifications.success("Security rule saved");
+      runSecurityTest();
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : "Failed to save security rule");
+    }
   }
 
-  function handleDeleteRule(id: string) {
-    rules = rules.filter((r) => r.id !== id);
-    notifications.info("Rule removed");
-    runSecurityTest();
+  async function handleDeleteRule(id: string) {
+    try {
+      rules = await saveSecurityRules(rules.filter((r) => r.id !== id));
+      notifications.info("Rule removed");
+      runSecurityTest();
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : "Failed to remove security rule");
+    }
   }
 
   function runSecurityTest() {
