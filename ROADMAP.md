@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-02  
 > **Planning baseline:** `main` at `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final Phase 1 PR-head CI run `41328813739` passed on Bun 1.4.4. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4. The most recent completed CI run `41338584108` passed on commit `b6980cec177f22f0f16306b1b4f63059a23595bc` (311 unit/protocol tests, transport fingerprint, build, installer smoke, and dashboard E2E). Latest branch head is `3531c33c53b17f61e23060bf631e1424e1d49196`; its run `41339060686` is pending/queued and has not produced job results yet. A stale older run `41338715045` remains stuck in the installer-smoke job after concurrency cancellation; do not use it as final evidence. The optional live upstream gate drill remains skipped by design.
+> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final Phase 1 PR-head CI run `41328813739` passed on Bun 1.4.4. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4. Latest branch head `01b5b86df9b0674d7f6c376d58397724975a1142` passed GitHub Actions run `41339526068` on Bun 1.4.4: 312 unit/protocol tests, 8 dashboard browser E2E tests, transport fingerprint, standalone binary build, and installer/embedded-dashboard smoke all passed. The installer smoke verifies the encryption master-key file survives upgrade unchanged. The optional live upstream gate drill was skipped by design. The optional live upstream gate drill remains skipped by design.
 
 ## 1. Product Direction
 
@@ -170,7 +170,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; PR #4 is draft. CI passed on the latest functional code/installer head (`2178342…`, run `41339302362`); a docs-only checkpoint/roadmap update followed, so the newest branch SHA must be confirmed by a routine rerun. Final security review remains pending.  
+**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; PR #4 is draft. Latest branch head `01b5b86df9b0674d7f6c376d58397724975a1142` passed CI run `41339526068` on Bun 1.4.4. Final secret-flow audit and security review remain pending.  
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -201,17 +201,17 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- GitHub Actions run `41339302362` passed on Bun 1.4.4 for commit `217834209035f147e640fdfe473e8ed3eee0381f`: **312 passed, 0 failed** across 31 test files; transport fingerprint passed (17 ciphers/12 extensions), standalone build passed, installer/embedded-dashboard smoke passed including SHA-256 verification that `secret-encryption.key` survives upgrade unchanged, and browser E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
-- The CI failure in runs `41339060686` and `41339200556` was in installer smoke only: the digest variable was written to `GITHUB_ENV` and read in the same step, where it is not yet exported. This was corrected by retaining `key_digest_before` as a same-shell variable; run `41339302362` confirms the installer smoke fix.
-- Older full passing runs: `41338584108` (311 unit tests) and `41338441043` (310 unit tests including AES-GCM tests). The current branch has documentation-only commits after the successfully verified functional head; verify the newest head's routine CI rerun before merge.
-- Do not begin Phase 3 until Phase 2 security review and merge acceptance criteria are satisfied.
+- GitHub Actions run `41339526068` passed on Bun 1.4.4 for the exact current branch head `01b5b86df9b0674d7f6c376d58397724975a1142`: **312 passed, 0 failed** across 31 unit/protocol test files; the transport fingerprint passed (17 ciphers/12 extensions); standalone build passed; installer/embedded-dashboard smoke passed, including SHA-256 verification that `secret-encryption.key` survives upgrade unchanged; and browser E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
+- CI runs `41339060686` and `41339200556` failed only in the installer smoke assertion because `GITHUB_ENV` values are not visible in the same shell step. The assertion now uses the same-shell `key_digest_before` variable; run `41339302362` first verified the fix, and run `41339526068` re-verified it on the current branch head.
+- Older full passing runs: `41338584108` (311 unit tests) and `41338441043` (310 unit tests including direct AES-GCM tests).
+- Do not begin Phase 3 until Phase 2 secret-flow audit, security review, and merge acceptance criteria are satisfied.
 
 **Acceptance criteria**
 
-- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; latest functional code/installer CI passed in run `41339302362`; documentation-only checkpoint updates followed).
+- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; latest branch-head CI run `41339526068` passed).
 - The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; latest functional code/installer CI passed in run `41339302362`; documentation-only checkpoint updates followed).
-- Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; latest functional CI run `41339302362` passed).
-- Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter and AES-GCM tests committed; latest functional CI run `41339302362` passed).
+- Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; latest branch-head CI run `41339526068` passed).
+- Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter and AES-GCM tests committed; latest branch-head CI run `41339526068` passed).
 ### Phase 3 — Plans, Limits, and Request Enforcement
 
 **Status:** Not started  
