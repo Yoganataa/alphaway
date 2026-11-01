@@ -4,21 +4,22 @@
 >
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Branch:** `main`  
-> **Last code-audited HEAD:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-**Documentation commits added after that code audit:** `6a6d581f37ad1c3d742e5701af7b2d072ef8ee1d` (ROADMAP) and `267d2dbfb83738b5957ca1d6f502a029a9935fe4` (CHECKPOINT)  
-> **Commit:** `feat: initial release of AlphaWay v0.0.1 - Universal AI Gateway & Security Router`
+> **Active branch:** `chore/phase-0-ci-distribution`  
+> **Branch HEAD before this checkpoint update:** `466f526e77322e9cc40c72e40522c2d1beaeaaaa`  
+> **Base main HEAD:** `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`  
+> **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`
 
 ## 1. Current Status
 
-**Planning/audit checkpoint only. Implementation has not started.**
+**Phase 0 is in progress.** A focused implementation branch exists; PR CI and runtime smoke verification are pending. No changes have been merged into `main`.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
 - [x] Target product direction and dashboard information architecture agreed.
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
-- [ ] Phase 0 — Repository Baseline, CI, and Distribution Integrity.
+- [x] Phase 0 planning/audit and initial implementation block (CI/build/dashboard/updater/installer/docs).  
+- [ ] Phase 0 acceptance verification (PR CI, clean build, installer, and embedded-dashboard smoke tests).
 - [ ] Phase 1 — Database Migrations and Canonical Persistence.
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
@@ -27,7 +28,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-The only repository changes in this session are these two documentation files. No application source code was changed and no test, build, installer, or CI command was executed as part of the planning/audit work that led to this checkpoint. Do not interpret the README's existing test-pass statement as a verification result from this session.
+Implementation branch changes are limited to Phase 0. Source files, build configuration, installer, tests, README, and AGENTS have been updated; no application feature work for later phases has started. This environment has no Bun runtime and cannot clone the repository over its network, so application tests/build/installer were not run locally. The latest baseline `main` GitHub Actions run `41317617602` failed: the Bun test step used `.test.js` paths while the repository contains `.test.ts`, and Node compatibility jobs called the absent `test:node` script. The new PR CI is the authoritative verification path. Do not interpret source changes as proof that build/tests currently pass.
 
 ## 2. Agreed Product Direction
 
@@ -132,23 +133,61 @@ Do not rely only on this summary. Fetch the current files from GitHub before edi
 
 Also inspect the current `9router-go` frontend and pin the exact upstream commit when beginning Phase 6.
 
-## 5. Next Action — Start Phase 0 Only
+## 5. Phase 0 Implementation Progress
 
-The next work session should begin with **Phase 0: Repository Baseline, CI, and Distribution Integrity** from `ROADMAP.md`.
+### Changes on `chore/phase-0-ci-distribution`
 
-Recommended execution order:
+- Reworked `.github/workflows/ci.yml`: Bun 1.4.3 pin; corrected TypeScript unit test path; separate unit, build, installer/embedded-dashboard smoke, and Playwright E2E jobs; live upstream drill is a manual workflow dispatch; removed obsolete Node compatibility matrix.
+- Updated `package.json`: Bun engine floor `>=1.4.3`; separate unit/E2E scripts; standalone build embeds `dist/`; host build emits `alphaway`; Windows x64 has an explicit cross-target.
+- Updated `vite.config.ts` and `src/routes/dashboard.ts` to use a deterministic module-relative dashboard asset directory. Removed ambiguous root-dist/web-dist fallback and added safe asset path resolution/MIME handling.
+- Removed the incompatible legacy updater calls from `src/index.ts`; replaced `src/core/updater.ts` with a no-network/no-write compatibility shim requiring complete installer updates.
+- Replaced the obsolete root-level JavaScript installer with a staged installer for the current TypeScript source archive. It performs frozen dependency install, TLS fingerprint validation, dashboard/binary build, pre-swap validation, persistent state/config separation, and systemd/launchd/background registration.
+- Replaced obsolete installer test assumptions in `test/install-migration.test.ts` and added `test/updater.test.ts`.
+- Updated `README.md`, `AGENTS.md`, `.env.example`, `ROADMAP.md`, and this checkpoint for the current Bun build, installer, supported runtime, and test commands.
 
-1. Fetch the live `main` HEAD and compare it with the last verified HEAD above. If it moved, inspect the new commits/diff and reconcile this checkpoint before editing.
-2. Inspect the current CI workflow, package scripts, Bun version requirements, Vite output, dashboard static serving, and installer.
-3. Run baseline checks on a clean working tree and record exact outputs. Do not change code before establishing which checks currently fail and why.
-4. Fix stale CI commands and establish deterministic build/package behavior.
-5. Rewrite the installer against the verified current artifact/layout; test install and upgrade behavior.
-6. Reconcile README/AGENTS instructions and update this checkpoint with actual test/build/install results.
-7. Only proceed to Phase 1 when Phase 0 acceptance criteria are met.
+### Verification state
 
-Use a focused feature branch and PR for implementation unless the repository owner explicitly requests direct commits to `main`. Keep provider handshake, TLS fingerprint, and protocol behavior protected by regression tests.
+| Check | State |
+|---|---|
+| Baseline `main` workflow run `41317617602` | Confirmed failed on stale test paths and missing `test:node` script |
+| Current branch unit/integration tests | Pending PR CI |
+| Current branch fingerprint check | Pending PR CI |
+| Dashboard and standalone binary build | Pending PR CI |
+| Installer Bash syntax and isolated install | Pending PR CI |
+| Compiled binary `/health`, `/`, and embedded JS asset | Pending PR CI |
+| Playwright dashboard E2E | Pending PR CI |
+| Local execution in this environment | Not available: Bun is not installed and repository clone/network access is unavailable |
 
-## 6. Working Rules for the Next Session
+No claim is made that the current branch passes. The workflow was authored to verify the built executable and installed artifact rather than relying only on static checks.
+
+### Files changed on the branch
+
+```text
+.github/workflows/ci.yml
+.env.example
+AGENTS.md
+README.md
+install.sh
+package.json
+vite.config.ts
+src/index.ts
+src/core/updater.ts
+src/routes/dashboard.ts
+test/install-migration.test.ts
+test/updater.test.ts
+ROADMAP.md
+CHECKPOINT.md
+```
+
+### Next action
+
+1. Open/review the PR from `chore/phase-0-ci-distribution` to `main`.
+2. Inspect its Actions run. Fix all failures; do not mark Phase 0 complete while any required job is failing or unexpectedly skipped.
+3. Pay particular attention to standalone embedded-asset resolution, install-smoke startup, and installer behavior.
+4. Once CI passes, perform a real upgrade test against a disposable state directory and a clean installation test; record exact command output here.
+5. Move to Phase 1 only after Phase 0 acceptance criteria are met.
+
+## 7. Working Rules for the Next Session
 
 - Read `CHECKPOINT.md` first, then `ROADMAP.md`, then inspect the current GitHub state.
 - The live repository/PR state takes precedence over this checkpoint if newer commits exist. Reconcile differences instead of blindly following stale notes.
@@ -176,7 +215,7 @@ Target produk yang sudah diputuskan:
 - Tambahkan Plans serta Persona/Jailbreak.
 - Ikuti struktur TypeScript idiomatis; jangan membuat struktur ala Go secara menyeluruh.
 
-Lanjutkan dari fase aktif dalam ROADMAP.md. Pada checkpoint awal ini fase berikutnya adalah Phase 0 — Repository Baseline, CI, and Distribution Integrity. Mulai dengan memeriksa kondisi aktual dan menjalankan baseline verification; jangan langsung melakukan rewrite. Kerjakan bertahap, gunakan branch/PR, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
+Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 — Repository Baseline, CI, and Distribution Integrity sedang dikerjakan di branch `chore/phase-0-ci-distribution`. Mulai dengan memeriksa PR dan CI terbaru; jangan mengulang perubahan yang sudah dibuat. Kerjakan bertahap, gunakan branch/PR, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
 ```
 
 ---
