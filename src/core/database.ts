@@ -9,6 +9,8 @@ import { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { runMigrations } from "./migrations";
+import { importLegacyJson } from "./legacy-imports";
 
 export interface CustomProviderRow {
   id: string;
@@ -37,15 +39,19 @@ export interface RequestLogRow {
 }
 
 export function resolveDbDir(): string {
-  const customState = process.env.ALPHAWAY_STATE_DIR || process.env.OPENCODE_BRIDGE_STATE_DIR;
+  const customState =
+    process.env.ALPHAWAY_STATE_DIR ||
+    process.env.ALPHAWAY_HOME ||
+    process.env.OPENCODE_BRIDGE_STATE_DIR;
   if (customState && customState.trim()) {
     return customState.trim();
   }
   const dir = path.join(os.homedir(), ".alphaway");
   try {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
+    if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
   } catch {}
   return dir;
 }
@@ -59,6 +65,27 @@ export function getDbFilePath(): string {
 
 let dbInstance: any = null;
 
+function createMigrationBackup(db: any, databasePath: string, migrationName: string): string {
+  if (databasePath === ":memory:") {
+    throw new Error("Cannot run a destructive migration against an in-memory database without an explicit backup");
+  }
+
+  const backupDir = path.join(path.dirname(databasePath), "backups");
+  fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") fs.chmodSync(backupDir, 0o700);
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeName = migrationName.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 48);
+  const backupPath = path.join(backupDir, `alphaway-before-${safeName}-${stamp}.sqlite`);
+
+  // Checkpoint WAL first, then let SQLite create a consistent standalone copy.
+  db.exec("PRAGMA wal_checkpoint(FULL)");
+  const escapedPath = backupPath.replace(/'/g, "''");
+  db.exec(`VACUUM INTO '${escapedPath}'`);
+  if (process.platform !== "win32") fs.chmodSync(backupPath, 0o600);
+  return backupPath;
+}
+
 export function getDatabase(): any {
   if (dbInstance) return dbInstance;
 
@@ -68,7 +95,8 @@ export function getDatabase(): any {
   if (!isMemory) {
     const dir = path.dirname(dbPath);
     try {
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
     } catch {}
   }
 
@@ -78,6 +106,9 @@ export function getDatabase(): any {
   }
 
   dbInstance = new Database(dbPath);
+  if (!isMemory && process.platform !== "win32") {
+    try { fs.chmodSync(dbPath, 0o600); } catch {}
+  }
 
   // 2. Enable WAL mode for concurrency and optimal I/O throughput
   if (!isMemory) {
@@ -87,48 +118,43 @@ export function getDatabase(): any {
     } catch {}
   }
 
-  // 3. Create Tables
-  dbInstance.exec(`
-    CREATE TABLE IF NOT EXISTS custom_providers (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      base_url TEXT NOT NULL,
-      api_key TEXT NOT NULL,
-      protocol TEXT NOT NULL DEFAULT 'openai',
-      models TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER NOT NULL
-    );
+  // 3. Apply versioned, transactional schema migrations. Existing tables are
+  // adopted by the initial CREATE IF NOT EXISTS migration; existing rows stay
+  // intact. A failed migration aborts startup instead of silently booting with
+  // a partially upgraded schema.
+  try {
+    const migrationResult = runMigrations(dbInstance, undefined, {
+      beforeDestructiveMigration: (migration) => {
+        const backupPath = createMigrationBackup(dbInstance, dbPath, migration.name);
+        console.warn(`[AlphaWay] Created pre-migration backup: ${backupPath}`);
+      },
+    });
+    if (migrationResult.applied.length > 0) {
+      console.info(
+        `[AlphaWay] SQLite schema migrated to v${migrationResult.currentVersion} (${migrationResult.applied.length} migration(s))`
+      );
+    }
+  } catch (error) {
+    try { dbInstance.close(); } catch {}
+    dbInstance = null;
+    throw error;
+  }
 
-    CREATE TABLE IF NOT EXISTS request_logs (
-      id TEXT PRIMARY KEY,
-      timestamp TEXT NOT NULL,
-      protocol TEXT NOT NULL,
-      model TEXT NOT NULL,
-      provider TEXT NOT NULL,
-      status INTEGER NOT NULL,
-      latency_ms INTEGER NOT NULL,
-      prompt_tokens INTEGER NOT NULL,
-      completion_tokens INTEGER NOT NULL,
-      total_tokens INTEGER NOT NULL,
-      saved_tokens INTEGER NOT NULL,
-      stream INTEGER NOT NULL DEFAULT 0
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_requests_timestamp ON request_logs(timestamp);
-    CREATE INDEX IF NOT EXISTS idx_requests_model ON request_logs(model);
-    CREATE INDEX IF NOT EXISTS idx_requests_provider ON request_logs(provider);
-    CREATE INDEX IF NOT EXISTS idx_requests_protocol ON request_logs(protocol);
-
-    CREATE TABLE IF NOT EXISTS app_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-  `);
-
-  // 4. Auto-migrate existing JSON files if tables are empty
-  autoMigrateJson(dbInstance);
+  // Import pre-SQLite JSON data exactly once. Each source file and all of
+  // its row/settings writes are committed in one transaction with its ledger
+  // record. Source files remain untouched as operator-readable backups.
+  const importReports = importLegacyJson(dbInstance, resolveDbDir());
+  for (const report of importReports) {
+    if (report.status === "skipped" || report.details) {
+      console.warn(
+        `[AlphaWay] Legacy import ${report.sourceKey}: ${report.details || report.status}`
+      );
+    } else if (report.status === "imported" && report.rowCount > 0) {
+      console.info(
+        `[AlphaWay] Legacy import ${report.sourceKey}: ${report.rowCount} row(s) imported`
+      );
+    }
+  }
 
   return dbInstance;
 }
@@ -385,6 +411,51 @@ export function dbGetProtocolSummaries(): Record<string, {
   return out;
 }
 
+export function dbGetDailyUsageHistory(): Record<string, { requests: number; tokens: number }> {
+  const db = getDatabase();
+  const rows = db.prepare(`
+    SELECT
+      substr(timestamp, 1, 10) AS date,
+      COUNT(*) AS requests,
+      COALESCE(SUM(total_tokens), 0) AS tokens
+    FROM request_logs
+    GROUP BY substr(timestamp, 1, 10)
+    ORDER BY date ASC
+  `).all();
+
+  const history: Record<string, { requests: number; tokens: number }> = {};
+  for (const row of rows) {
+    history[row.date] = { requests: row.requests, tokens: row.tokens };
+  }
+  return history;
+}
+
+export function dbGetHourlyUsageHistory(): Record<string, { tokens: number; cost: number; byModel: Record<string, number> }> {
+  const db = getDatabase();
+  const rows = db.prepare(`
+    SELECT
+      substr(timestamp, 1, 13) || ':00' AS hour,
+      model,
+      COALESCE(SUM(total_tokens), 0) AS tokens,
+      COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+      COALESCE(SUM(completion_tokens), 0) AS completion_tokens
+    FROM request_logs
+    GROUP BY substr(timestamp, 1, 13), model
+    ORDER BY hour ASC
+  `).all();
+
+  const history: Record<string, { tokens: number; cost: number; byModel: Record<string, number> }> = {};
+  for (const row of rows) {
+    const bucket = history[row.hour] ||= { tokens: 0, cost: 0, byModel: {} };
+    bucket.tokens += Number(row.tokens || 0);
+    bucket.cost += (Number(row.prompt_tokens || 0) / 1_000_000) * 2.5 +
+      (Number(row.completion_tokens || 0) / 1_000_000) * 10;
+    bucket.byModel[row.model] = (bucket.byModel[row.model] || 0) + Number(row.tokens || 0);
+  }
+  return history;
+}
+
+
 // ============================================================================
 // Settings Key-Value Queries
 // ============================================================================
@@ -410,8 +481,68 @@ export function dbSetSetting<T>(key: string, value: T): void {
   `).run(key, serialized, Date.now());
 }
 
+export function dbDeleteSetting(key: string): boolean {
+  const db = getDatabase();
+  const result = db.prepare("DELETE FROM app_settings WHERE key = ?").run(key);
+  return Number(result.changes || 0) > 0;
+}
+
+/**
+ * Atomically persist one request event and the matching aggregate snapshot.
+ * This prevents a crash between the event insert and summary persistence from
+ * leaving usage analytics permanently behind the request log.
+ */
+export function dbInsertRequestLogWithSnapshot(entry: RequestLogRow, snapshot: unknown): void {
+  const db = getDatabase();
+  const insert = db.prepare(`
+    INSERT INTO request_logs (
+      id, timestamp, protocol, model, provider, status,
+      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const upsert = db.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES ('usage_stats_snapshot', ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `);
+  const persist = db.transaction(() => {
+    insert.run(
+      entry.id,
+      entry.timestamp,
+      entry.protocol,
+      entry.model,
+      entry.provider,
+      entry.status,
+      entry.latencyMs,
+      entry.promptTokens,
+      entry.completionTokens,
+      entry.totalTokens,
+      entry.savedTokens,
+      entry.stream ? 1 : 0
+    );
+    upsert.run(JSON.stringify(snapshot), Date.now());
+  });
+  persist();
+}
+
+/** Atomically clear request detail rows and save the new aggregate snapshot. */
+export function dbClearRequestLogsWithSnapshot(snapshot: unknown): void {
+  const db = getDatabase();
+  const upsert = db.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES ('usage_stats_snapshot', ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `);
+  const persist = db.transaction(() => {
+    db.exec("DELETE FROM request_logs");
+    upsert.run(JSON.stringify(snapshot), Date.now());
+  });
+  persist();
+}
+
+
 // ============================================================================
-// Helpers & Auto-Migration
+// Helpers
 // ============================================================================
 
 function mapRequestRow(r: any): RequestLogRow {
@@ -437,74 +568,4 @@ function safeParseJson<T>(raw: string, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-function autoMigrateJson(db: any): void {
-  const dir = resolveDbDir();
-
-  // 1. Migrate custom_providers.json
-  try {
-    const provCount = db.prepare("SELECT COUNT(*) as count FROM custom_providers").get()?.count || 0;
-    if (provCount === 0) {
-      const provJsonFile = path.join(dir, "custom_providers.json");
-      if (fs.existsSync(provJsonFile)) {
-        const raw = fs.readFileSync(provJsonFile, "utf8");
-        const list = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          const stmt = db.prepare(`
-            INSERT OR IGNORE INTO custom_providers (id, name, base_url, api_key, protocol, models, enabled, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-          `);
-          for (const p of list) {
-            stmt.run(
-              p.id,
-              p.name,
-              p.baseUrl,
-              p.apiKey,
-              p.protocol || "openai",
-              JSON.stringify(p.models || []),
-              p.enabled !== false ? 1 : 0,
-              p.createdAt || Date.now()
-            );
-          }
-        }
-      }
-    }
-  } catch {}
-
-  // 2. Migrate usage_stats.json recent logs
-  try {
-    const reqCount = db.prepare("SELECT COUNT(*) as count FROM request_logs").get()?.count || 0;
-    if (reqCount === 0) {
-      const usageJsonFile = path.join(dir, "usage_stats.json");
-      if (fs.existsSync(usageJsonFile)) {
-        const raw = fs.readFileSync(usageJsonFile, "utf8");
-        const stats = JSON.parse(raw);
-        if (Array.isArray(stats?.recentLogs)) {
-          const stmt = db.prepare(`
-            INSERT OR IGNORE INTO request_logs (
-              id, timestamp, protocol, model, provider, status,
-              latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-          `);
-          for (const l of stats.recentLogs) {
-            stmt.run(
-              l.id,
-              l.timestamp,
-              l.protocol || "openai",
-              l.model || "unknown",
-              l.provider || "opencode",
-              l.status || 200,
-              l.latencyMs || 0,
-              l.promptTokens || 0,
-              l.completionTokens || 0,
-              l.totalTokens || 0,
-              l.savedTokens || 0,
-              l.stream ? 1 : 0
-            );
-          }
-        }
-      }
-    }
-  } catch {}
 }
