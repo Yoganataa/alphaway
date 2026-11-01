@@ -163,7 +163,7 @@ describe("legacy JSON import", () => {
     expect(skipped[0].details).toContain("Invalid JSON");
 
     const unchanged = importLegacyJson(db, stateDir, []);
-    expect(unchanged[0].status).toBe("already-imported");
+    expect(unchanged[0].status).toBe("already-skipped");
 
     // An operator may repair the source file and retry without manually
     // deleting its ledger row. The changed checksum permits a retry.
