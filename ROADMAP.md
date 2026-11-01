@@ -170,7 +170,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; PR #4 is draft. CI has passed on earlier branch heads; latest-head CI and final security review remain pending.  
+**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; PR #4 is draft. CI passed on the latest functional code/installer head (`2178342…`, run `41339302362`); a docs-only checkpoint/roadmap update followed, so the newest branch SHA must be confirmed by a routine rerun. Final security review remains pending.  
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -202,13 +202,13 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
 - GitHub Actions run `41338584108` passed on Bun 1.4.4 for commit `b6980cec177f22f0f16306b1b4f63059a23595bc`: **311 passed, 0 failed** across 31 test files; the 17-cipher/12-extension transport fingerprint, standalone build, installer/embedded-dashboard smoke, and browser E2E jobs passed. The optional live upstream drill was skipped as designed.
-- Run `41338441043` also passed on commit `2eb3d54d95e79ca30244dbd01a2575908563821b`, including direct AES-GCM tests (310 passed, 0 failed). The login throttle test passed in run `41338584108`. The latest head additionally includes API-key control-character validation and installer-upgrade master-key preservation; run `41339060686` must pass before those newest changes are considered CI-verified.
+- Run `41338441043` also passed on commit `2eb3d54d95e79ca30244dbd01a2575908563821b`, including direct AES-GCM tests (310 passed, 0 failed). The login throttle test passed in run `41338584108`. The latest successful run includes API-key control-character validation, bounded login throttling, and installer-upgrade master-key preservation. All functional code and installer changes through commit `2178342…` were covered by run `41339302362`.
 - Do not begin Phase 3 until Phase 2 CI, security review, and merge acceptance criteria are satisfied.
 
 **Acceptance criteria**
 
-- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; CI passed on prior branch heads; latest-head rerun pending).
-- The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; CI passed on prior branch heads; latest-head rerun pending).
+- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; latest functional code/installer CI passed in run `41339302362`; documentation-only checkpoint updates followed).
+- The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; latest functional code/installer CI passed in run `41339302362`; documentation-only checkpoint updates followed).
 - Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; CI passed on prior branch heads; latest-head rerun pending).
 - Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter tests committed; CI passed on prior branch heads; latest-head rerun pending).
 ### Phase 3 — Plans, Limits, and Request Enforcement
