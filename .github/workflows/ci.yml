@@ -72,7 +72,7 @@ jobs:
 
       - name: Verify upgrade preserves configuration and SQLite state
         run: |
-          printf 'API_KEY=upgrade-preserved-key\\n' > "$ALPHAWAY_INSTALL_ROOT/.env"
+          printf '%s\n' 'API_KEY=upgrade-preserved-key' > "$ALPHAWAY_INSTALL_ROOT/.env"
           ALPHAWAY_DB_PATH="$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite" bun -e '
             import { Database } from "bun:sqlite";
             const db = new Database(process.env.ALPHAWAY_DB_PATH);
