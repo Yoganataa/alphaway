@@ -28,7 +28,7 @@ export const customProvidersRoute = new Hono();
 function redactUpstreamError(value: string, secrets: string[]): string {
   let sanitized = String(value || "").slice(0, 300);
   for (const secret of secrets) {
-    if (secret && secret.length >= 8) sanitized = sanitized.replaceAll(secret, "[REDACTED]");
+    if (secret) sanitized = sanitized.replaceAll(secret, "[REDACTED]");
   }
   return sanitized;
 }
@@ -129,7 +129,11 @@ customProvidersRoute.post("/api/custom-providers/test", async (c) => {
 
       if (!res.ok) {
         const text = await res.text();
-        return c.json({ ok: false, status: res.status, error: redactUpstreamError(text, [cleanKey, rawKey]) });
+        return c.json({
+          ok: false,
+          status: res.status,
+          error: redactUpstreamError(text, [cleanKey, rawKey, ...embeddedProviderUrlSecrets(cleanUrl)]),
+        });
       }
       return c.json({ ok: true, status: res.status, message: "OpenAI endpoint reachable!" });
     }
