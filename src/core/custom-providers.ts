@@ -119,6 +119,13 @@ export function findCustomProviderForModel(modelName: string): {
  * Dispatches an OpenAI Chat Completion request to a 3rd party custom provider.
  * Supports both OpenAI and Anthropic upstream wire protocols.
  */
+function appendProviderEndpoint(baseUrl: string, endpoint: string): string {
+  const url = new URL(baseUrl);
+  const suffix = `/${endpoint.replace(/^\\/+/, "")}`;
+  const currentPath = url.pathname.replace(/\\/+$/, "");
+  if (!currentPath.endsWith(suffix)) url.pathname = `${currentPath}${suffix}`;
+  return url.toString();
+}
 export async function forwardToCustomProvider(
   provider: CustomProvider,
   actualModel: string,
@@ -133,9 +140,7 @@ export async function forwardToCustomProvider(
 
   if (isAnthropic) {
     // Anthropic Upstream
-    const anthropicUrl = provider.baseUrl.endsWith("/messages")
-      ? provider.baseUrl
-      : `${provider.baseUrl}/messages`;
+    const anthropicUrl = appendProviderEndpoint(provider.baseUrl, "messages");
 
     const anthropicPayload = openAIToAnthropicRequest({
       model: actualModel,
@@ -156,9 +161,7 @@ export async function forwardToCustomProvider(
     });
   } else {
     // OpenAI Upstream
-    const openAiUrl = provider.baseUrl.endsWith("/chat/completions")
-      ? provider.baseUrl
-      : `${provider.baseUrl}/chat/completions`;
+    const openAiUrl = appendProviderEndpoint(provider.baseUrl, "chat/completions");
 
     const openAiPayload = {
       model: actualModel,
