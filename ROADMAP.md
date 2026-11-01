@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `9805d2335293539424fd66af3c047b493edad630`  
-> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 implementation for all existing persistence-backed features is complete and passed GitHub Actions run `41327665505` on Bun 1.4.4. Draft PR #3 is ready for review; Plans and Persona/Jailbreak configuration are deferred to the phases that implement those domain features.
+> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 implementation for all existing persistence-backed features is complete and passed GitHub Actions run `41327959473` on the current PR head (`be5019f`). Draft PR #3 is ready for review; Plans and Persona/Jailbreak configuration are deferred to the phases that implement those domain features.
 
 ## 1. Product Direction
 
