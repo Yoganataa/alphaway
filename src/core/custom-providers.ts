@@ -5,9 +5,6 @@
  * Anthropic, Ollama, vLLM, etc.) supporting both OpenAI and Anthropic formats.
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
 import { openAIToAnthropicRequest } from "./protocol-translator";
 import {
   dbLoadCustomProviders,
@@ -26,66 +23,13 @@ export interface CustomProvider {
   createdAt?: number;
 }
 
-function resolveConfigDir(): string {
-  const dir = process.env.ALPHAWAY_STATE_DIR || process.env.ALPHAWAY_HOME || path.join(os.homedir(), ".alphaway");
-  const legacyDir = path.join(os.homedir(), ".opencode-free-bridge");
-  if (!fs.existsSync(dir) && fs.existsSync(legacyDir)) {
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-      const legacyProviders = path.join(legacyDir, "custom_providers.json");
-      const targetProviders = path.join(dir, "custom_providers.json");
-      if (fs.existsSync(legacyProviders) && !fs.existsSync(targetProviders)) {
-        fs.copyFileSync(legacyProviders, targetProviders);
-      }
-    } catch {}
-  }
-  return dir;
-}
-
-const CONFIG_DIR = resolveConfigDir();
-const PROVIDERS_FILE = path.join(CONFIG_DIR, "custom_providers.json");
-
-function ensureConfigDir(): void {
-  try {
-    if (!fs.existsSync(CONFIG_DIR)) {
-      fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    }
-  } catch {}
-}
-
 export function loadCustomProviders(): CustomProvider[] {
-  try {
-    return dbLoadCustomProviders();
-  } catch {
-    ensureConfigDir();
-    if (!fs.existsSync(PROVIDERS_FILE)) {
-      return [];
-    }
-    try {
-      const raw = fs.readFileSync(PROVIDERS_FILE, "utf8");
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
+  return dbLoadCustomProviders();
 }
 
 export function saveCustomProviders(providers: CustomProvider[]): void {
-  try {
-    for (const p of providers) {
-      dbSaveCustomProvider(p);
-    }
-  } catch (err) {
-    console.error("[AlphaWay] Failed to save custom providers to SQLite:", err);
-  }
-
-  // Also persist JSON mirror for zero-loss file inspection
-  ensureConfigDir();
-  try {
-    fs.writeFileSync(PROVIDERS_FILE, JSON.stringify(providers, null, 2), "utf8");
-  } catch (err) {
-    console.error("[AlphaWay] Failed to save custom providers JSON mirror:", err);
+  for (const provider of providers) {
+    dbSaveCustomProvider(provider);
   }
 }
 
@@ -130,28 +74,7 @@ export function addOrUpdateCustomProvider(provider: Partial<CustomProvider> & { 
 }
 
 export function deleteCustomProvider(id: string): boolean {
-  let deletedFromDb = false;
-  try {
-    deletedFromDb = dbDeleteCustomProvider(id);
-  } catch {}
-
-  // Also update JSON mirror
-  ensureConfigDir();
-  let deletedFromJson = false;
-  if (fs.existsSync(PROVIDERS_FILE)) {
-    try {
-      const raw = fs.readFileSync(PROVIDERS_FILE, "utf8");
-      const list = JSON.parse(raw);
-      if (Array.isArray(list)) {
-        const filtered = list.filter((p: any) => p.id !== id);
-        if (filtered.length !== list.length) {
-          deletedFromJson = true;
-          fs.writeFileSync(PROVIDERS_FILE, JSON.stringify(filtered, null, 2), "utf8");
-        }
-      }
-    } catch {}
-  }
-  return deletedFromDb || deletedFromJson;
+  return dbDeleteCustomProvider(id);
 }
 
 /**
