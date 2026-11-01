@@ -190,6 +190,14 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(mainText).toContain("Socratic");
 
     const editor = page.locator("#soul-editor");
+    await editor.waitFor({ state: "visible" });
+    // Soul configuration is loaded asynchronously after the view mounts.
+    // Wait for the API-backed editor value rather than racing the initial
+    // render; the non-empty assertion below remains mandatory.
+    await page.waitForFunction(() => {
+      const element = document.querySelector<HTMLTextAreaElement>("#soul-editor");
+      return Boolean(element && element.value.trim().length > 0);
+    });
     expect(await editor.isVisible()).toBe(true);
     const content = await editor.inputValue();
     expect(content.length).toBeGreaterThan(0);
