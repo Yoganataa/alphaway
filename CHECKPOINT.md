@@ -5,21 +5,21 @@
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `chore/phase-0-ci-distribution`  
-> **Branch HEAD before this checkpoint update:** `466f526e77322e9cc40c72e40522c2d1beaeaaaa`  
+> **Last implementation HEAD before this checkpoint update:** `4e216e01509a9301e41135bbb8bbf364edea2215`  
 > **Base main HEAD:** `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`  
-> **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`
+> **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
+> **PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
 
 ## 1. Current Status
 
-**Phase 0 is in progress.** A focused implementation branch exists; PR CI and runtime smoke verification are pending. No changes have been merged into `main`.
+**Phase 0 is complete on the implementation branch.** All required GitHub Actions jobs passed in run `41320438608`. PR #1 is open and has not been merged into `main`.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
 - [x] Target product direction and dashboard information architecture agreed.
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
-- [x] Phase 0 planning/audit and initial implementation block (CI/build/dashboard/updater/installer/docs).  
-- [ ] Phase 0 acceptance verification (PR CI, clean build, installer, and embedded-dashboard smoke tests).
+- [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [ ] Phase 1 — Database Migrations and Canonical Persistence.
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
@@ -28,7 +28,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Implementation branch changes are limited to Phase 0. Source files, build configuration, installer, tests, README, and AGENTS have been updated; no application feature work for later phases has started. This environment has no Bun runtime and cannot clone the repository over its network, so application tests/build/installer were not run locally. The latest baseline `main` GitHub Actions run `41317617602` failed: the Bun test step used `.test.js` paths while the repository contains `.test.ts`, and Node compatibility jobs called the absent `test:node` script. The new PR CI is the authoritative verification path. Do not interpret source changes as proof that build/tests currently pass.
+Implementation branch changes are limited to Phase 0; no application feature work for later phases has started. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so all verification below comes from GitHub Actions. Baseline `main` run `41317617602` had failed on stale `.test.js` paths and the absent `test:node` script. The final current-branch run `41320438608` completed successfully: 270 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed, and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
 
 ## 2. Agreed Product Direction
 
@@ -133,61 +133,73 @@ Do not rely only on this summary. Fetch the current files from GitHub before edi
 
 Also inspect the current `9router-go` frontend and pin the exact upstream commit when beginning Phase 6.
 
-## 5. Phase 0 Implementation Progress
+## 5. Phase 0 — Complete
 
-### Changes on `chore/phase-0-ci-distribution`
+### Implementation summary
 
-- Reworked `.github/workflows/ci.yml`: Bun 1.4.3 pin; corrected TypeScript unit test path; separate unit, build, installer/embedded-dashboard smoke, and Playwright E2E jobs; live upstream drill is a manual workflow dispatch; removed obsolete Node compatibility matrix.
-- Updated `package.json`: Bun engine floor `>=1.4.3`; separate unit/E2E scripts; standalone build embeds `dist/`; host build emits `alphaway`; Windows x64 has an explicit cross-target.
-- Updated `vite.config.ts` and `src/routes/dashboard.ts` to use a deterministic module-relative dashboard asset directory. Removed ambiguous root-dist/web-dist fallback and added safe asset path resolution/MIME handling.
-- Removed the incompatible legacy updater calls from `src/index.ts`; replaced `src/core/updater.ts` with a no-network/no-write compatibility shim requiring complete installer updates.
-- Replaced the obsolete root-level JavaScript installer with a staged installer for the current TypeScript source archive. It performs frozen dependency install, TLS fingerprint validation, dashboard/binary build, pre-swap validation, persistent state/config separation, and systemd/launchd/background registration.
-- Replaced obsolete installer test assumptions in `test/install-migration.test.ts` and added `test/updater.test.ts`.
-- Updated `README.md`, `AGENTS.md`, `.env.example`, `ROADMAP.md`, and this checkpoint for the current Bun build, installer, supported runtime, and test commands.
+- Repaired `.github/workflows/ci.yml` for the current Bun + TypeScript project. CI has separate unit/protocol, build, installer/embedded-dashboard smoke, and Playwright E2E jobs. The live upstream gate drill is manual only.
+- Set Bun support floor and CI runtime to 1.4.3, with the matching OpenCode TLS fingerprint check.
+- Made the dashboard build output deterministic, embedded `dist/` into the standalone executable, and made Hono serve the embedded assets from the standalone module root.
+- Removed the legacy root-level JavaScript self-updater and replaced it with a safe manual-install-required compatibility shim.
+- Replaced `install.sh` with a staged install/upgrade flow for the current Bun + TypeScript source tree. Configuration and SQLite state remain outside the replaceable app directory.
+- Added regression coverage for installer/distribution behavior and updater behavior.
+- Stabilized the Playwright harness to launch the Chromium browser installed by CI directly, use bounded health probes, and clean up the server on launch failure.
+- Updated README, AGENTS, `.env.example`, ROADMAP, and this checkpoint.
 
-### Verification state
+### Final verification evidence
 
-| Check | State |
+GitHub Actions [run `41320438608`](https://github.com/Yoganataa/alphaway/actions/runs/41320438608), branch HEAD `4e216e01509a9301e41135bbb8bbf364edea2215`:
+
+| Job / check | Result |
 |---|---|
-| Baseline `main` workflow run `41317617602` | Confirmed failed on stale test paths and missing `test:node` script |
-| Current branch unit/integration tests | Pending PR CI |
-| Current branch fingerprint check | Pending PR CI |
-| Dashboard and standalone binary build | Pending PR CI |
-| Installer Bash syntax and isolated install | Pending PR CI |
-| Compiled binary `/health`, `/`, and embedded JS asset | Pending PR CI |
-| Playwright dashboard E2E | Pending PR CI |
-| Local execution in this environment | Not available: Bun is not installed and repository clone/network access is unavailable |
+| Unit and protocol tests | **270 passed, 0 failed**, 25 files |
+| OpenCode transport fingerprint | Bun 1.4.3 matched baseline: 17 ciphers, 12 extensions |
+| UI and standalone binary build | Passed |
+| Installer and embedded dashboard smoke | Passed |
+| Fresh install | Passed |
+| Upgrade preservation | Passed; `.env` value and SQLite marker row retained |
+| Background startup | Passed; health endpoint responded |
+| Embedded dashboard | Passed after physical `app/dist/` directory was moved away; `/health`, `/`, and generated JS asset all responded |
+| Dashboard browser E2E | **8 passed, 0 failed** |
+| Live upstream gate drill | Skipped intentionally; manual-only workflow |
 
-No claim is made that the current branch passes. The workflow was authored to verify the built executable and installed artifact rather than relying only on static checks.
+The workflow verifies Linux x86_64 only. macOS launchd service registration and Windows x64 executable runtime are not yet covered and must not be described as validated.
 
-### Files changed on the branch
+### Changed files
 
 ```text
-.github/workflows/ci.yml
 .env.example
+.github/workflows/ci.yml
 AGENTS.md
+CHECKPOINT.md
 README.md
+ROADMAP.md
 install.sh
 package.json
 vite.config.ts
 src/index.ts
 src/core/updater.ts
 src/routes/dashboard.ts
+test/e2e/dashboard.test.ts
+test/e2e/harness.ts
 test/install-migration.test.ts
 test/updater.test.ts
-ROADMAP.md
-CHECKPOINT.md
+test/verify-quick.test.ts
 ```
 
-### Next action
+### Current GitHub state
 
-1. Open/review the PR from `chore/phase-0-ci-distribution` to `main`.
-2. Inspect its Actions run. Fix all failures; do not mark Phase 0 complete while any required job is failing or unexpectedly skipped.
-3. Pay particular attention to standalone embedded-asset resolution, install-smoke startup, and installer behavior.
-4. Once CI passes, perform a real upgrade test against a disposable state directory and a clean installation test; record exact command output here.
-5. Move to Phase 1 only after Phase 0 acceptance criteria are met.
+- Branch: `chore/phase-0-ci-distribution`
+- PR: [#1 — Stabilize CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
+- PR state: open, mergeable, no merge performed.
+- Base: `main` at `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`.
+- Branch is ahead of main. Review the complete PR diff before merging.
 
-## 7. Working Rules for the Next Session
+### Next phase
+
+Phase 0 acceptance criteria are met for the tested Linux x86_64 path. After reviewing/merging PR #1, proceed to **Phase 1 — Database Migrations and Canonical Persistence** in ROADMAP.md. Do not start Plans or Persona implementation before the database migration foundation is designed and tested.
+
+## 6. Working Rules for the Next Session
 
 - Read `CHECKPOINT.md` first, then `ROADMAP.md`, then inspect the current GitHub state.
 - The live repository/PR state takes precedence over this checkpoint if newer commits exist. Reconcile differences instead of blindly following stale notes.
@@ -215,7 +227,7 @@ Target produk yang sudah diputuskan:
 - Tambahkan Plans serta Persona/Jailbreak.
 - Ikuti struktur TypeScript idiomatis; jangan membuat struktur ala Go secara menyeluruh.
 
-Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 — Repository Baseline, CI, and Distribution Integrity sedang dikerjakan di branch `chore/phase-0-ci-distribution`. Mulai dengan memeriksa PR dan CI terbaru; jangan mengulang perubahan yang sudah dibuat. Kerjakan bertahap, gunakan branch/PR, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
+Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 sudah selesai dan PR #1 masih terbuka. Setelah memeriksa status PR terbaru, lanjut ke Phase 1 — Database Migrations and Canonical Persistence sesuai ROADMAP.md. Kerjakan bertahap, gunakan branch/PR, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
 ```
 
 ---
