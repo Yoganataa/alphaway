@@ -79,7 +79,7 @@ describe("current AlphaWay installer and distribution contract", () => {
 
     expect(vite).toContain("ALPHAWAY_DASHBOARD_DIR");
     expect(dashboard).toContain("ALPHAWAY_DASHBOARD_DIR");
-    expect(dashboard).toContain('path.resolve(import.meta.dir, "../../dist")');
+    expect(dashboard).toContain('path.resolve(import.meta.dir, isStandalone ? "dist" : "../../dist")');
     expect(dashboard).not.toContain("LEGACY_DIST");
     expect(pkg.scripts["build:bin"]).toContain("--asset ./dist");
     expect(pkg.scripts.build).toContain("build:ui");
