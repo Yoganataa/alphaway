@@ -43,10 +43,10 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 
 - PR #4 is the only open PR, targets `main`, and remains **draft**. No review submissions or inline review threads were present at the last check.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- Latest CI-verified checkpoint head: `6a0bbf0b2c2958e41342e903eca64f46ca542890`. Re-fetch actual live feature-branch HEAD before making changes; a final documentation-only commit may follow this checkpoint.
-- GitHub Actions run `41340495437` passed on Bun 1.4.4 for this exact head: **314 unit/protocol tests passed, 0 failed** across 31 files; transport fingerprint passed (17 ciphers/12 extensions), standalone binary build passed, installer/embedded-dashboard smoke passed including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged, and dashboard E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
+- Latest CI-verified Phase 2 branch head: `7cb72121d7fd4b9467cf6c93294afa70079fa9ea`.
+- GitHub Actions run `41340700836` passed on Bun 1.4.4 for that exact head: **314 unit/protocol tests passed, 0 failed** across 31 files; transport fingerprint passed (17 ciphers/12 extensions), standalone binary build passed, installer/embedded-dashboard smoke passed including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged, and dashboard E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
 - This run includes custom-provider chat error redaction, legacy JSON symlink refusal, and POSIX owner-only mode assertions for retained JSON rollback backups.
-- The earlier installer-smoke failures were caused by reading a `GITHUB_ENV` value in the same shell step. The check now uses a local `key_digest_before` variable; runs `41339302362`, `41339526068`, `41339693714`, `41340243880`, and `41340495437` all passed the corrected smoke test.
+- The earlier installer-smoke failures were caused by reading a `GITHUB_ENV` value inside the same shell step. The check now uses a local `key_digest_before` variable; runs `41339302362`, `41339526068`, `41339693714`, `41340243880`, `41340495437`, and `41340700836` all passed the corrected smoke test.
 - Reviews and inline review threads were empty at the last check. PR #4 remains draft; re-check mergeability/ahead-behind against live `main` when resuming.
 ### Remaining Phase 2 gaps / boundaries
 
