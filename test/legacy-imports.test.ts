@@ -109,6 +109,13 @@ describe("legacy JSON import", () => {
     expect(first).toHaveLength(5);
     expect(first.every((report) => report.status === "imported")).toBe(true);
 
+    const proxyImport = first.find((report) => report.sourceKey === `proxy:${path.resolve(stateDir!, "proxy.json")}`);
+    expect(proxyImport).toEqual({
+      sourceKey: `proxy:${path.resolve(stateDir, "proxy.json")}`,
+      status: "imported",
+      rowCount: 1,
+    });
+
     const provider = db.prepare(
       "SELECT id, api_key, models FROM custom_providers WHERE id = ?"
     ).get("legacy-deepseek") as { id: string; api_key: string; models: string };
