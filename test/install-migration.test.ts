@@ -39,7 +39,7 @@ describe("current AlphaWay installer and distribution contract", () => {
     expect(installer).toContain("run fingerprint:check");
     expect(installer).toContain("run build");
     expect(installer).toContain("./alphaway --version");
-    expect(installer).toContain('MIN_BUN_VERSION="1.4.3"');
+    expect(installer).toContain('MIN_BUN_VERSION="1.4.4"');
   });
 
   it("supports install-only smoke tests without starting a service", () => {
