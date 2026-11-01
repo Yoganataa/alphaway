@@ -3,6 +3,7 @@ import { app } from "../src/app";
 import { adminHeaders, adminRequest } from "./helpers/admin";
 import { issueAPIKey } from "../src/core/api-keys";
 import { getDatabase } from "../src/core/database";
+import { loginAdmin } from "../src/core/admin-auth";
 
 describe("administrator authentication and managed gateway API keys", () => {
   beforeEach(() => {
@@ -44,6 +45,17 @@ describe("administrator authentication and managed gateway API keys", () => {
 
     const bootstrapTokenResponse = await app.request("/api/admin/auth/status", { headers: { Host: "localhost" } });
     expect(JSON.stringify(await bootstrapTokenResponse.json())).not.toContain("bootstrapToken");
+  });
+
+  it("bounds login input and throttles repeated invalid credentials", async () => {
+    expect(await loginAdmin("x".repeat(33), "wrong-password")).toEqual({ error: "invalid" });
+    expect(await loginAdmin("alphaway-throttle-check", "x".repeat(1025))).toEqual({ error: "invalid" });
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      expect(await loginAdmin("alphaway-throttle-check", "wrong-password")).toEqual({ error: "invalid" });
+    }
+    expect(await loginAdmin("alphaway-throttle-check", "wrong-password")).toEqual({ error: "rate_limited" });
+    expect(await loginAdmin("alphaway-throttle-check", "another-wrong-password")).toEqual({ error: "rate_limited" });
   });
 
   it("requires a gateway credential on every inference alias", async () => {
