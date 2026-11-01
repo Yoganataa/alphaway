@@ -6,6 +6,7 @@ const path = require("node:path");
 const http = require("node:http");
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ofb-proxy-test-"));
+const previousStateDir = process.env.OPENCODE_BRIDGE_STATE_DIR;
 process.env.OPENCODE_BRIDGE_STATE_DIR = tmpDir;
 delete process.env.UPSTREAM_PROXY_URL;
 
@@ -58,6 +59,7 @@ describe("egress proxy", () => {
   });
 
   after(() => {
+    closeDatabase();
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {}
@@ -221,6 +223,12 @@ describe("proxy HTTP surface", () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    closeDatabase();
+    if (previousStateDir === undefined) delete process.env.OPENCODE_BRIDGE_STATE_DIR;
+    else process.env.OPENCODE_BRIDGE_STATE_DIR = previousStateDir;
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
   });
 
   it("serves the panel at / and keeps /health as JSON", async () => {
