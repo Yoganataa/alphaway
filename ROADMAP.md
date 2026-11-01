@@ -142,7 +142,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 
-**Status:** In progress (branch is based on merged Phase 0 `main`; Phase 1 PR will be opened after its CI verification).  
+**Status:** In progress (based on merged Phase 0 `main`; draft PR #3 open; do not mark ready until all Phase 1 acceptance criteria and CI pass).  
 **Priority:** P1
 
 - [x] Introduce a versioned SQLite migration mechanism with ordered migrations, a `schema_migrations` ledger, registry validation, and transactional DDL/history writes.
@@ -151,7 +151,8 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [x] Convert legacy custom-provider, usage, TokenSaver, and proxy JSON files into one-time imports tracked by checksums and `legacy_imports`; retain source files as backups.
 - [x] Persist each usage request event and its aggregate snapshot atomically in one SQLite transaction.
 - [x] Add a pre-destructive-migration backup hook using SQLite `VACUUM INTO` and owner-only backup permissions.
-- [ ] Make SQLite canonical for API keys, DLP/security rules, Plans, Persona/Jailbreak configuration, and remaining settings.
+- [x] Retain API key configuration in SQLite `app_settings` (credential-verification and secret-at-rest hardening remain Phase 2 work).
+- [ ] Make SQLite canonical for custom DLP/security rules, Plans, Persona/Jailbreak configuration, and remaining settings.
 - [ ] Add an end-to-end file-backed backup and restore test, including interrupted upgrade/recovery behavior.
 - [ ] Review credential storage separately: caller API keys should be verifiable without storing raw secrets; upstream credentials that must be replayed need recoverable encryption and a documented key-management strategy.
 - [x] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
