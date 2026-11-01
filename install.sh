@@ -77,9 +77,9 @@ if ! BUN_BIN="$(find_bun)"; then
 fi
 
 BUN_VERSION="$("$BUN_BIN" --version)"
-if ! "$BUN_BIN" -e '
-  const [major, minor, patch] = process.argv[1].split(".").map(Number);
-  const [minMajor, minMinor, minPatch] = process.argv[2].split(".").map(Number);
+if ! ALPHAWAY_BUN_VERSION="$BUN_VERSION" ALPHAWAY_MIN_BUN_VERSION="$MIN_BUN_VERSION" "$BUN_BIN" -e '
+  const [major, minor, patch] = process.env.ALPHAWAY_BUN_VERSION.split(".").map(Number);
+  const [minMajor, minMinor, minPatch] = process.env.ALPHAWAY_MIN_BUN_VERSION.split(".").map(Number);
   const current = [major || 0, minor || 0, patch || 0];
   const minimum = [minMajor, minMinor, minPatch];
   let comparison = 0;
@@ -275,12 +275,11 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=$(id -un)
-WorkingDirectory=$APPDIR
-EnvironmentFile=-$BINDIR/.env
+WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
 Environment=ALPHAWAY_STATE_DIR=$BINDIR
-ExecStart=$APPDIR/alphaway
+ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
 
@@ -310,8 +309,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=$APPDIR
-EnvironmentFile=-$BINDIR/.env
+WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
 Environment=ALPHAWAY_STATE_DIR=$BINDIR
