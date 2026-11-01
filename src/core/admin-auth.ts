@@ -216,8 +216,9 @@ export async function loginAdmin(
   const valid = Boolean(row) && derived.length === expected.length && timingSafeEqual(derived, expected);
   if (!valid) {
     const previous = failedLogins.get(key);
-    const firstAt = previous?.firstAt && now - previous.firstAt <= 15 * 60 * 1000 ? previous.firstAt : now;
-    const count = (previous?.count || 0) + 1;
+    const withinWindow = Boolean(previous && now - previous.firstAt < LOGIN_WINDOW_MS);
+    const firstAt = withinWindow ? previous!.firstAt : now;
+    const count = withinWindow ? previous!.count + 1 : 1;
     rememberFailedLogin(key, {
       count,
       firstAt,
