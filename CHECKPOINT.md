@@ -4,15 +4,16 @@
 >
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active branch:** `chore/phase-0-ci-distribution`  
-> **Last implementation HEAD before this checkpoint update:** `e1d8fbbe2a8f0a360109e48f476d9745cdefda4a`  
+> **Active branch:** `feat/phase-1-sqlite-migrations-rebased`  
+> **Phase 1 base:** `chore/phase-0-ci-distribution` at `e47399a3bba8a2f7c86c07f44d0dfc6324ca89f3`  
+> **Phase 1 implementation HEAD before this checkpoint update:** `e25c69ecb81956b1cbdcdea88a19f9b791578fe8`  
 > **Base main HEAD:** `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
 > **PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
 
 ## 1. Current Status
 
-**Phase 0 is complete on the implementation branch.** All required GitHub Actions jobs passed on Bun 1.4.4 in run `41322403767`. PR #1 is open and has not been merged into `main`.
+**Phase 0 is complete; Phase 1 is in progress.** Phase 0 passed all required CI jobs on Bun 1.4.4 in run `41322998575`. PR #1 remains open and has not been merged into `main`. Phase 1 is isolated on `feat/phase-1-sqlite-migrations-rebased`, based on the latest Phase 0 commit.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
@@ -20,7 +21,8 @@
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
-- [ ] Phase 1 — Database Migrations and Canonical Persistence.
+- [x] Phase 1 implementation started: versioned SQLite migrations, initial schema adoption, canonical persistence for current JSON-backed features, and ledger-backed legacy import.
+- [ ] Phase 1 CI verification and credential-storage review.
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
@@ -28,7 +30,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Implementation branch changes are limited to Phase 0; no application feature work for later phases has started. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so all verification below comes from GitHub Actions. Baseline `main` run `41317617602` had failed on stale `.test.js` paths and the absent `test:node` script. The final current-branch run `41322403767` completed successfully with Bun 1.4.4: 270 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed (17 ciphers, 12 extensions), and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
+Phase 0 is complete; Phase 1 implementation has begun. Local execution is unavailable in this environment (Bun is not installed and a repository clone cannot be made), so all runtime verification must come from GitHub Actions. The latest Phase 0 branch run `41322998575` completed successfully with Bun 1.4.4: 270 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed (17 ciphers, 12 extensions), and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and embedded dashboard/JS serving. Phase 1 has not yet been run through CI; do not claim its tests or build pass until its PR workflow succeeds. Phase 0 verification remains Linux x86_64 only; macOS launchd and Windows binary runtime are not covered.
 
 ## 2. Agreed Product Direction
 
@@ -133,71 +135,76 @@ Do not rely only on this summary. Fetch the current files from GitHub before edi
 
 Also inspect the current `9router-go` frontend and pin the exact upstream commit when beginning Phase 6.
 
-## 5. Phase 0 — Complete
+## 5. Phase 1 — In Progress
 
-### Implementation summary
+### Phase 0 baseline
 
-- Repaired `.github/workflows/ci.yml` for the current Bun + TypeScript project. CI has separate unit/protocol, build, installer/embedded-dashboard smoke, and Playwright E2E jobs. The live upstream gate drill is manual only.
-- Set Bun support floor and CI runtime to 1.4.3, with the matching OpenCode TLS fingerprint check.
-- Made the dashboard build output deterministic, embedded `dist/` into the standalone executable, and made Hono serve the embedded assets from the standalone module root.
-- Removed the legacy root-level JavaScript self-updater and replaced it with a safe manual-install-required compatibility shim.
-- Replaced `install.sh` with a staged install/upgrade flow for the current Bun + TypeScript source tree. Configuration and SQLite state remain outside the replaceable app directory.
-- Added regression coverage for installer/distribution behavior and updater behavior.
-- Stabilized the Playwright harness to launch the Chromium browser installed by CI directly, use bounded health probes, and clean up the server on launch failure.
-- Updated README, AGENTS, `.env.example`, ROADMAP, and this checkpoint.
+Phase 0 remains complete on Bun 1.4.4. GitHub Actions [run `41322998575`](https://github.com/Yoganataa/alphaway/actions/runs/41322998575) on commit `e47399a3bba8a2f7c86c07f44d0dfc6324ca89f3` passed:
+- Unit/protocol tests: 270 passed, 0 failed.
+- Playwright E2E: 8 passed, 0 failed.
+- Build, installer/upgrade smoke, background startup, embedded dashboard and TLS fingerprint (17 ciphers, 12 extensions): passed.
+- Live upstream gate drill: intentionally skipped.
 
-### Final verification evidence
+PR #1 remains open: [Stabilize CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1).
 
-GitHub Actions [run `41322403767`](https://github.com/Yoganataa/alphaway/actions/runs/41322403767), branch HEAD `e1d8fbbe2a8f0a360109e48f476d9745cdefda4a`:
+### Phase 1 implementation
 
-| Job / check | Result |
+Active branch: `feat/phase-1-sqlite-migrations-rebased`, based on the latest Phase 0 branch HEAD `e47399a3bba8a2f7c86c07f44d0dfc6324ca89f3`.
+
+Implemented so far:
+- Added `src/core/migrations/` with ordered, contiguous migration registry and transactional migration history.
+- Added migration v1 to adopt the pre-existing schema without deleting existing provider, usage, or setting rows; added `legacy_imports` ledger.
+- Integrated migrations into database startup; migration failures abort initialization instead of silently running against a partial schema.
+- Added a destructive-migration guard. Such migrations require a preflight backup callback; production uses WAL checkpoint plus SQLite `VACUUM INTO` before applying them.
+- Added checksum-ledgered, transactional import for `custom_providers.json`, `usage_stats.json`, `tokensaver.json`, and `proxy.json`. Source JSON files are retained.
+- Made SQLite canonical for TokenSaver configuration, custom providers, proxy/pool configuration, usage events and usage aggregate snapshots.
+- Kept `pool-health.json` as runtime health cache only; it is not operator configuration.
+- Made usage request-log insertion and aggregate-snapshot update atomic in the same SQLite transaction.
+- Added guards/tests so stale JSON mirrors do not restore deleted provider data or merge stale recent usage logs into a newer canonical snapshot.
+- Updated the Playwright Soul Studio E2E test to wait for asynchronous editor content while preserving the non-empty assertion.
+
+### Verification status
+
+| Area | Status |
 |---|---|
-| Unit and protocol tests | **270 passed, 0 failed**, 25 files |
-| OpenCode transport fingerprint | Bun 1.4.4 matched baseline: 17 ciphers, 12 extensions |
-| UI and standalone binary build | Passed |
-| Installer and embedded dashboard smoke | Passed |
-| Fresh install | Passed |
-| Upgrade preservation | Passed; `.env` value and SQLite marker row retained |
-| Background startup | Passed; health endpoint responded |
-| Embedded dashboard | Passed after physical `app/dist/` directory was moved away; `/health`, `/`, and generated JS asset all responded |
-| Dashboard browser E2E | **8 passed, 0 failed** |
-| Live upstream gate drill | Skipped intentionally; manual-only workflow |
+| Phase 1 source implementation | Added on the branch |
+| Migration runner unit tests | Pending Phase 1 CI |
+| Legacy importer tests | Pending Phase 1 CI |
+| Proxy SQLite persistence tests | Pending Phase 1 CI |
+| Usage atomic persistence tests | Pending Phase 1 CI |
+| Full unit/protocol suite | Pending Phase 1 CI |
+| Build and Playwright E2E | Pending Phase 1 CI |
+| Bun 1.4.4 runtime/fingerprint | Verified in Phase 0; Phase 1 CI must repeat it |
 
-The workflow verifies Linux x86_64 only. macOS launchd service registration and Windows x64 executable runtime are not yet covered and must not be described as validated.
+No Phase 1 test/build pass is claimed. The environment running this session has no Bun executable, so CI is the authoritative test path.
 
-### Changed files
+### Changed implementation files
 
 ```text
-.env.example
-.github/workflows/ci.yml
-AGENTS.md
-CHECKPOINT.md
-README.md
-ROADMAP.md
-install.sh
-package.json
-vite.config.ts
-src/index.ts
-src/core/updater.ts
-src/routes/dashboard.ts
+src/core/migrations/types.ts
+src/core/migrations/001_initial_schema.ts
+src/core/migrations/index.ts
+src/core/legacy-imports.ts
+src/core/database.ts
+src/core/custom-providers.ts
+src/core/proxy.ts
+src/core/usage-tracker.ts
+src/features/tokensaver.ts
+test/migrations.test.ts
+test/legacy-imports.test.ts
+test/database.test.ts
+test/proxy.test.ts
+test/usage-analytics.test.ts
 test/e2e/dashboard.test.ts
-test/e2e/harness.ts
-test/install-migration.test.ts
-test/updater.test.ts
-test/verify-quick.test.ts
 ```
 
-### Current GitHub state
+### Remaining Phase 1 work
 
-- Branch: `chore/phase-0-ci-distribution`
-- PR: [#1 — Stabilize CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
-- PR state: open, mergeable, no merge performed.
-- Base: `main` at `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`.
-- Branch is ahead of main. Review the complete PR diff before merging.
-
-### Next phase
-
-Phase 0 acceptance criteria are met for the tested Linux x86_64 path. After reviewing/merging PR #1, proceed to **Phase 1 — Database Migrations and Canonical Persistence** in ROADMAP.md. Do not start Plans or Persona implementation before the database migration foundation is designed and tested.
+- Run and fix the full CI workflow on this branch.
+- Review the legacy import rules against representative existing AlphaWay state directories before merging.
+- Decide credential storage design separately: caller keys should not be stored as plaintext; upstream secrets require recoverable encryption and key-management policy.
+- Extend canonical persistence to Security, Plans and Persona only when their backend feature models are being implemented.
+- Update docs with final test results and open a stacked PR targeting `chore/phase-0-ci-distribution`; merge PR #1 first, then retarget Phase 1 PR to `main`.
 
 ## 6. Working Rules for the Next Session
 
@@ -227,7 +234,7 @@ Target produk yang sudah diputuskan:
 - Tambahkan Plans serta Persona/Jailbreak.
 - Ikuti struktur TypeScript idiomatis; jangan membuat struktur ala Go secara menyeluruh.
 
-Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 sudah selesai dan PR #1 masih terbuka. Setelah memeriksa status PR terbaru, lanjut ke Phase 1 — Database Migrations and Canonical Persistence sesuai ROADMAP.md. Kerjakan bertahap, gunakan branch/PR, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
+Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 sudah selesai pada Bun 1.4.4. Lanjutkan Phase 1 pada branch `feat/phase-1-sqlite-migrations-rebased`, periksa CI terbaru, perbaiki kegagalan, dan jangan klaim selesai sebelum migration/import/persistence teruji. Kerjakan bertahap, gunakan branch/PR, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
 ```
 
 ---
