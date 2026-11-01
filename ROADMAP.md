@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **Current state:** Planning and repository audit completed; implementation phases have not started.
+> **Current state:** Phase 0 implementation in progress on `chore/phase-0-ci-distribution`; CI and installer verification are pending.
 
 ## 1. Product Direction
 
@@ -105,19 +105,19 @@ The phases are sequential. A phase is not complete until its acceptance criteria
 
 ### Phase 0 — Repository Baseline, CI, and Distribution Integrity
 
-**Status:** Not started  
+**Status:** In progress  
 **Priority:** P0 — unblock all further work
 
-- [ ] Run a clean baseline install and inspect the actual test/build results.
-- [ ] Repair `.github/workflows/ci.yml`: current workflow refers to stale paths such as `test/*.test.js`, `gate-drill.js`, and `transport-fingerprint.js`; align it with the real TypeScript paths and package scripts.
-- [ ] Remove or correct the Node compatibility job. Node is not a supported live runtime and the referenced `test:node` script is absent from the current package manifest.
-- [ ] Define CI jobs for type/build checks, unit/integration tests, E2E browser tests, and the transport fingerprint check. Keep environment-dependent upstream probes out of ordinary deterministic CI.
-- [ ] Reconcile the Bun version requirement in `package.json` with the actual runtime APIs and fingerprint requirements. Do not claim `>=1.0.0` if the implementation requires a newer release.
-- [ ] Audit `build`, `build:ui`, `build:bin`, and `build:bin:win` as one coherent packaging contract. The current `build` script names an `.exe` output regardless of host OS.
-- [ ] Verify how the compiled binary serves dashboard assets. Do not call it a self-contained single binary unless the built artifact is tested without an external `dist/` directory.
-- [ ] Rewrite `install.sh` against the current repository/release layout. The current script references legacy root-level files such as `server.js` and other paths absent from the current `src/` tree.
-- [ ] Reconcile stale claims in `README.md` and `AGENTS.md`, especially test counts, CI commands, installer behavior, and architecture paths.
-- [ ] Record baseline commands, tool versions, pass/fail counts, and known environment limitations in `CHECKPOINT.md`.
+- [x] Inspect the latest baseline CI run on `main`; the Bun test step and Node compatibility job failed because their commands were stale. A local clean install/test/build was not available in this environment.
+- [x] Repair `.github/workflows/ci.yml`: use the actual TypeScript test paths and package scripts.
+- [x] Remove the Node compatibility job; Node is not a supported live runtime and the referenced `test:node` script does not exist.
+- [x] Define separate CI jobs for unit/integration tests, dashboard/binary build, installer/embedded-dashboard smoke tests, browser E2E tests, and the transport fingerprint check. Keep the live upstream drill manual.
+- [x] Set the supported Bun floor to `>=1.4.3` and pin CI to Bun 1.4.3 pending a verified fingerprint-compatible upgrade.
+- [x] Align `build`, `build:ui`, `build:bin`, and `build:bin:win`; the host build emits `alphaway` and the explicit Windows x64 target emits `alphaway.exe`.
+- [ ] Verify the compiled binary serves embedded dashboard assets without an external `dist/` directory. A CI install smoke test has been added; its result is still pending.
+- [x] Rewrite `install.sh` for the current TypeScript source archive, frozen dependency install, fingerprint validation, embedded-asset build, staged replacement, persistent state/config, and service registration. Runtime install/upgrade smoke verification is pending.
+- [x] Reconcile `README.md`, `AGENTS.md`, and `.env.example` with the current Bun build, installer, supported runtime, and test commands.
+- [x] Record the observed failing `main` CI run and disclose that local Bun/test/build/installer commands could not be executed in this environment.
 
 **Acceptance criteria**
 
