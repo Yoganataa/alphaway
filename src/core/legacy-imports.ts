@@ -237,9 +237,21 @@ function importSourceFile(
     };
   }
 
-  const stat = fs.statSync(filePath);
-  if (!stat.isFile()) {
-    return { sourceKey, status: "missing", rowCount: 0 };
+  const stat = fs.lstatSync(filePath);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    return {
+      sourceKey,
+      status: "skipped",
+      rowCount: 0,
+      details: "Only regular, non-symlink legacy JSON files can be imported.",
+    };
+  }
+
+  // These files remain as rollback copies after import. Restrict their
+  // permissions before reading so legacy credentials are not world-readable
+  // on POSIX systems. Their contents are intentionally left unchanged.
+  if (process.platform !== "win32") {
+    try { fs.chmodSync(filePath, 0o600); } catch {}
   }
 
   if (stat.size > MAX_LEGACY_JSON_BYTES) {
