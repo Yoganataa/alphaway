@@ -1,0 +1,49 @@
+/**
+ * Integration Test for Hono Application Engine
+ */
+
+import { describe, it, expect } from "bun:test";
+import { app } from "../src/app";
+
+describe("Hono application engine", () => {
+  it("answers /health with diagnostics and provider status", async () => {
+    const res = await app.request("/health");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.status).toBe("ok");
+    expect(json.framework).toBe("Hono.js");
+    expect(json.tls).toBe("BoringSSL Native Parity");
+    expect(json.providers.codebuddy).toBeDefined();
+    expect(json.providers.opencode).toBeDefined();
+  });
+
+  it("lists both OpenCode and CodeBuddy models on /v1/models", async () => {
+    const apiKey = process.env.API_KEY || "";
+    const headers: Record<string, string> = {};
+    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+    const res = await app.request("/v1/models", { headers });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.object).toBe("list");
+    const ids = json.data.map((m: any) => m.id);
+    expect(ids).toContain("mimo-v2.6-flash-free");
+    expect(ids).toContain("deepseek-v4.1-flash");
+    expect(ids).toContain("glm-5.2");
+  });
+
+  it("returns tokensaver config on /api/tokensaver", async () => {
+    const res = await app.request("/api/tokensaver");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(typeof json.rtkEnabled).toBe("boolean");
+    expect(typeof json.rtkMaxLines).toBe("number");
+  });
+
+  it("serves the Svelte dashboard on /", async () => {
+    const res = await app.request("/");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("<!doctype html>");
+  });
+});

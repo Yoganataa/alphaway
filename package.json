@@ -1,0 +1,79 @@
+{
+  "name": "alphaway",
+  "version": "0.0.1",
+  "description": "AlphaWay: High-Performance Universal AI Gateway & Security Router (OpenAI, Anthropic Claude, Codex Responses) with Multi-Provider Routing, TokenSaver DLP Defense, and Real-Time Analytics",
+  "main": "src/index.ts",
+  "bin": {
+    "alphaway": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "dev:client": "vite dev",
+    "build:ui": "vite build",
+    "build:bin": "bun build --compile --minify ./src/index.ts --outfile alphaway",
+    "build:bin:win": "bun build --compile --minify ./src/index.ts --outfile alphaway.exe",
+    "build": "vite build && bun build --compile --minify ./src/index.ts --outfile alphaway.exe",
+    "tunnel": "bun src/index.ts --tunnel",
+    "test": "bun test test/",
+    "test:e2e": "bun test test/e2e/",
+    "login:codebuddy": "bun src/providers/codebuddy.ts --login",
+    "login:cb": "bun src/providers/codebuddy.ts --login",
+    "drill": "bun src/cli/gate-drill.ts",
+    "verify": "bun src/cli/verify.ts",
+    "verify:quick": "bun src/cli/verify.ts --quick",
+    "fingerprint": "bun src/core/transport-fingerprint.ts",
+    "fingerprint:check": "bun src/core/transport-fingerprint.ts --check"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "src",
+    "dist",
+    "scripts",
+    "README.md",
+    "AGENTS.md",
+    "install.sh",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "keywords": [
+    "alphaway",
+    "ai-gateway",
+    "openai",
+    "anthropic",
+    "claude",
+    "codex",
+    "tokensaver",
+    "soul-engine",
+    "llm-proxy",
+    "cursor",
+    "continue",
+    "vscode"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Yoganataa/alphaway.git"
+  },
+  "homepage": "https://github.com/Yoganataa/alphaway#readme",
+  "bugs": {
+    "url": "https://github.com/Yoganataa/alphaway/issues"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "hono": "^4.13.14",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.5.1",
+    "svelte": "^5.57.0",
+    "svelte-check": "^4.7.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}
