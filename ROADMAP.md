@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-02  
 > **Planning baseline:** `main` at `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final Phase 1 PR-head CI run `41328813739` passed on Bun 1.4.4. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4. Latest branch head `01b5b86df9b0674d7f6c376d58397724975a1142` passed GitHub Actions run `41339526068` on Bun 1.4.4: 312 unit/protocol tests, 8 dashboard browser E2E tests, transport fingerprint, standalone binary build, and installer/embedded-dashboard smoke all passed. The installer smoke verifies the encryption master-key file survives upgrade unchanged. The optional live upstream gate drill was skipped by design. The optional live upstream gate drill remains skipped by design.
+> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; CI run `41328813739` passed on Bun 1.4.4. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4. Latest branch head `aa9fd1bc81231996964a8fcbc4b095b0bbf58522` passed run `41340243880`: 314 unit/protocol tests and 8 browser E2E tests passed; transport fingerprint, standalone build, and installer smoke also passed, including encryption master-key preservation. The optional live upstream gate drill was skipped by design.
 
 ## 1. Product Direction
 
@@ -170,7 +170,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; PR #4 is draft. Latest branch head `01b5b86df9b0674d7f6c376d58397724975a1142` passed CI run `41339526068` on Bun 1.4.4. Final secret-flow audit and security review remain pending.  
+**Status:** Implementation in progress on `feat/phase-2-auth-admin-security`; PR #4 is draft. Latest branch head `aa9fd1bc81231996964a8fcbc4b095b0bbf58522` passed CI run `41340243880` on Bun 1.4.4. The retained legacy JSON backup strategy and full security review remain open.  
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -181,7 +181,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [x] Replace predictable `Math.random()` API key generation with CSPRNG keys and UUID identifiers.
 - [x] Add per-key metadata, lifecycle state, inference scope, and usage counters without coupling gateway keys to administrator sessions. Plan assignment is intentionally a Phase 3 task and will be implemented with the Plan model and enforcement rules.
 - [x] Add negative tests for missing, invalid, revoked, wrong-scope, and unauthenticated admin credentials.
-- [ ] Finish the full secret-flow audit across logs, analytics, backup/export surfaces, and platform-specific storage permissions. Current coverage includes hashed API keys, encrypted provider/proxy/relay/CodeBuddy OAuth credentials, CodeBuddy/custom-provider upstream error redaction, and one-time bootstrap/session tests.
+- [ ] Finish the full secret-flow audit across logs, diagnostics, analytics, backup/export, and platform-specific storage permissions. SQLite credentials are encrypted/hashed and provider error responses are redacted. Legacy JSON source backups are intentionally retained in plaintext for rollback; the importer rejects symlinks and applies POSIX mode `0600`, but decide whether to encrypt, relocate, or remove these backups after a verified rollback window. Windows ACL behavior remains unverified.
 - [x] Encrypt custom-provider credentials at the SQLite adapter boundary, proxy/relay credentials in the egress store, legacy JSON imports, and CodeBuddy OAuth credentials.
 - [x] Separate AlphaWay gateway bearer credentials from CodeBuddy upstream credentials; use server-side CodeBuddy configuration or the explicit `x-codebuddy-api-key` override.
 - [x] Keep the CodeBuddy OAuth access/refresh token out of HTTP responses and persist the upstream access token encrypted in SQLite.
@@ -190,6 +190,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [x] Bound administrator login username/password lengths and failed-login tracking memory; add regression coverage for lockout and API-key label control characters.
 - [x] Make `/health` recognize an encrypted CodeBuddy OAuth credential in SQLite without exposing the token.
 - [x] Add direct AES-GCM tests for nonce uniqueness, authenticated decryption/tamper rejection, symlink refusal, and POSIX owner-only key-file permissions.
+- [x] Refuse symlinked legacy JSON sources and restrict retained rollback-source files to POSIX mode `0600` before reading; backup contents remain plaintext for backward-compatible rollback.
 
 **Implementation notes**
 
@@ -201,15 +202,16 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- GitHub Actions run `41339693714` passed on Bun 1.4.4 for PR head `ca122b584886511a5d9d2ef4df39b04db43a6ee2`: **312 passed, 0 failed** across 31 unit/protocol test files; transport fingerprint passed (17 ciphers/12 extensions); standalone binary build passed; installer/embedded-dashboard smoke passed, including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged; browser E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
-- Runs `41339060686` and `41339200556` previously failed only because the installer-smoke digest variable was written to `GITHUB_ENV` and read inside the same shell step. The assertion was corrected to use the local `key_digest_before` variable. Runs `41339302362`, `41339526068`, and `41339693714` verify the corrected installer smoke.
+- GitHub Actions run `41340243880` passed on Bun 1.4.4 for PR head `aa9fd1bc81231996964a8fcbc4b095b0bbf58522`: **314 passed, 0 failed** across 31 unit/protocol test files; transport fingerprint passed (17 ciphers/12 extensions); standalone binary build passed; installer/embedded-dashboard smoke passed, including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged; browser E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
+- The installer-smoke failures in runs `41339060686` and `41339200556` came from reading a `GITHUB_ENV` value in the same shell step. The assertion now uses a local shell variable; runs `41339302362`, `41339526068`, `41339693714`, and `41340243880` verify the correction.
+- This latest CI run includes regression tests for custom-provider chat error redaction, legacy JSON symlink refusal, and POSIX owner-only permissions for retained JSON source backups.
 - Older passing runs: `41338584108` (311 unit tests) and `41338441043` (310 unit tests including direct AES-GCM tests).
 - Do not begin Phase 3 until Phase 2 secret-flow audit, security review, and merge acceptance criteria are satisfied.
 
 **Acceptance criteria**
 
-- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; latest branch-head CI run `41339526068` passed).
-- The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; current PR-head CI run `41339693714` passed).
+- Newly issued keys authenticate gateway requests; revoked keys immediately stop working (covered by committed tests; latest branch-head CI run `41340243880` passed).
+- The dashboard cannot perform admin operations without an authenticated admin session (covered by committed tests; current PR-head CI run `41340243880` passed).
 - Existing OpenAI, Anthropic, and Codex gateway protocols retain their documented authorization header compatibility (regression tests retained; latest branch-head CI run `41339526068` passed).
 - Managed caller keys and persisted upstream credentials are not retrievable as plaintext from the current database representation (migration/adapter and AES-GCM tests committed; latest branch-head CI run `41339526068` passed).
 ### Phase 3 — Plans, Limits, and Request Enforcement
