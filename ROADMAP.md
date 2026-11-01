@@ -129,7 +129,7 @@ The phases are sequential. A phase is not complete until its acceptance criteria
 
 **Verification evidence (2026-11-01)**
 
-GitHub Actions [run `41322403767`](https://github.com/Yoganataa/alphaway/actions/runs/41322403767) completed successfully on Bun 1.4.4:
+GitHub Actions [run `41322998575`](https://github.com/Yoganataa/alphaway/actions/runs/41322998575) completed successfully on Bun 1.4.4:
 - Unit and protocol tests: **270 passed, 0 failed** across 25 files.
 - Transport fingerprint: Bun 1.4.4 matched the 17-cipher / 12-extension baseline.
 - Dashboard and standalone binary build: passed.
