@@ -233,20 +233,11 @@ function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksu
   }
 
   try {
-    try {
-      fs.renameSync(tempPath, filePath);
-    } catch (error) {
-      if (process.platform !== "win32") throw error;
-      const quarantine = filePath + "." + randomUUID() + ".plaintext.tmp";
-      fs.renameSync(filePath, quarantine);
-      try {
-        fs.renameSync(tempPath, filePath);
-        fs.unlinkSync(quarantine);
-      } catch (replaceError) {
-        try { fs.renameSync(quarantine, filePath); } catch {}
-        throw replaceError;
-      }
-    }
+    const latestStat = fs.lstatSync(filePath);
+    if (latestStat.isSymbolicLink() || !latestStat.isFile()) return false;
+    if (expectedStat && (latestStat.dev !== expectedStat.dev || latestStat.ino !== expectedStat.ino)) return false;
+    if (sha256(fs.readFileSync(filePath, "utf8")) !== expectedChecksum) return false;
+    fs.renameSync(tempPath, filePath);
     if (process.platform !== "win32") {
       try { fs.chmodSync(filePath, 0o600); } catch {}
     }
@@ -255,6 +246,9 @@ function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksu
       try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
     } catch {}
     return true;
+  } catch {
+    return false;
+  }
   } finally {
     try { fs.unlinkSync(tempPath); } catch {}
   }
@@ -265,11 +259,18 @@ export function restoreLegacyBackup(encryptedPath: string, outputPath: string): 
   const source = path.resolve(encryptedPath);
   const destination = path.resolve(outputPath);
   if (source === destination) throw new Error("Restore output must be a different file");
-  const sourceStat = fs.lstatSync(source);
-  if (sourceStat.isSymbolicLink() || !sourceStat.isFile()) throw new Error("Encrypted backup source must be a regular, non-symlink file");
-  const maxEncryptedBytes = Math.ceil(MAX_LEGACY_JSON_BYTES * 4 / 3) + 4096;
-  if (sourceStat.size > maxEncryptedBytes) throw new Error("Encrypted backup exceeds the restore size limit");
-  const envelope = fs.readFileSync(source, "utf8").trim();
+  const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+  const sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
+  let envelope: string;
+  try {
+    const sourceStat = fs.fstatSync(sourceFd);
+    if (!sourceStat.isFile()) throw new Error("Encrypted backup source must be a regular file");
+    const maxEncryptedBytes = Math.ceil(MAX_LEGACY_JSON_BYTES * 4 / 3) + 4096;
+    if (sourceStat.size > maxEncryptedBytes) throw new Error("Encrypted backup exceeds the restore size limit");
+    envelope = fs.readFileSync(sourceFd, "utf8").trim();
+  } finally {
+    fs.closeSync(sourceFd);
+  }
   if (!isEncryptedSecret(envelope)) throw new Error("File is not an AlphaWay encrypted legacy backup");
   const plaintext = decryptSecret(envelope);
   if (Buffer.byteLength(plaintext, "utf8") > MAX_LEGACY_JSON_BYTES) throw new Error("Restored JSON exceeds the legacy import size limit");
@@ -351,11 +352,19 @@ function importSourceFile(
   }
   const checksum = sha256(raw);
   if (prior?.checksum === checksum) {
+    let details = prior.details || undefined;
+    if (!isEncryptedSecret(raw.trim())) {
+      const secured = secureLegacyBackup(filePath, raw, checksum, stat);
+      if (secured) {
+        details = [details, "Encrypted rollback copy retained; restore with --restore-legacy-backup before editing."].filter(Boolean).join(" ");
+        db.prepare("UPDATE legacy_imports SET details = ? WHERE source_key = ?").run(details, sourceKey);
+      }
+    }
     return {
       sourceKey,
       status: prior.status === "imported" ? "already-imported" : "skipped",
       rowCount: Number(prior.row_count || 0),
-      details: prior.details || undefined,
+      details,
     };
   }
 
@@ -407,19 +416,16 @@ function importSourceFile(
   });
   apply();
 
-  if (outcome.status === "imported") {
-    const secured = secureLegacyBackup(filePath, raw, checksum);
-    const details = [
-      outcome.details,
-      secured
-        ? "Encrypted rollback copy retained in the original JSON path; restore with --restore-legacy-backup."
-        : "Import succeeded, but the source changed during backup and remains owner-restricted plaintext; retry on next startup.",
-    ].filter(Boolean).join(" ");
-    db.prepare("UPDATE legacy_imports SET details = ? WHERE source_key = ?").run(details || null, sourceKey);
-    return { sourceKey, ...outcome, details };
-  }
-
-  return { sourceKey, ...outcome };
+  const secured = secureLegacyBackup(filePath, raw, checksum, stat);
+  const details = [
+    outcome.details,
+    secured
+      ? "Encrypted rollback copy retained in the original JSON path; restore with --restore-legacy-backup."
+      : "Source remains owner-restricted plaintext because backup encryption could not safely replace it; retry after resolving the file issue.",
+  ].filter(Boolean).join(" ");
+  db.prepare("UPDATE legacy_imports SET details = ? WHERE source_key = ?")
+    .run(details || null, sourceKey);
+  return { sourceKey, ...outcome, details };
 }
 
 /**
