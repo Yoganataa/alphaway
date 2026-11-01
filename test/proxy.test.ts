@@ -206,6 +206,23 @@ describe("egress proxy", () => {
       assert.equal(refused.ok, false);
       assert.equal(refused.apiStatus, 403);
       assert.match(refused.error, /403/);
+
+      const credentialProxy = "http://proxy-user:proxy-password@127.0.0.1:8080";
+      global.fetch = async () => { throw new Error("connect failed via " + credentialProxy); };
+      const connectionError = await proxy.testProxy(credentialProxy);
+      assert.equal(connectionError.ok, false);
+      assert.equal(connectionError.error.includes("proxy-user"), false);
+      assert.equal(connectionError.error.includes("proxy-password"), false);
+      assert.equal(connectionError.error.includes("[REDACTED]"), true);
+
+      global.fetch = async (url) => {
+        if (String(url).includes("cdn-cgi/trace")) throw new Error("trace failed via " + credentialProxy);
+        return { ok: true, status: 200 };
+      };
+      const traceError = await proxy.testProxy(credentialProxy);
+      assert.equal(traceError.ok, true);
+      assert.equal(traceError.exitError.includes("proxy-user"), false);
+      assert.equal(traceError.exitError.includes("proxy-password"), false);
     } finally {
       global.fetch = original;
     }
