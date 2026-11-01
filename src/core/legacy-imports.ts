@@ -321,7 +321,7 @@ function importSourceFile(
 
   // Completed imports are immutable. If an older build left the original JSON
   // source in plaintext, secure it after checking its ledger entry below.
-  let sourceFd: number;
+  let sourceFd: number | undefined;
   let stat: fs.Stats;
   try {
     const pathStat = fs.lstatSync(filePath);
@@ -333,9 +333,11 @@ function importSourceFile(
     stat = fs.fstatSync(sourceFd);
     if (stat.dev !== pathStat.dev || stat.ino !== pathStat.ino) {
       fs.closeSync(sourceFd);
+      sourceFd = undefined;
       return { sourceKey, status: "skipped", rowCount: 0, details: "Legacy source changed while it was being opened." };
     }
   } catch (error: any) {
+    if (sourceFd !== undefined) { try { fs.closeSync(sourceFd); } catch {} }
     if (error?.code === "ENOENT") return { sourceKey, status: "missing", rowCount: 0 };
     return {
       sourceKey,
@@ -352,7 +354,7 @@ function importSourceFile(
     if (!stat.isFile()) {
       return { sourceKey, status: "skipped", rowCount: 0, details: "Only regular legacy JSON files can be imported." };
     }
-    if (process.platform !== "win32") fs.fchmodSync(sourceFd, 0o600);
+    if (process.platform !== "win32") fs.fchmodSync(sourceFd!, 0o600);
     if (stat.size > MAX_LEGACY_JSON_BYTES) {
       return {
         sourceKey,
@@ -361,9 +363,9 @@ function importSourceFile(
         details: `File exceeds the ${MAX_LEGACY_JSON_BYTES}-byte import limit.`,
       };
     }
-    raw = fs.readFileSync(sourceFd, "utf8");
+    raw = fs.readFileSync(sourceFd!, "utf8");
   } finally {
-    fs.closeSync(sourceFd);
+    if (sourceFd !== undefined) fs.closeSync(sourceFd);
   }
   if (prior?.status === "imported") {
     if (!isEncryptedSecret(raw.trim())) {
