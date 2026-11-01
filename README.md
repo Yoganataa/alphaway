@@ -228,6 +228,22 @@ curl -s http://127.0.0.1:20129/response \
   }'
 ```
 
+### 4. CodeBuddy International Upstream
+
+CodeBuddy requests require two independent credentials: an AlphaWay gateway key and a CodeBuddy upstream token. The administrator can configure the upstream token through **Providers → CodeBuddy → OAuth Device Login** or keep using the `CODEBUDDY_API_KEY` environment override.
+
+```bash
+curl -s http://127.0.0.1:20129/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ALPHAWAY_API_KEY" \
+  -H "x-codebuddy-api-key: YOUR_CODEBUDDY_TOKEN" \
+  -d '{
+    "model": "cbai/deepseek-v4.1-flash",
+    "messages": [{"role": "user", "content": "Hello from AlphaWay"}]
+  }'
+```
+
+The `x-codebuddy-api-key` header is an optional per-request upstream override. It does not authenticate the caller; `Authorization` must still contain a valid AlphaWay gateway key. The upstream token is redacted from error bodies and is never returned by the OAuth polling endpoint.
 ---
 
 ## 🧪 Testing & Quality Standards
