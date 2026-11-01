@@ -90,7 +90,7 @@ if ! ALPHAWAY_BUN_VERSION="$BUN_VERSION" ALPHAWAY_MIN_BUN_VERSION="$MIN_BUN_VERS
     }
   }
   if (comparison < 0) process.exit(1);
-' "$BUN_VERSION" "$MIN_BUN_VERSION"; then
+'; then
   die "Bun >= $MIN_BUN_VERSION is required (found $BUN_VERSION)"
 fi
 say "Using Bun $BUN_VERSION"
