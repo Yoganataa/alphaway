@@ -13,7 +13,7 @@
 
 ## 1. Current Status
 
-**Phase 0 is complete; Phase 1 is in progress.** Phase 0 passed all required CI jobs on Bun 1.4.4 in run `41322998575`. PR #1 remains open and has not been merged into `main`. Phase 1 is isolated on `feat/phase-1-sqlite-migrations-rebased`, based on the latest Phase 0 commit.
+**Phase 0 is complete; Phase 1 is in progress.** Phase 0 passed all required CI jobs on Bun 1.4.4 in run `41322998575`. PR #1 remains open and has not been merged into `main`. Phase 1 is isolated on `feat/phase-1-sqlite-migrations-rebased`, based on Phase 0 HEAD `e47399a3bba8a2f7c86c07f44d0dfc6324ca89f3`.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
