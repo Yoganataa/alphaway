@@ -634,7 +634,11 @@ async function testCodebuddyPing(apiKey, model = "deepseek-v4.1-flash") {
       json = { message: text };
     }
     const classified = classifyCodebuddyError(res.status, json);
-    return { ok: false, status: res.status, classified, raw: text };
+    const serialized = JSON.stringify(classified);
+    const safeClassified = apiKey
+      ? JSON.parse(serialized.split(apiKey).join("[REDACTED]").split("Bearer [REDACTED]").join("[REDACTED]"))
+      : classified;
+    return { ok: false, status: res.status, classified: safeClassified };
   }
 
   const sseText = await res.text();
