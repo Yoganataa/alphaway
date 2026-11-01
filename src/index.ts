@@ -9,7 +9,6 @@ if (typeof (globalThis as any).Bun === "undefined") {
     console.error(
       "AlphaWay requires Bun (https://bun.sh).\n" +
       "Upstream inspects TLS ClientHello (BoringSSL). Node (OpenSSL) earns 403 FreeTierError.\n" +
-      "Measurement: Bun 6/6 pass, Node 0/6 pass.\n" +
       "Run with: bun src/index.ts"
     );
     process.exit(1);
@@ -20,7 +19,6 @@ import { app } from "./app";
 import { handleDaemonCli } from "./features/daemon";
 import { startTunnel } from "./features/tunnel";
 import { opencode } from "./providers";
-import { checkAndApplyUpdate, repairMissingModules } from "./core/updater";
 
 const PORT = parseInt(process.env.PORT || "20129", 10);
 const HOST = process.env.HOST || "127.0.0.1";
@@ -72,25 +70,17 @@ console.log(`🩺 Health Check   : http://${HOST}:${PORT}/health`);
 console.log(`🔒 BoringSSL TLS  : Active (Native Parity)`);
 console.log("=".repeat(60) + "\n");
 
-// Start server on configured host and port
 const server = Bun.serve({
   port: PORT,
   hostname: HOST,
   fetch: app.fetch,
 });
 
-// Start background services (non-blocking)
-repairMissingModules().catch(() => {});
+// Start background model discovery (non-blocking).
 opencode.discoverModels().catch(() => {});
-
 const discoveryTimer = setInterval(() => {
   opencode.discoverModels().catch(() => {});
 }, 5 * 60 * 1000);
 if (typeof discoveryTimer.unref === "function") discoveryTimer.unref();
-
-const updateTimer = setInterval(() => {
-  checkAndApplyUpdate(server).catch(() => {});
-}, 6 * 60 * 60 * 1000);
-if (typeof updateTimer.unref === "function") updateTimer.unref();
 
 export { server, app, PORT, HOST };

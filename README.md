@@ -62,10 +62,17 @@
 ## 🚀 Getting Started
 
 ### 1. Running Directly with Bun (Developer Mode)
+
+**Runtime requirement:** Bun 1.4.4 or newer. AlphaWay's OpenCode transport profile is verified against Bun 1.4.4 (17 TLS cipher suites, 12 extensions); run `bun run fingerprint:check` before adopting a newer runtime.
+
 ```bash
 # Clone the repository
 git clone https://github.com/Yoganataa/alphaway.git
 cd alphaway
+
+# Install the locked dependencies and build the dashboard
+bun install --frozen-lockfile
+bun run build:ui
 
 # Run AlphaWay Gateway
 bun src/index.ts
@@ -77,7 +84,19 @@ bun src/index.ts --tunnel
 bun src/index.ts --tunnel -d
 ```
 
-### 2. Service Management
+### 2. Install as a Local Service (Linux / macOS)
+
+The installer downloads a complete source snapshot, builds the dashboard and Bun executable, checks the TLS fingerprint, and only then replaces the installed application. Configuration and SQLite state remain outside the replaceable application directory.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yoganataa/alphaway/main/install.sh | bash
+```
+
+By default, the application is installed under `~/.alphaway/app`, configuration is stored in `~/.alphaway/.env`, and database state remains under `~/.alphaway`. Set `BINDIR`, `PORT`, or `HOST` to customize the installation. To run an isolated install smoke test from a local checkout without starting a service, use `BINDIR="$(mktemp -d)" SOURCE=local NO_START=1 bash install.sh`.
+
+Windows is not supported by this shell installer. A Windows executable can be cross-compiled from Bun using the command below.
+
+### 3. Service Management
 ```bash
 # Check daemon service status
 bun src/index.ts --status
@@ -86,14 +105,17 @@ bun src/index.ts --status
 bun src/index.ts --stop
 ```
 
-### 3. Compiling Standalone Executable
-AlphaWay can be compiled into a single, self-contained executable binary:
+### 4. Compiling Standalone Executable
+AlphaWay can be compiled into a standalone executable. The production build embeds the generated `dist/` dashboard assets into the executable using Bun's asset embedding support:
 ```bash
-# For Windows (alphaway.exe):
+# For Windows x64 (alphaway.exe):
 bun run build:bin:win
 
-# For Linux / macOS (alphaway):
+# For the current Linux / macOS host (alphaway):
 bun run build:bin
+
+# Build the dashboard and host-platform executable:
+bun run build
 ```
 Once compiled, simply execute:
 ```cmd
@@ -187,9 +209,15 @@ curl -s http://127.0.0.1:20129/response \
 
 AlphaWay enforces a strict **Zero Weakened Tests Policy**:
 ```bash
-bun test test/
+Run deterministic unit/integration tests and browser E2E tests separately:
+
+```bash
+bun run test:unit
+bunx playwright install --with-deps chromium
+bun run test:e2e
 ```
-All **292 tests (100% PASS, 0 fail)** across 25 test suites pass reliably, covering:
+
+The test suite covers:
 - BoringSSL `ClientHello` TLS fingerprint parity
 - Upstream gate contracts and adaptive handshakes
 - Tri-Protocol translators (OpenAI, Anthropic Claude, Codex)

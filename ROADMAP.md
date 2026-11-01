@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **Current state:** Planning and repository audit completed; implementation phases have not started.
+> **Current state:** Phase 0 acceptance criteria passed on `chore/phase-0-ci-distribution` in GitHub Actions run `41325262197`. The installer legacy-service retirement review finding is fixed and its thread is resolved; PR #1 is ready for merge.
 
 ## 1. Product Direction
 
@@ -105,26 +105,40 @@ The phases are sequential. A phase is not complete until its acceptance criteria
 
 ### Phase 0 — Repository Baseline, CI, and Distribution Integrity
 
-**Status:** Not started  
+**Status:** Complete (Linux x86_64 CI verified)  
 **Priority:** P0 — unblock all further work
 
-- [ ] Run a clean baseline install and inspect the actual test/build results.
-- [ ] Repair `.github/workflows/ci.yml`: current workflow refers to stale paths such as `test/*.test.js`, `gate-drill.js`, and `transport-fingerprint.js`; align it with the real TypeScript paths and package scripts.
-- [ ] Remove or correct the Node compatibility job. Node is not a supported live runtime and the referenced `test:node` script is absent from the current package manifest.
-- [ ] Define CI jobs for type/build checks, unit/integration tests, E2E browser tests, and the transport fingerprint check. Keep environment-dependent upstream probes out of ordinary deterministic CI.
-- [ ] Reconcile the Bun version requirement in `package.json` with the actual runtime APIs and fingerprint requirements. Do not claim `>=1.0.0` if the implementation requires a newer release.
-- [ ] Audit `build`, `build:ui`, `build:bin`, and `build:bin:win` as one coherent packaging contract. The current `build` script names an `.exe` output regardless of host OS.
-- [ ] Verify how the compiled binary serves dashboard assets. Do not call it a self-contained single binary unless the built artifact is tested without an external `dist/` directory.
-- [ ] Rewrite `install.sh` against the current repository/release layout. The current script references legacy root-level files such as `server.js` and other paths absent from the current `src/` tree.
-- [ ] Reconcile stale claims in `README.md` and `AGENTS.md`, especially test counts, CI commands, installer behavior, and architecture paths.
-- [ ] Record baseline commands, tool versions, pass/fail counts, and known environment limitations in `CHECKPOINT.md`.
+- [x] Inspect the latest baseline CI run on `main`; the Bun test step and Node compatibility job failed because their commands were stale. A local clean install/test/build was not available in this environment.
+- [x] Repair `.github/workflows/ci.yml`: use the actual TypeScript test paths and package scripts.
+- [x] Remove the Node compatibility job; Node is not a supported live runtime and the referenced `test:node` script does not exist.
+- [x] Define separate CI jobs for unit/integration tests, dashboard/binary build, installer/embedded-dashboard smoke tests, browser E2E tests, and the transport fingerprint check. Keep the live upstream drill manual.
+- [x] Set the supported Bun floor to `>=1.4.4` and pin CI to Bun 1.4.4; its ClientHello matches the recorded 17-cipher / 12-extension baseline.
+- [x] Align `build`, `build:ui`, `build:bin`, and `build:bin:win`; the host build emits `alphaway` and the explicit Windows x64 target emits `alphaway.exe`.
+- [x] Verify the compiled binary serves embedded dashboard assets without an external `dist/` directory. CI removes the physical `app/dist/` directory after build, then verifies `/health`, dashboard HTML, and the generated JavaScript asset from the standalone executable.
+- [x] Rewrite `install.sh` for the current TypeScript source archive, frozen dependency install, fingerprint validation, embedded-asset build, staged replacement, persistent state/config, and service registration. CI verifies fresh install, upgrade preservation of `.env` and SQLite data, detached background startup, and HTTP health.
+- [x] Reconcile `README.md`, `AGENTS.md`, and `.env.example` with the current Bun build, installer, supported runtime, and test commands.
+- [x] Record the observed failing `main` CI run and disclose that local Bun/test/build/installer commands could not be executed in this environment.
 
 **Acceptance criteria**
 
-- CI runs valid commands against the current repository and fails on real regressions.
-- A clean checkout can install dependencies, run checks, build the UI, and produce the documented release artifact.
-- The installer installs/upgrades the current application layout safely, or is explicitly marked unsupported until a tested installer is ready.
-- No documentation claims that tests or packaging pass without recorded evidence.
+- [x] CI runs valid commands against the current repository and fails on real regressions.
+- [x] A clean Linux x86_64 checkout can install dependencies, run checks, build the UI, and produce the documented standalone executable.
+- [x] The installer installs/upgrades the current application layout safely while preserving `.env` and SQLite state.
+- [x] The executable serves its dashboard and built JS asset without an external `dist/` directory.
+- [x] No documentation claims that tests or packaging pass without recorded evidence.
+
+**Verification evidence (2026-11-01)**
+
+GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions/runs/41325262197) completed successfully on Bun 1.4.4 after the legacy-service retirement fix:
+- Unit and protocol tests: **271 passed, 0 failed** across 25 files.
+- Transport fingerprint: Bun 1.4.4 matched the 17-cipher / 12-extension baseline.
+- Dashboard and standalone binary build: passed.
+- Installer smoke: passed fresh install, upgrade preservation of `.env` and SQLite row, detached background startup, and embedded dashboard/JS asset serving after physical `dist/` removal.
+- Legacy service retirement: `opencode-bridge.service` and `opencode-free-bridge.service` are disabled and local unit definitions are moved out of systemd's active search path before replacing the app; regression assertion passed. The prior P1 Codex review thread is resolved.
+- Browser E2E: **8 passed, 0 failed**.
+- Live upstream gate drill: intentionally skipped; it is an explicit manual workflow action, not a deterministic CI check.
+
+**Platform boundary:** CI verified the Linux x86_64 path. The launchd/macOS service branch and Windows x64 cross-compiled binary are not exercised by this workflow yet; add platform-specific release checks before claiming those targets are verified.
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 

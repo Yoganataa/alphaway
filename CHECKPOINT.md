@@ -4,22 +4,23 @@
 >
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Branch:** `main`  
-> **Last code-audited HEAD:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-**Documentation commits added after that code audit:** `6a6d581f37ad1c3d742e5701af7b2d072ef8ee1d` (ROADMAP) and `267d2dbfb83738b5957ca1d6f502a029a9935fe4` (CHECKPOINT)  
-> **Commit:** `feat: initial release of AlphaWay v0.0.1 - Universal AI Gateway & Security Router`
+> **Active branch:** `chore/phase-0-ci-distribution`  
+> **Last implementation HEAD before this checkpoint update:** `337cea4287ebc1710c9821c6d1b3315b96686d0a`  
+> **Base main HEAD:** `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`  
+> **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
+> **PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
 
 ## 1. Current Status
 
-**Planning/audit checkpoint only. Implementation has not started.**
+**Phase 0 is complete and verified on the implementation branch.** All required GitHub Actions jobs passed on Bun 1.4.4 in run `41325262197`. The P1 legacy-systemd retirement finding has been fixed, the review thread resolved, and PR #1 is ready for merge.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
 - [x] Target product direction and dashboard information architecture agreed.
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
-- [ ] Phase 0 — Repository Baseline, CI, and Distribution Integrity.
-- [ ] Phase 1 — Database Migrations and Canonical Persistence.
+- [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
+- [ ] Phase 1 — Database Migrations and Canonical Persistence (implementation started on `feat/phase-1-sqlite-migrations`; rebase onto Phase 0 after merge before opening its PR).
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
@@ -27,7 +28,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-The only repository changes in this session are these two documentation files. No application source code was changed and no test, build, installer, or CI command was executed as part of the planning/audit work that led to this checkpoint. Do not interpret the README's existing test-pass statement as a verification result from this session.
+Phase 1 implementation has begun on a separate feature branch, but it was created before the final Phase 0 installer review fix and must be rebased onto the merged Phase 0 commit before its own PR is opened. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so verification comes from GitHub Actions. Baseline `main` run `41317617602` failed on stale `.test.js` paths and the absent `test:node` script. The final Phase 0 run `41325262197` completed successfully with Bun 1.4.4: 271 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed (17 ciphers, 12 extensions), and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The installer also disables and retires both legacy systemd service names before replacing the application. The prior P1 review finding is resolved. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
 
 ## 2. Agreed Product Direction
 
@@ -132,21 +133,71 @@ Do not rely only on this summary. Fetch the current files from GitHub before edi
 
 Also inspect the current `9router-go` frontend and pin the exact upstream commit when beginning Phase 6.
 
-## 5. Next Action — Start Phase 0 Only
+## 5. Phase 0 — Complete
 
-The next work session should begin with **Phase 0: Repository Baseline, CI, and Distribution Integrity** from `ROADMAP.md`.
+### Implementation summary
 
-Recommended execution order:
+- Repaired `.github/workflows/ci.yml` for the current Bun + TypeScript project. CI has separate unit/protocol, build, installer/embedded-dashboard smoke, and Playwright E2E jobs. The live upstream gate drill is manual only.
+- Set Bun support floor and CI runtime to 1.4.3, with the matching OpenCode TLS fingerprint check.
+- Made the dashboard build output deterministic, embedded `dist/` into the standalone executable, and made Hono serve the embedded assets from the standalone module root.
+- Removed the legacy root-level JavaScript self-updater and replaced it with a safe manual-install-required compatibility shim.
+- Replaced `install.sh` with a staged install/upgrade flow for the current Bun + TypeScript source tree. Configuration and SQLite state remain outside the replaceable app directory.
+- Added regression coverage for installer/distribution behavior and updater behavior.
+- Stabilized the Playwright harness to launch the Chromium browser installed by CI directly, use bounded health probes, and clean up the server on launch failure.
+- Updated README, AGENTS, `.env.example`, ROADMAP, and this checkpoint.
 
-1. Fetch the live `main` HEAD and compare it with the last verified HEAD above. If it moved, inspect the new commits/diff and reconcile this checkpoint before editing.
-2. Inspect the current CI workflow, package scripts, Bun version requirements, Vite output, dashboard static serving, and installer.
-3. Run baseline checks on a clean working tree and record exact outputs. Do not change code before establishing which checks currently fail and why.
-4. Fix stale CI commands and establish deterministic build/package behavior.
-5. Rewrite the installer against the verified current artifact/layout; test install and upgrade behavior.
-6. Reconcile README/AGENTS instructions and update this checkpoint with actual test/build/install results.
-7. Only proceed to Phase 1 when Phase 0 acceptance criteria are met.
+### Final verification evidence
 
-Use a focused feature branch and PR for implementation unless the repository owner explicitly requests direct commits to `main`. Keep provider handshake, TLS fingerprint, and protocol behavior protected by regression tests.
+GitHub Actions [run `41322403767`](https://github.com/Yoganataa/alphaway/actions/runs/41322403767), branch HEAD `e1d8fbbe2a8f0a360109e48f476d9745cdefda4a`:
+
+| Job / check | Result |
+|---|---|
+| Unit and protocol tests | **270 passed, 0 failed**, 25 files |
+| OpenCode transport fingerprint | Bun 1.4.4 matched baseline: 17 ciphers, 12 extensions |
+| UI and standalone binary build | Passed |
+| Installer and embedded dashboard smoke | Passed |
+| Fresh install | Passed |
+| Upgrade preservation | Passed; `.env` value and SQLite marker row retained |
+| Background startup | Passed; health endpoint responded |
+| Embedded dashboard | Passed after physical `app/dist/` directory was moved away; `/health`, `/`, and generated JS asset all responded |
+| Dashboard browser E2E | **8 passed, 0 failed** |
+| Live upstream gate drill | Skipped intentionally; manual-only workflow |
+
+The workflow verifies Linux x86_64 only. macOS launchd service registration and Windows x64 executable runtime are not yet covered and must not be described as validated.
+
+### Changed files
+
+```text
+.env.example
+.github/workflows/ci.yml
+AGENTS.md
+CHECKPOINT.md
+README.md
+ROADMAP.md
+install.sh
+package.json
+vite.config.ts
+src/index.ts
+src/core/updater.ts
+src/routes/dashboard.ts
+test/e2e/dashboard.test.ts
+test/e2e/harness.ts
+test/install-migration.test.ts
+test/updater.test.ts
+test/verify-quick.test.ts
+```
+
+### Current GitHub state
+
+- Branch: `chore/phase-0-ci-distribution`
+- PR: [#1 — Stabilize CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
+- PR state: open, mergeable, no merge performed.
+- Base: `main` at `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`.
+- Branch is ahead of main. Review the complete PR diff before merging.
+
+### Next phase
+
+Phase 0 acceptance criteria are met for the tested Linux x86_64 path. After reviewing/merging PR #1, proceed to **Phase 1 — Database Migrations and Canonical Persistence** in ROADMAP.md. Do not start Plans or Persona implementation before the database migration foundation is designed and tested.
 
 ## 6. Working Rules for the Next Session
 
@@ -176,7 +227,7 @@ Target produk yang sudah diputuskan:
 - Tambahkan Plans serta Persona/Jailbreak.
 - Ikuti struktur TypeScript idiomatis; jangan membuat struktur ala Go secara menyeluruh.
 
-Lanjutkan dari fase aktif dalam ROADMAP.md. Pada checkpoint awal ini fase berikutnya adalah Phase 0 — Repository Baseline, CI, and Distribution Integrity. Mulai dengan memeriksa kondisi aktual dan menjalankan baseline verification; jangan langsung melakukan rewrite. Kerjakan bertahap, gunakan branch/PR, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
+Lanjutkan dari fase aktif dalam ROADMAP.md. Phase 0 selesai, semua CI job hijau, temuan P1 legacy systemd sudah ditangani, dan PR #1 siap merge. Setelah Phase 0 masuk ke main, rebase `feat/phase-1-sqlite-migrations` pada main terbaru, verifikasi ulang semua test, lalu lanjut Phase 1 — Database Migrations and Canonical Persistence sesuai ROADMAP.md. Jangan membuka PR Phase 1 sebelum branch sinkron dengan main. Kerjakan bertahap, jangan melemahkan tes, dan update CHECKPOINT.md setiap selesai satu blok kerja yang bermakna.
 ```
 
 ---

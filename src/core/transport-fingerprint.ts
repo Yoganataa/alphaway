@@ -11,8 +11,9 @@
  *   curl, HTTP/1.1 or h2     403
  *
  * The bridge therefore depends on Bun's TLS stack matching the CLI's. Bun 1.4.2
- * (the version bundled in CLI 2.0.32) and 1.4.3 produce identical ClientHellos
- * today, but nothing guarantees that for 1.5. This script makes the drift
+ * (the version bundled in CLI 2.0.32) and Bun 1.4.3 matched the recorded
+ * ClientHello profile. Bun 1.4.4 must pass the same check before deployment.
+ * This script makes transport drift
  * visible: it opens a TCP listener, points a fetch at it, and parses the
  * ClientHello without any TLS library.
  *
@@ -109,7 +110,7 @@ function capture() {
 }
 
 function describe(fp) {
-  const runtime = `bun ${process.versions.bun || (globalThis as any).Bun?.version || "1.4.2"}`;
+  const runtime = `bun ${process.versions.bun || (globalThis as any).Bun?.version || "unknown"}`;
   return {
     runtime,
     legacyVersion: fp.legacyVersion,

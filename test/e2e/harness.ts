@@ -22,14 +22,14 @@ export interface BridgeDashboard {
 /**
  * Wait for AlphaWay /health to respond with 200 OK
  */
-async function waitForServer(url: string, processHandle: ChildProcess, timeoutMs = 15000): Promise<void> {
+async function waitForServer(url: string, processHandle: ChildProcess, timeoutMs = 20000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (processHandle.exitCode !== null) {
       throw new Error(`AlphaWay server exited prematurely with code ${processHandle.exitCode}`);
     }
     try {
-      const res = await fetch(`${url}/health`);
+      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(1500) });
       if (res.ok) {
         return;
       }
@@ -58,7 +58,7 @@ export async function startBridgeDashboard(port = 20149): Promise<BridgeDashboar
       NODE_ENV: "test",
       UPDATE_MODE: "reactive",
     },
-    stdio: "pipe",
+    stdio: ["ignore", "ignore", "ignore"],
   });
 
   const baseURL = `http://127.0.0.1:${port}`;
@@ -72,9 +72,12 @@ export async function startBridgeDashboard(port = 20149): Promise<BridgeDashboar
 
   let browser: Browser;
   try {
-    browser = await chromium.launch({ channel: "msedge", headless: true });
-  } catch {
+    // CI explicitly installs Playwright Chromium; do not probe an unrelated
+    // system Edge channel before launching the browser we actually test.
     browser = await chromium.launch({ headless: true });
+  } catch (error) {
+    server.kill("SIGKILL");
+    throw error;
   }
 
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });

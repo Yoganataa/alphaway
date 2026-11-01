@@ -4,33 +4,144 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      run_live_gate_drill:
+        description: Run the live upstream gate drill (may consume upstream allowance)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: 1.4.4
 
 jobs:
-  test:
+  unit:
+    name: Unit and protocol tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      - name: Unit tests (Bun)
-        run: bun test test/*.test.js
-      - name: Offline drills (Bun)
-        run: bun gate-drill.js
-      - name: Transport fingerprint matches the CLI baseline
-        run: bun transport-fingerprint.js --check
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Run unit and integration tests
+        run: bun run test:unit
+      - name: Verify transport fingerprint
+        run: bun run fingerprint:check
 
-  # The bridge still runs on Node, but Node is refused by the live gate, so it is
-  # tested for compatibility only — never as the supported runtime.
-  compat:
+  build:
+    name: UI and standalone binary build
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: ${{ matrix.node-version }}
-      - name: Unit tests (Node compatibility)
-        run: npm run test:node
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build dashboard and standalone executable
+        run: bun run build
+      - name: Verify standalone executable
+        run: ./alphaway --version
+
+
+  install-smoke:
+    name: Installer and embedded dashboard smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Validate installer syntax
+        run: bash -n install.sh
+      - name: Install from the current checkout without starting a service
+        run: |
+          install_root="$(mktemp -d "$RUNNER_TEMP/alphaway-install.XXXXXX")"
+          echo "ALPHAWAY_INSTALL_ROOT=$install_root" >> "$GITHUB_ENV"
+          BINDIR="$install_root" SOURCE=local NO_START=1 bash install.sh
+
+      - name: Verify upgrade preserves configuration and SQLite state
+        run: |
+          printf '%s\n' 'API_KEY=upgrade-preserved-key' > "$ALPHAWAY_INSTALL_ROOT/.env"
+          ALPHAWAY_DB_PATH="$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite" bun -e '
+            import { Database } from "bun:sqlite";
+            const db = new Database(process.env.ALPHAWAY_DB_PATH);
+            db.exec("CREATE TABLE checkpoint_state (value TEXT NOT NULL)");
+            db.prepare("INSERT INTO checkpoint_state VALUES (?)").run("preserve-me");
+            db.close();
+          '
+          BINDIR="$ALPHAWAY_INSTALL_ROOT" SOURCE=local NO_START=1 bash install.sh
+          grep -qx 'API_KEY=upgrade-preserved-key' "$ALPHAWAY_INSTALL_ROOT/.env"
+          test -s "$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite"
+          test -d "$ALPHAWAY_INSTALL_ROOT/app"
+          find "$ALPHAWAY_INSTALL_ROOT" -maxdepth 1 -type d -name '.backup-app-*' | grep -q .
+          ALPHAWAY_DB_PATH="$ALPHAWAY_INSTALL_ROOT/alphaway.sqlite" bun -e '
+            import { Database } from "bun:sqlite";
+            const db = new Database(process.env.ALPHAWAY_DB_PATH);
+            const row = db.query("SELECT value FROM checkpoint_state").get();
+            if (row?.value !== "preserve-me") process.exit(1);
+            db.close();
+          '
+
+      - name: Verify installer background startup
+        run: |
+          BINDIR="$ALPHAWAY_INSTALL_ROOT" SOURCE=local NO_SERVICE=1 PORT=20261 HOST=127.0.0.1 bash install.sh
+      - name: Verify standalone binary and embedded dashboard
+        run: |
+          test -s "$ALPHAWAY_INSTALL_ROOT/app/alphaway"
+          test -s "$ALPHAWAY_INSTALL_ROOT/app/dist/index.html"
+          "$ALPHAWAY_INSTALL_ROOT/app/alphaway" --version
+          test -s "$ALPHAWAY_INSTALL_ROOT/alphaway.pid"
+          server_pid="$(cat "$ALPHAWAY_INSTALL_ROOT/alphaway.pid")"
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          mv "$ALPHAWAY_INSTALL_ROOT/app/dist" "$ALPHAWAY_INSTALL_ROOT/dist-outside-app"
+          curl --fail --silent --show-error http://127.0.0.1:20261/health >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:20261/ > "$ALPHAWAY_INSTALL_ROOT/dashboard.html"
+          grep -q 'id="app"' "$ALPHAWAY_INSTALL_ROOT/dashboard.html"
+          asset="$(grep -oE 'src="/assets/[^"]+\.js"' "$ALPHAWAY_INSTALL_ROOT/dashboard.html" | head -n 1 | cut -d '"' -f 2)"
+          test -n "$asset"
+          curl --fail --silent --show-error "http://127.0.0.1:20261$asset" >/dev/null
+          kill "$server_pid" 2>/dev/null || true
+          rm -f "$ALPHAWAY_INSTALL_ROOT/alphaway.pid"
+
+  e2e:
+    name: Dashboard browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build dashboard
+        run: bun run build:ui
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+      - name: Run dashboard E2E tests
+        run: bun run test:e2e
+
+  live-gate-drill:
+    name: Optional live upstream gate drill
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_gate_drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Run live upstream drill
+        run: bun run drill
