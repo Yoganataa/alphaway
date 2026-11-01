@@ -101,6 +101,24 @@ function parseProxyUrl(raw) {
   return { ok: true, url: `${u.protocol}//${auth}${u.hostname}${port}` };
 }
 
+function redactProxyTransportError(error, proxyUrl) {
+  let message = String(error && error.message ? error.message : "Proxy request failed").slice(0, 500);
+  const secrets = new Set([String(proxyUrl || "")]);
+  try {
+    const parsed = new URL(String(proxyUrl || ""));
+    for (const value of [parsed.username, parsed.password]) {
+      if (value) {
+        secrets.add(value);
+        try { secrets.add(decodeURIComponent(value)); } catch {}
+      }
+    }
+    if (parsed.username || parsed.password) secrets.add(parsed.username + (parsed.password ? ":" + parsed.password : ""));
+  } catch {}
+  for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
+    if (secret) message = message.split(secret).join("[REDACTED]");
+  }
+  return message.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1[REDACTED]@").slice(0, 300);
+}
 /** `host:port` for display. Credentials are never part of this string. */
 
 function parseRelayUrl(raw) {
@@ -969,7 +987,7 @@ async function testProxy(url, { timeoutMs = 15000, probeUrl = null } = {}) {
       ok: false,
       exitIp: exit.ip,
       latencyMs: Date.now() - started,
-      error: `Cannot reach upstream through proxy: ${err.message}`,
+      error: `Cannot reach upstream through proxy: ${redactProxyTransportError(err, parsed.url)}`,
     };
   }
   const latencyMs = Date.now() - started;
@@ -1030,7 +1048,7 @@ async function probeExitIp(proxyUrl, timeoutMs) {
     const ip = (text.match(/^ip=(.+)$/m) || [])[1] || null;
     return { ip, error: ip ? null : "trace tanpa field ip" };
   } catch (err) {
-    return { ip: null, error: err.message };
+    return { ip: null, error: redactProxyTransportError(err, proxyUrl) };
   }
 }
 
