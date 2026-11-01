@@ -6,11 +6,11 @@ const path = require("node:path");
 const http = require("node:http");
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ofb-proxy-test-"));
-const previousStateDir = process.env.OPENCODE_BRIDGE_STATE_DIR;
 process.env.OPENCODE_BRIDGE_STATE_DIR = tmpDir;
 delete process.env.UPSTREAM_PROXY_URL;
 
 const proxy = require("../src/core/proxy");
+const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("../src/core/database");
 const panel = require("../src/core/panel");
 const { app } = require("../src/app");
 
@@ -40,6 +40,11 @@ function request(port, method, urlPath, body, headers = {}) {
   });
 }
 
+function expectNoSecretValue(config) {
+  assert.equal(JSON.stringify(proxy.describe()).includes("secret"), false);
+  assert.equal(config.pool.length, 2);
+}
+
 function emptyStateDir() {
   // Describes run in order and each one's `after` cleans up, so this recreates
   // the directory instead of assuming an earlier suite left it in place.
@@ -55,11 +60,11 @@ function emptyStateDir() {
 describe("egress proxy", () => {
   beforeEach(() => {
     emptyStateDir();
+    dbDeleteSetting("proxy_config");
     proxy.__reload();
   });
 
   after(() => {
-    closeDatabase();
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {}
@@ -90,38 +95,38 @@ describe("egress proxy", () => {
     }
   });
 
-  it("persists the proxy to disk with owner-only permissions and never echoes credentials", () => {
+  it("persists proxy credentials in SQLite and never echoes them in public state", () => {
     const saved = proxy.setProxyUrl("http://user:secret@10.0.0.5:8080");
     assert.equal(saved.ok, true);
     assert.equal(saved.mode, "proxy");
     assert.equal(saved.proxy, "10.0.0.5:8080");
     assert.equal(saved.hasCredentials, true);
     assert.equal(JSON.stringify(saved).includes("secret"), false, "describe() must not leak the password");
+    assert.equal(proxy.configStore(), "SQLite app_settings.proxy_config");
 
-    const file = proxy.configFile();
-    if (process.platform !== "win32") assert.equal(fs.statSync(file).mode & 0o777, 0o600);
-    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).url, "http://user:secret@10.0.0.5:8080");
+    const stored = dbGetSetting("proxy_config", null);
+    assert.equal(stored.url, "http://user:secret@10.0.0.5:8080");
 
-    // A fresh process reads the same file.
-    proxy.__reload();
+    // A fresh runtime reload reads the same canonical SQLite setting.
+    proxy.__restart();
     assert.equal(proxy.getProxyUrl(), "http://user:secret@10.0.0.5:8080");
-    assert.equal(proxy.describe().source, "file");
+    assert.equal(proxy.describe().source, "database");
   });
 
-  it("clearing the URL returns to direct egress and removes the file", () => {
+  it("clearing the URL returns to direct egress and deletes the SQLite setting", () => {
     proxy.setProxyUrl("http://127.0.0.1:8080");
     const cleared = proxy.setProxyUrl("");
     assert.equal(cleared.ok, true);
     assert.equal(cleared.mode, "direct");
     assert.equal(proxy.getProxyUrl(), "");
-    assert.equal(fs.existsSync(proxy.configFile()), false);
+    assert.equal(dbGetSetting("proxy_config", null), null);
   });
 
-  it("ignores a corrupt config file instead of refusing to boot", () => {
-    fs.writeFileSync(proxy.configFile(), "{not json", "utf8");
+  it("ignores an invalid SQLite config value instead of refusing to boot", () => {
+    dbSetSetting("proxy_config", "not-an-object");
     proxy.__reload();
     assert.equal(proxy.getProxyUrl(), "");
-    assert.match(proxy.describe().error, /proxy\.json/);
+    assert.match(proxy.describe().error, /app_settings\.proxy_config/);
   });
 
   it("lets UPSTREAM_PROXY_URL win and refuses runtime edits while it is set", () => {
@@ -223,12 +228,6 @@ describe("proxy HTTP surface", () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    closeDatabase();
-    if (previousStateDir === undefined) delete process.env.OPENCODE_BRIDGE_STATE_DIR;
-    else process.env.OPENCODE_BRIDGE_STATE_DIR = previousStateDir;
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
   });
 
   it("serves the panel at / and keeps /health as JSON", async () => {
@@ -410,11 +409,10 @@ describe("egress pool", () => {
     assert.equal(saved.raw ?? JSON.stringify(saved).includes("secret"), false);
     assert.equal(JSON.stringify(saved).includes("secret"), false, "describe() must not leak credentials");
 
-    const file = proxy.configFile();
-    if (process.platform !== "win32") assert.equal(fs.statSync(file).mode & 0o777, 0o600);
-    const onDisk = JSON.parse(fs.readFileSync(file, "utf8"));
-    assert.equal(onDisk.pool.length, 2);
-    assert.equal(onDisk.strategy, "failover");
+    const stored = dbGetSetting("proxy_config", null);
+    assert.equal(stored.pool.length, 2);
+    assert.equal(stored.strategy, "failover");
+    expectNoSecretValue(stored);
 
     // A fresh process reads the same pool.
     proxy.__reload();
