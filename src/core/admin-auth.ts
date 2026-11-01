@@ -14,6 +14,8 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const PASSWORD_BYTES = 64;
 const SCRYPT_OPTIONS = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const failedLogins = new Map<string, { count: number; firstAt: number; lockedUntil: number }>();
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MAX_TRACKED_FAILED_LOGINS = 4096;
 
 export interface AdminIdentity {
   id: string;
@@ -165,16 +167,42 @@ function loginThrottleKey(username: string): string {
   return String(username || "").trim().toLowerCase();
 }
 
+function pruneFailedLogins(now: number): void {
+  for (const [key, attempt] of failedLogins) {
+    if (now - attempt.firstAt > LOGIN_WINDOW_MS && attempt.lockedUntil <= now) {
+      failedLogins.delete(key);
+    }
+  }
+}
+
+function rememberFailedLogin(
+  key: string,
+  attempt: { count: number; firstAt: number; lockedUntil: number }
+): void {
+  // Refresh insertion order and bound memory when clients submit many unique usernames.
+  failedLogins.delete(key);
+  if (failedLogins.size >= MAX_TRACKED_FAILED_LOGINS) {
+    const oldest = failedLogins.keys().next().value;
+    if (oldest) failedLogins.delete(oldest);
+  }
+  failedLogins.set(key, attempt);
+}
+
 export async function loginAdmin(
   usernameInput: string,
   password: string
 ): Promise<{ identity: AdminIdentity; sessionToken: string } | { error: "invalid" | "rate_limited" }> {
   const username = String(usernameInput || "").trim();
+  const inputPassword = String(password || "");
+  if (!/^[A-Za-z0-9._-]{1,32}$/.test(username) || inputPassword.length < 1 || inputPassword.length > 1024) {
+    return { error: "invalid" };
+  }
+
   const key = loginThrottleKey(username);
   const now = Date.now();
+  pruneFailedLogins(now);
   const attempt = failedLogins.get(key);
   if (attempt && attempt.lockedUntil > now) return { error: "rate_limited" };
-  if (attempt && now - attempt.firstAt > 15 * 60 * 1000) failedLogins.delete(key);
 
   const db = getDatabase();
   const row = db.prepare(
@@ -183,17 +211,17 @@ export async function loginAdmin(
 
   // Run the same KDF for unknown usernames to avoid a cheap account-enumeration oracle.
   const salt = row?.password_salt || "00000000000000000000000000000000";
-  const derived = await scrypt(String(password || ""), salt);
+  const derived = await scrypt(inputPassword, salt);
   const expected = Buffer.from(row?.password_hash || "0".repeat(PASSWORD_BYTES * 2), "hex");
   const valid = Boolean(row) && derived.length === expected.length && timingSafeEqual(derived, expected);
   if (!valid) {
     const previous = failedLogins.get(key);
     const firstAt = previous?.firstAt && now - previous.firstAt <= 15 * 60 * 1000 ? previous.firstAt : now;
     const count = (previous?.count || 0) + 1;
-    failedLogins.set(key, {
+    rememberFailedLogin(key, {
       count,
       firstAt,
-      lockedUntil: count >= 5 ? firstAt + 15 * 60 * 1000 : 0,
+      lockedUntil: count >= 5 ? firstAt + LOGIN_WINDOW_MS : 0,
     });
     return { error: count >= 5 ? "rate_limited" : "invalid" };
   }
