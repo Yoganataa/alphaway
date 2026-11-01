@@ -260,11 +260,11 @@ export function restoreLegacyBackup(encryptedPath: string, outputPath: string): 
   const destination = path.resolve(outputPath);
   if (source === destination) throw new Error("Restore output must be a different file");
   const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
-  const sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
+  const sourcePathStat = fs.lstatSync(source);\n  if (sourcePathStat.isSymbolicLink() || !sourcePathStat.isFile()) throw new Error("Encrypted backup source must be a regular, non-symlink file");\n  const sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
   let envelope: string;
   try {
     const sourceStat = fs.fstatSync(sourceFd);
-    if (!sourceStat.isFile()) throw new Error("Encrypted backup source must be a regular file");
+    if (!sourceStat.isFile() || sourceStat.dev !== sourcePathStat.dev || sourceStat.ino !== sourcePathStat.ino) throw new Error("Encrypted backup source changed while it was being opened");
     const maxEncryptedBytes = Math.ceil(MAX_LEGACY_JSON_BYTES * 4 / 3) + 4096;
     if (sourceStat.size > maxEncryptedBytes) throw new Error("Encrypted backup exceeds the restore size limit");
     envelope = fs.readFileSync(sourceFd, "utf8").trim();
@@ -303,9 +303,17 @@ function importSourceFile(
   let sourceFd: number;
   let stat: fs.Stats;
   try {
+    const pathStat = fs.lstatSync(filePath);
+    if (pathStat.isSymbolicLink() || !pathStat.isFile()) {
+      return { sourceKey, status: "skipped", rowCount: 0, details: "Only regular, non-symlink legacy JSON files can be imported." };
+    }
     const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
     sourceFd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
     stat = fs.fstatSync(sourceFd);
+    if (stat.dev !== pathStat.dev || stat.ino !== pathStat.ino) {
+      fs.closeSync(sourceFd);
+      return { sourceKey, status: "skipped", rowCount: 0, details: "Legacy source changed while it was being opened." };
+    }
   } catch (error: any) {
     if (error?.code === "ENOENT") return { sourceKey, status: "missing", rowCount: 0 };
     return {
