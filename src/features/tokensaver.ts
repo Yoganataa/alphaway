@@ -1,8 +1,5 @@
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
 const securityGuard = require("../core/security-guard");
 const soulEngine = require("./soul-engine");
 const { dbGetSetting, dbSetSetting } = require("../core/database");
@@ -114,21 +111,6 @@ function rtkCompressText(text, maxLines = 250, deduplicate = true) {
 }
 
 // --- Configuration Management ---
-function getStateDir() {
-  const dir =
-    process.env.ALPHAWAY_STATE_DIR ||
-    process.env.OPENCODE_BRIDGE_STATE_DIR ||
-    path.join(os.homedir(), ".alphaway");
-  if (!fs.existsSync(dir)) {
-    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-  }
-  return dir;
-}
-
-function getConfigPath() {
-  return path.join(getStateDir(), "tokensaver.json");
-}
-
 const DEFAULT_CONFIG = {
   rtkEnabled: process.env.RTK_ENABLED === "1" || process.env.RTK_ENABLED === "true",
   rtkMaxLines: parseInt(process.env.RTK_MAX_LINES || "250", 10),
@@ -157,36 +139,19 @@ const DEFAULT_CONFIG = {
 let currentConfig = { ...DEFAULT_CONFIG };
 
 function loadConfig() {
-  try {
-    const fromDb = dbGetSetting("tokensaver_config", null);
-    if (fromDb && typeof fromDb === "object") {
-      currentConfig = { ...DEFAULT_CONFIG, ...fromDb };
-      return currentConfig;
-    }
-  } catch {}
-
-  try {
-    const filePath = getConfigPath();
-    if (fs.existsSync(filePath)) {
-      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      currentConfig = { ...DEFAULT_CONFIG, ...parsed };
-      try { dbSetSetting("tokensaver_config", currentConfig); } catch {}
-    }
-  } catch {}
+  const fromDb = dbGetSetting("tokensaver_config", null);
+  if (fromDb && typeof fromDb === "object" && !Array.isArray(fromDb)) {
+    currentConfig = { ...DEFAULT_CONFIG, ...fromDb };
+  }
   return currentConfig;
 }
 
 function saveConfig(updates) {
-  currentConfig = { ...currentConfig, ...updates };
-  try {
-    dbSetSetting("tokensaver_config", currentConfig);
-  } catch {}
-  try {
-    const filePath = getConfigPath();
-    fs.writeFileSync(filePath, JSON.stringify(currentConfig, null, 2), "utf8");
-  } catch (err) {
-    console.warn(`[AlphaWay] Failed to persist config: ${err.message}`);
-  }
+  const nextConfig = { ...currentConfig, ...updates };
+  // SQLite is authoritative. Do not report a successful update when the
+  // transaction failed to persist it.
+  dbSetSetting("tokensaver_config", nextConfig);
+  currentConfig = nextConfig;
   return currentConfig;
 }
 
