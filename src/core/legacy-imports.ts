@@ -1,9 +1,9 @@
 /**
  * One-time imports from AlphaWay's pre-canonical JSON persistence.
  *
- * Source files are never removed or rewritten. Each successfully parsed source
- * is recorded in legacy_imports in the same transaction as its imported data.
- * INSERT OR IGNORE protects data already saved in SQLite.
+ * Legacy source files are imported into canonical SQLite state, then replaced
+ * atomically with AES-256-GCM rollback envelopes. The import ledger prevents
+ * encrypted backups from being re-imported as JSON.
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -308,9 +308,8 @@ function importSourceFile(
     };
   }
 
-  // These files remain as rollback copies after import. Restrict their
-  // permissions before reading so legacy credentials are not world-readable
-  // on POSIX systems. Their contents are intentionally left unchanged.
+  // Restrict file access before reading. Successful imports and unparseable
+  // source files are replaced by authenticated encrypted rollback envelopes.
   if (process.platform !== "win32") {
     try { fs.chmodSync(filePath, 0o600); } catch {}
   }
@@ -343,7 +342,7 @@ function importSourceFile(
   if (prior?.checksum === checksum) {
     return {
       sourceKey,
-      status: "already-imported",
+      status: prior.status === "imported" ? "already-imported" : "skipped",
       rowCount: Number(prior.row_count || 0),
       details: prior.details || undefined,
     };
