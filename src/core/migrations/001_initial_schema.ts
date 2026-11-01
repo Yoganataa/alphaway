@@ -44,7 +44,7 @@ export const initialSchemaMigration: Migration = {
       CREATE INDEX IF NOT EXISTS idx_requests_protocol ON request_logs(protocol);
 
       CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
+        key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
