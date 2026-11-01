@@ -6,11 +6,12 @@ const path = require("node:path");
 const http = require("node:http");
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ofb-proxy-test-"));
+const previousStateDir = process.env.OPENCODE_BRIDGE_STATE_DIR;
 process.env.OPENCODE_BRIDGE_STATE_DIR = tmpDir;
 delete process.env.UPSTREAM_PROXY_URL;
 
 const proxy = require("../src/core/proxy");
-const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("../src/core/database");
+const { dbGetSetting, dbSetSetting, dbDeleteSetting, closeDatabase } = require("../src/core/database");
 const panel = require("../src/core/panel");
 const { app } = require("../src/app");
 
@@ -65,6 +66,7 @@ describe("egress proxy", () => {
   });
 
   after(() => {
+    closeDatabase();
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {}
@@ -215,6 +217,7 @@ describe("proxy HTTP surface", () => {
 
   before(async () => {
     emptyStateDir();
+    dbDeleteSetting("proxy_config");
     proxy.__reload();
     const testServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: app.fetch });
     port = testServer.port;
@@ -228,6 +231,12 @@ describe("proxy HTTP surface", () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    closeDatabase();
+    if (previousStateDir === undefined) delete process.env.OPENCODE_BRIDGE_STATE_DIR;
+    else process.env.OPENCODE_BRIDGE_STATE_DIR = previousStateDir;
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
   });
 
   it("serves the panel at / and keeps /health as JSON", async () => {
