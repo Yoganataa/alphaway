@@ -202,6 +202,27 @@ describe("codebuddy server integration tests", () => {
     }
   });
 
+  it("redacts upstream credential echoes from the interactive CLI probe result", async () => {
+    const previousStatus = mockResponseStatus;
+    const previousBody = mockResponseBody;
+    const previousSse = mockIsSSE;
+    mockResponseStatus = 401;
+    mockIsSSE = false;
+    mockResponseBody = JSON.stringify({ msg: "Rejected credential test-codebuddy-jwt-token" });
+
+    try {
+      const result = await codebuddy.testCodebuddyPing("test-codebuddy-jwt-token");
+      expect(result.ok).toBe(false);
+      expect(JSON.stringify(result)).not.toContain("test-codebuddy-jwt-token");
+      expect(result.raw).toBeUndefined();
+      expect(JSON.stringify(result)).toContain("[REDACTED]");
+    } finally {
+      mockResponseStatus = previousStatus;
+      mockResponseBody = previousBody;
+      mockIsSSE = previousSse;
+    }
+  });
+
   it("redacts CodeBuddy upstream credentials from error bodies", async () => {
     const testServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: app.fetch });
     const port = testServer.port;
