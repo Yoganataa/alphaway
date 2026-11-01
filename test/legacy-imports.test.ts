@@ -213,7 +213,7 @@ describe("legacy JSON import", () => {
     const expectedSourceKey = "custom_providers:" + path.resolve(source);
     const providerReport = reports.find((report) => report.sourceKey === expectedSourceKey);
     expect(providerReport?.status).toBe("skipped");
-    expect(providerReport?.details).toContain("non-symlink");
+    expect(providerReport?.details).toContain("Symlinked legacy JSON sources");
     expect(db.prepare("SELECT COUNT(*) AS count FROM custom_providers").get().count).toBe(0);
   }));
 
@@ -257,6 +257,25 @@ describe("legacy JSON import", () => {
     ).get();
     expect(ledger.status).toBe("imported");
   }));
+  it("encrypts structurally invalid JSON sources while preserving an explicit restore path", () => withSandbox(false, ({ db, stateDir }) => {
+    const file = path.join(stateDir, "custom_providers.json");
+    writeJson(stateDir, "custom_providers.json", { unexpected: "shape", token: "legacy-token-should-not-remain" });
+
+    const report = importLegacyJson(db, stateDir, []);
+    expect(report[0].status).toBe("skipped");
+    expect(report[0].details).toContain("Encrypted rollback copy retained");
+    const stored = fs.readFileSync(file, "utf8");
+    expect(isEncryptedSecret(stored.trim())).toBe(true);
+    expect(stored).not.toContain("legacy-token-should-not-remain");
+
+    const restored = path.join(stateDir, "restored-invalid-shape.json");
+    restoreLegacyBackup(file, restored);
+    expect(JSON.parse(fs.readFileSync(restored, "utf8"))).toEqual({
+      unexpected: "shape",
+      token: "legacy-token-should-not-remain",
+    });
+  }));
+
   it("does not resurrect deleted providers from a stale JSON mirror", () => withSandbox(false, ({ db, stateDir, legacyDir, readSetting }) => {
 
     db.prepare(`
