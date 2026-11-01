@@ -4,8 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runMigrations } from "../src/core/migrations";
-import { decryptSecret } from "../src/core/secrets";
-import { importLegacyJson } from "../src/core/legacy-imports";
+import { decryptSecret, isEncryptedSecret } from "../src/core/secrets";
+import { importLegacyJson, restoreLegacyBackup } from "../src/core/legacy-imports";
 
 describe("legacy JSON import", () => {
   const writeJson = (dir: string, name: string, value: unknown) => {
@@ -174,6 +174,22 @@ describe("legacy JSON import", () => {
     expect(fs.existsSync(path.join(stateDir, "tokensaver.json"))).toBe(true);
     expect(fs.existsSync(path.join(stateDir, "proxy.json"))).toBe(true);
 
+    for (const name of ["custom_providers.json", "usage_stats.json", "tokensaver.json", "proxy.json"]) {
+      const backup = fs.readFileSync(path.join(stateDir, name), "utf8");
+      expect(isEncryptedSecret(backup.trim())).toBe(true);
+      expect(backup).not.toContain("sk-legacy-deepseek");
+      expect(backup).not.toContain("user:secret");
+    }
+
+    const restoredPath = path.join(stateDir, "restored_custom_providers.json");
+    restoreLegacyBackup(path.join(stateDir, "custom_providers.json"), restoredPath);
+    const restoredProviders = JSON.parse(fs.readFileSync(restoredPath, "utf8"));
+    expect(restoredProviders[0].apiKey).toBe("sk-legacy-deepseek");
+    if (process.platform !== "win32") {
+      expect(fs.statSync(restoredPath).mode & 0o777).toBe(0o600);
+    }
+    expect(() => restoreLegacyBackup(path.join(stateDir, "custom_providers.json"), restoredPath)).toThrow();
+
     const second = importLegacyJson(db, stateDir, [legacyDir!]);
     expect(second.every((report) => report.status === "already-imported")).toBe(true);
     expect(db.prepare("SELECT COUNT(*) AS count FROM custom_providers").get().count).toBe(1);
@@ -210,8 +226,15 @@ describe("legacy JSON import", () => {
     expect(skipped[0].status).toBe("skipped");
     expect(skipped[0].details).toContain("Invalid JSON");
 
+    const encryptedInvalidBackup = fs.readFileSync(file, "utf8");
+    expect(isEncryptedSecret(encryptedInvalidBackup.trim())).toBe(true);
+    const restoredInvalidPath = path.join(stateDir, "invalid-restored.json");
+    restoreLegacyBackup(file, restoredInvalidPath);
+    expect(fs.readFileSync(restoredInvalidPath, "utf8")).toBe("{broken json");
+
     const unchanged = importLegacyJson(db, stateDir, []);
-    expect(unchanged[0].status).toBe("already-imported");
+    expect(unchanged[0].status).toBe("skipped");
+    expect(unchanged[0].details).toContain("Encrypted rollback copy");
 
     // An operator may repair the source file and retry without manually
     // deleting its ledger row. The changed checksum permits a retry.
