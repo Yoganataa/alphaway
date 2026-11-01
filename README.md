@@ -38,7 +38,10 @@
   - **Interactive Playground (`/dashboard/playground`)**: Multi-model prompt test suite with streaming SSE output and real-time reasoning content.
 - **Embedded SQLite Storage Engine**:
   - Native Bun SQLite (`bun:sqlite`) ACID persistence with WAL mode concurrency (`~/.alphaway/alphaway.sqlite`).
-  - Indexed queries for request logs, custom providers, and settings with automated fallback and migration.
+  - Versioned, ordered schema migrations recorded in `schema_migrations`; each migration and its version record commit atomically.
+  - SQLite is the canonical store for request logs and usage snapshots, custom providers, TokenSaver configuration, proxy pool settings, and application settings.
+  - Legacy `custom_providers.json`, `usage_stats.json`, `tokensaver.json`, and `proxy.json` are imported once through a checksum-backed `legacy_imports` ledger. Source files are preserved as recovery copies; they are not used as write mirrors.
+  - Destructive future migrations require a successful SQLite backup before execution; backups are written under the database directory's `backups/` folder.
 - **100% Bun-Native Architecture & BoringSSL TLS Parity**:
   - Engineered from the ground up exclusively for the **Bun** runtime (zero Node.js dependencies, native `bun:sqlite` engine, and high-performance Hono on Bun HTTP).
   - Official ClientHello BoringSSL parity (17 cipher suites & 12 extensions) to bypass upstream gate `403 FreeTierError` fingerprint detection.
