@@ -13,6 +13,7 @@ import { runMigrations } from "./migrations";
 import { createMigrationBackup } from "./migrations/backup";
 import { importLegacyJson } from "./legacy-imports";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "./secrets";
+import { hasEmbeddedProviderUrlSecrets } from "./provider-url-secrets";
 
 export interface CustomProviderRow {
   id: string;
@@ -171,8 +172,20 @@ export function dbLoadCustomProviders(): CustomProviderRow[] {
   const db = getDatabase();
   const rows = db.prepare("SELECT * FROM custom_providers ORDER BY created_at ASC").all();
   const migrateKey = db.prepare("UPDATE custom_providers SET api_key = ? WHERE id = ?");
+  const migrateBaseUrl = db.prepare("UPDATE custom_providers SET base_url = ? WHERE id = ?");
 
   return rows.map((r: any) => {
+    let baseUrl = String(r.base_url || "");
+    if (isEncryptedSecret(baseUrl)) {
+      baseUrl = decryptSecret(baseUrl);
+    } else if (hasEmbeddedProviderUrlSecrets(baseUrl)) {
+      // Legacy records may have credentials embedded in base URLs. Encrypt the
+      // original URL before exposing it to internal provider dispatch.
+      const encryptedBaseUrl = encryptSecret(baseUrl);
+      migrateBaseUrl.run(encryptedBaseUrl, r.id);
+      baseUrl = decryptSecret(encryptedBaseUrl);
+    }
+
     let apiKey = String(r.api_key || "");
     if (apiKey.includes("xxxxxxxx")) {
       if (apiKey) migrateKey.run("", r.id);
@@ -189,7 +202,7 @@ export function dbLoadCustomProviders(): CustomProviderRow[] {
     return {
       id: r.id,
       name: r.name,
-      baseUrl: r.base_url,
+      baseUrl,
       apiKey,
       protocol: r.protocol === "anthropic" ? "anthropic" : "openai",
       models: safeParseJson(r.models, ["default-model"]),
@@ -216,7 +229,7 @@ export function dbSaveCustomProvider(provider: CustomProviderRow): void {
   stmt.run(
     provider.id,
     provider.name,
-    provider.baseUrl,
+    hasEmbeddedProviderUrlSecrets(provider.baseUrl) ? encryptSecret(provider.baseUrl) : provider.baseUrl,
     encryptSecret(String(provider.apiKey || "").includes("xxxxxxxx") ? "" : provider.apiKey),
     provider.protocol,
     JSON.stringify(provider.models || []),
