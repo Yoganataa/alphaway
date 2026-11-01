@@ -53,25 +53,19 @@ export function encryptExistingMigrationBackups(backupDir: string, legacyDatabas
   const directoryStat = fs.lstatSync(backupDir);
   if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) throw new Error("Migration backup directory must be a regular directory");
   if (process.platform !== "win32") fs.chmodSync(backupDir, 0o700);
-  const legacyRestorePattern = legacyDatabaseName
-    ? new RegExp("^" + legacyDatabaseName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\export function encryptExistingMigrationBackups(backupDir: string): string[] {
-  if (!fs.existsSync(backupDir)) return [];
-  const directoryStat = fs.lstatSync(backupDir);
-  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) throw new Error("Migration backup directory must be a regular directory");
-  if (process.platform !== "win32") fs.chmodSync(backupDir, 0o700);
   const encrypted: string[] = [];
   for (const name of fs.readdirSync(backupDir)) {
-    if (!/^alphaway-before-.+\.sqlite$/i.test(name)) continue;") + "\\.pre-restore-.+\\.sqlite$", "i")
-    : null;
-  const encrypted: string[] = [];
-  for (const name of fs.readdirSync(backupDir)) {
-    if (!/^alphaway-before-.+\.sqlite$/i.test(name) && !legacyRestorePattern?.test(name)) continue;
+    const legacyMigration = /^alphaway-before-.+\.sqlite$/i.test(name);
+    const legacyRestore = Boolean(legacyDatabaseName && name.startsWith(legacyDatabaseName + ".pre-restore-") && name.endsWith(".sqlite"));
+    if (!legacyMigration && !legacyRestore) continue;
     const source = path.join(backupDir, name);
     const target = source + ".awenc";
     if (fs.existsSync(target)) {
       const encryptedFile = readRegularFile(target).bytes.toString("utf8").trim();
       if (!isEncryptedSecret(encryptedFile)) throw new Error("Existing encrypted migration backup is invalid");
-      const decoded = Buffer.from(decryptSecret(encryptedFile), "base64");
+      const decodedText = decryptSecret(encryptedFile);
+      const decoded = Buffer.from(decodedText, "base64");
+      if (!decoded.length || decoded.toString("base64") !== decodedText) throw new Error("Existing encrypted migration backup is malformed");
       const legacy = readRegularFile(source);
       if (sha256(decoded) !== sha256(legacy.bytes)) throw new Error("Existing encrypted migration backup does not match its plaintext source");
       fs.unlinkSync(source);
