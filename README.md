@@ -89,7 +89,7 @@ The installer downloads a complete source snapshot, builds the dashboard and Bun
 curl -fsSL https://raw.githubusercontent.com/Yoganataa/alphaway/main/install.sh | bash
 ```
 
-By default, the application is installed under `~/.alphaway/app`, configuration is stored in `~/.alphaway/.env`, and database state remains under `~/.alphaway`. Set `BINDIR`, `PORT`, or `HOST` to customize the installation. To install from a local checkout without starting a service, run `SOURCE=local NO_START=1 bash install.sh`.
+By default, the application is installed under `~/.alphaway/app`, configuration is stored in `~/.alphaway/.env`, and database state remains under `~/.alphaway`. Set `BINDIR`, `PORT`, or `HOST` to customize the installation. To run an isolated install smoke test from a local checkout without starting a service, use `BINDIR="$(mktemp -d)" SOURCE=local NO_START=1 bash install.sh`.
 
 Windows is not supported by this shell installer. A Windows executable can be cross-compiled from Bun using the command below.
 
