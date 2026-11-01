@@ -168,7 +168,7 @@ function importUsageStats(db: any, payload: any): ImportOutcome {
   return { status: "imported", rowCount };
 }
 
-function importSetting(db: any, key: string): ImportHandler {
+function importSetting(key: string): ImportHandler {
   return (database, payload) => {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return { status: "skipped", rowCount: 0, details: "Expected a JSON object." };
