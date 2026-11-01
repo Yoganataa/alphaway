@@ -5,14 +5,14 @@
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `chore/phase-0-ci-distribution`  
-> **Last implementation HEAD before this checkpoint update:** `4e216e01509a9301e41135bbb8bbf364edea2215`  
+> **Last implementation HEAD before this checkpoint update:** `e1d8fbbe2a8f0a360109e48f476d9745cdefda4a`  
 > **Base main HEAD:** `93b7945c6d6b32c8fa09b9aad65b6ce6839f9c95`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
 > **PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
 
 ## 1. Current Status
 
-**Phase 0 is complete on the implementation branch.** All required GitHub Actions jobs passed in run `41320438608`. PR #1 is open and has not been merged into `main`.
+**Phase 0 is complete on the implementation branch.** All required GitHub Actions jobs passed on Bun 1.4.4 in run `41322403767`. PR #1 is open and has not been merged into `main`.
 
 - [x] Repository and baseline structure inspected.
 - [x] Existing product capabilities and major implementation risks recorded.
@@ -28,7 +28,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Implementation branch changes are limited to Phase 0; no application feature work for later phases has started. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so all verification below comes from GitHub Actions. Baseline `main` run `41317617602` had failed on stale `.test.js` paths and the absent `test:node` script. The final current-branch run `41320438608` completed successfully: 270 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed, and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
+Implementation branch changes are limited to Phase 0; no application feature work for later phases has started. Local execution was not available in this environment (Bun is not installed and a repository clone could not be made), so all verification below comes from GitHub Actions. Baseline `main` run `41317617602` had failed on stale `.test.js` paths and the absent `test:node` script. The final current-branch run `41322403767` completed successfully with Bun 1.4.4: 270 unit/protocol tests passed (0 failed), 8 Playwright E2E tests passed (0 failed), build and fingerprint checks passed (17 ciphers, 12 extensions), and the installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
 
 ## 2. Agreed Product Direction
 
@@ -148,12 +148,12 @@ Also inspect the current `9router-go` frontend and pin the exact upstream commit
 
 ### Final verification evidence
 
-GitHub Actions [run `41320438608`](https://github.com/Yoganataa/alphaway/actions/runs/41320438608), branch HEAD `4e216e01509a9301e41135bbb8bbf364edea2215`:
+GitHub Actions [run `41322403767`](https://github.com/Yoganataa/alphaway/actions/runs/41322403767), branch HEAD `e1d8fbbe2a8f0a360109e48f476d9745cdefda4a`:
 
 | Job / check | Result |
 |---|---|
 | Unit and protocol tests | **270 passed, 0 failed**, 25 files |
-| OpenCode transport fingerprint | Bun 1.4.3 matched baseline: 17 ciphers, 12 extensions |
+| OpenCode transport fingerprint | Bun 1.4.4 matched baseline: 17 ciphers, 12 extensions |
 | UI and standalone binary build | Passed |
 | Installer and embedded dashboard smoke | Passed |
 | Fresh install | Passed |
