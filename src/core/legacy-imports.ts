@@ -212,9 +212,10 @@ function importSetting(key: string): ImportHandler {
   };
 }
 
-function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksum: string): boolean {
+function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksum: string, expectedStat?: fs.Stats): boolean {
   const currentStat = fs.lstatSync(filePath);
   if (currentStat.isSymbolicLink() || !currentStat.isFile()) return false;
+  if (expectedStat && (currentStat.dev !== expectedStat.dev || currentStat.ino !== expectedStat.ino)) return false;
   if (process.platform !== "win32") {
     try { fs.chmodSync(filePath, 0o600); } catch {}
   }
@@ -298,35 +299,45 @@ function importSourceFile(
 
   // Completed imports are immutable. If an older build left the original JSON
   // source in plaintext, secure it after checking its ledger entry below.
-  const stat = fs.lstatSync(filePath);
-  if (stat.isSymbolicLink() || !stat.isFile()) {
+  let sourceFd: number;
+  let stat: fs.Stats;
+  try {
+    const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+    sourceFd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    stat = fs.fstatSync(sourceFd);
+  } catch (error: any) {
+    if (error?.code === "ENOENT") return { sourceKey, status: "missing", rowCount: 0 };
     return {
       sourceKey,
       status: "skipped",
       rowCount: 0,
-      details: "Only regular, non-symlink legacy JSON files can be imported.",
+      details: error?.code === "ELOOP"
+        ? "Symlinked legacy JSON sources are not imported."
+        : `Could not safely open the legacy source: ${error?.code || "I/O error"}.`,
     };
   }
 
-  // Restrict file access before reading. Successful imports and unparseable
-  // source files are replaced by authenticated encrypted rollback envelopes.
-  if (process.platform !== "win32") {
-    try { fs.chmodSync(filePath, 0o600); } catch {}
+  let raw: string;
+  try {
+    if (!stat.isFile()) {
+      return { sourceKey, status: "skipped", rowCount: 0, details: "Only regular legacy JSON files can be imported." };
+    }
+    if (process.platform !== "win32") fs.fchmodSync(sourceFd, 0o600);
+    if (stat.size > MAX_LEGACY_JSON_BYTES) {
+      return {
+        sourceKey,
+        status: "skipped",
+        rowCount: 0,
+        details: `File exceeds the ${MAX_LEGACY_JSON_BYTES}-byte import limit.`,
+      };
+    }
+    raw = fs.readFileSync(sourceFd, "utf8");
+  } finally {
+    fs.closeSync(sourceFd);
   }
-
-  if (stat.size > MAX_LEGACY_JSON_BYTES) {
-    return {
-      sourceKey,
-      status: "skipped",
-      rowCount: 0,
-      details: `File exceeds the ${MAX_LEGACY_JSON_BYTES}-byte import limit.`,
-    };
-  }
-
-  const raw = fs.readFileSync(filePath, "utf8");
   if (prior?.status === "imported") {
     if (!isEncryptedSecret(raw.trim())) {
-      const secured = secureLegacyBackup(filePath, raw, sha256(raw));
+      const secured = secureLegacyBackup(filePath, raw, sha256(raw), stat);
       const details = secured
         ? "Canonical SQLite data retained; legacy rollback copy encrypted in place."
         : "Canonical SQLite data retained; legacy source changed during backup and remains owner-restricted plaintext."; 
@@ -353,7 +364,7 @@ function importSourceFile(
     payload = JSON.parse(raw);
   } catch (error) {
     const parseError = `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`;
-    const secured = secureLegacyBackup(filePath, raw, checksum);
+    const secured = secureLegacyBackup(filePath, raw, checksum, stat);
     const details = parseError + (secured
       ? " Encrypted rollback copy retained; restore with --restore-legacy-backup before editing or retrying."
       : " Source remains owner-restricted plaintext because it changed during backup; retry after resolving the file race.");
