@@ -6,6 +6,7 @@
  */
 
 import { openAIToAnthropicRequest } from "./protocol-translator";
+import { hasEmbeddedProviderUrlSecrets, redactProviderBaseUrl } from "./provider-url-secrets";
 import {
   dbLoadCustomProviders,
   dbSaveCustomProvider,
@@ -51,7 +52,16 @@ export function addOrUpdateCustomProvider(provider: Partial<CustomProvider> & { 
   }
   if (!apiKey || apiKey === "none") apiKey = existing?.apiKey || "";
 
-  const baseUrl = (provider.baseUrl || "").trim().replace(/\/+$/, "");
+  const submittedBaseUrl = (provider.baseUrl || "").trim().replace(/\/+$/, "");
+  const keepExistingEmbeddedCredential = Boolean(
+    existing &&
+    hasEmbeddedProviderUrlSecrets(existing.baseUrl) &&
+    redactProviderBaseUrl(existing.baseUrl).replace(/\/+$/, "") === submittedBaseUrl &&
+    (!provider.apiKey || provider.apiKey === "none")
+  );
+  // The dashboard receives a redacted base URL. Preserve the encrypted source
+  // URL when an edit only changes metadata and does not provide a new key.
+  const baseUrl = keepExistingEmbeddedCredential ? existing!.baseUrl : submittedBaseUrl;
   const updated: CustomProvider = {
     id,
     name: provider.name.trim(),
