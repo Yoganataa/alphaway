@@ -54,7 +54,7 @@ describe("current AlphaWay installer and distribution contract", () => {
     expect(installer).toContain("install_system_service");
     expect(installer).toContain("install_user_service");
     expect(installer).toContain("install_launchd_service");
-    expect(installer).toContain("ExecStart=$APPDIR/alphaway");
+    expect(installer).toContain('ExecStart="$APPDIR/alphaway"');
   });
 
   it("does not use the obsolete root-level JavaScript server layout", () => {
