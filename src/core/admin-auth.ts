@@ -58,14 +58,22 @@ function removeBootstrapToken(): void {
 function readBootstrapToken(): string | null {
   const filePath = getAdminBootstrapTokenPath();
   try {
-    const stat = fs.lstatSync(filePath);
-    if (!stat.isFile() || stat.isSymbolicLink()) {
+    const pathStat = fs.lstatSync(filePath);
+    if (!pathStat.isFile() || pathStat.isSymbolicLink()) {
       throw new Error("Administrator bootstrap token path must be a regular file");
     }
-    if (process.platform !== "win32") {
-      try { fs.chmodSync(filePath, 0o600); } catch {}
+    const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+    const fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    try {
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile() || stat.dev !== pathStat.dev || stat.ino !== pathStat.ino) {
+        throw new Error("Administrator bootstrap token path changed while it was being opened");
+      }
+      if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
+      return fs.readFileSync(fd, "utf8").trim();
+    } finally {
+      fs.closeSync(fd);
     }
-    return fs.readFileSync(filePath, "utf8").trim();
   } catch (error: any) {
     if (error?.code === "ENOENT") return null;
     throw error;
