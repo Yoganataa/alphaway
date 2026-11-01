@@ -28,6 +28,7 @@ import {
   type ResponsesRequest,
 } from "../core/protocol-translator";
 import { findCustomProviderForModel, forwardToCustomProvider } from "../core/custom-providers";
+import { embeddedProviderUrlSecrets } from "../core/provider-url-secrets";
 const identity = require("../core/identity");
 import * as tokensaver from "../features/tokensaver";
 import { recordRequestUsage, estimateTokensFromText } from "../core/usage-tracker";
@@ -74,9 +75,11 @@ async function dispatchToUpstream(
     if (!upstreamRes.ok) {
       const errText = await upstreamRes.text();
       const providerSecret = String(customMatch.provider.apiKey || "");
-      const safeError = providerSecret
-        ? errText.replaceAll(providerSecret, "[REDACTED]")
-        : errText;
+      let safeError = errText;
+      const providerSecrets = [providerSecret, ...embeddedProviderUrlSecrets(customMatch.provider.baseUrl)];
+      for (const secret of providerSecrets) {
+        if (secret) safeError = safeError.replaceAll(secret, "[REDACTED]");
+      }
       return new Response(safeError, {
         status: upstreamRes.status,
         headers: { "Content-Type": "application/json" },
