@@ -158,8 +158,13 @@ describe("legacy JSON import", () => {
     ).get().count;
     expect(importedCount).toBe(5);
 
-    // Source files are intentionally retained as a recovery/inspection copy.
+    // Source files are retained as recovery copies, but POSIX permissions are
+    // restricted because legacy JSON may still contain plaintext credentials.
     expect(fs.existsSync(path.join(stateDir, "custom_providers.json"))).toBe(true);
+    if (process.platform !== "win32") {
+      expect(fs.statSync(path.join(stateDir, "custom_providers.json")).mode & 0o777).toBe(0o600);
+      expect(fs.statSync(path.join(stateDir, "proxy.json")).mode & 0o777).toBe(0o600);
+    }
     expect(fs.existsSync(path.join(stateDir, "usage_stats.json"))).toBe(true);
     expect(fs.existsSync(path.join(stateDir, "tokensaver.json"))).toBe(true);
     expect(fs.existsSync(path.join(stateDir, "proxy.json"))).toBe(true);
@@ -170,6 +175,26 @@ describe("legacy JSON import", () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM request_logs").get().count).toBe(1);
     expect(db.prepare("SELECT COUNT(*) AS count FROM legacy_imports").get().count).toBe(5);
   }));
+  it("refuses symlinked legacy JSON sources instead of reading through them", () => withSandbox(false, ({ db, stateDir }) => {
+    const target = path.join(stateDir, "provider-data.json");
+    const source = path.join(stateDir, "custom_providers.json");
+    writeJson(stateDir, "provider-data.json", [{
+      id: "must-not-import",
+      name: "Linked Provider",
+      baseUrl: "https://provider.example.test/v1",
+      apiKey: "sk-should-not-be-imported",
+      models: ["linked-model"],
+    }]);
+    fs.symlinkSync(target, source);
+
+    const reports = importLegacyJson(db, stateDir, []);
+    const expectedSourceKey = "custom_providers:" + path.resolve(source);
+    const providerReport = reports.find((report) => report.sourceKey === expectedSourceKey);
+    expect(providerReport?.status).toBe("skipped");
+    expect(providerReport?.details).toContain("non-symlink");
+    expect(db.prepare("SELECT COUNT(*) AS count FROM custom_providers").get().count).toBe(0);
+  }));
+
   it("records invalid JSON as skipped and retries after the source changes", () => withSandbox(false, ({ db, stateDir, legacyDir, readSetting }) => {
 
     const file = path.join(stateDir, "custom_providers.json");
