@@ -113,7 +113,7 @@ describe("3rd-Party Custom Providers Engine", () => {
     addOrUpdateCustomProvider({
       id: providerId,
       name: "Secret Redaction Test",
-      baseUrl: "https://provider.example.test/v1",
+      baseUrl: "https://provider.example.test/v1/chat/completions?api_key=url-embedded-secret-987654321",
       apiKey: providerSecret,
       protocol: "openai",
       models: ["secret-redaction-model"],
@@ -122,10 +122,10 @@ describe("3rd-Party Custom Providers Engine", () => {
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (input, init) => {
-      expect(String(input)).toBe("https://provider.example.test/v1/chat/completions");
+      expect(String(input)).toBe("https://provider.example.test/v1/chat/completions?api_key=url-embedded-secret-987654321");
       const headers = new Headers(init?.headers);
       expect(headers.get("authorization")).toBe(`Bearer ${providerSecret}`);
-      return new Response(JSON.stringify({ error: { message: `Rejected key ${providerSecret}` } }), {
+      return new Response(JSON.stringify({ error: { message: `Rejected key ${providerSecret} and URL key url-embedded-secret-987654321` } }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
       });
@@ -146,6 +146,7 @@ describe("3rd-Party Custom Providers Engine", () => {
       expect(response.status).toBe(401);
       const body = await response.text();
       expect(body).not.toContain(providerSecret);
+      expect(body).not.toContain("url-embedded-secret-987654321");
       expect(body).toContain("[REDACTED]");
     } finally {
       globalThis.fetch = originalFetch;
