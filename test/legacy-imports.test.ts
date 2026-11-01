@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
 import fs from "node:fs";
 import os from "node:os";
@@ -7,35 +7,43 @@ import { runMigrations } from "../src/core/migrations";
 import { importLegacyJson } from "../src/core/legacy-imports";
 
 describe("legacy JSON import", () => {
-  let db: Database | undefined;
-  let stateDir: string | undefined;
-  let legacyDir: string | undefined;
-
   const writeJson = (dir: string, name: string, value: unknown) => {
     fs.writeFileSync(path.join(dir, name), JSON.stringify(value, null, 2), "utf8");
   };
 
-  const readSetting = (key: string) => {
-    const row = db!.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as
-      | { value: string }
-      | null;
-    return row ? JSON.parse(row.value) : null;
-  };
-
-  afterEach(() => {
-    db?.close();
-    db = undefined;
-    if (stateDir) fs.rmSync(stateDir, { recursive: true, force: true });
-    if (legacyDir) fs.rmSync(legacyDir, { recursive: true, force: true });
-    stateDir = undefined;
-    legacyDir = undefined;
-  });
-
-  it("imports providers, usage, TokenSaver and proxy settings exactly once", () => {
-    db = new Database(":memory:");
+  function withSandbox<T>(
+    includeLegacy: boolean,
+    run: (context: {
+      db: Database;
+      stateDir: string;
+      legacyDir?: string;
+      readSetting: (key: string) => any;
+    }) => T
+  ): T {
+    const db = new Database(":memory:");
     runMigrations(db);
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-state-"));
-    legacyDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-legacy-"));
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-state-"));
+    const legacyDir = includeLegacy
+      ? fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-legacy-"))
+      : undefined;
+
+    const readSetting = (key: string) => {
+      const row = db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as
+        | { value: string }
+        | null;
+      return row ? JSON.parse(row.value) : null;
+    };
+
+    try {
+      return run({ db, stateDir, legacyDir, readSetting });
+    } finally {
+      db.close();
+      fs.rmSync(stateDir, { recursive: true, force: true });
+      if (legacyDir) fs.rmSync(legacyDir, { recursive: true, force: true });
+    }
+  }
+
+  it("imports providers, usage, TokenSaver and proxy settings exactly once", () => withSandbox(true, ({ db, stateDir, legacyDir, readSetting }) => {
 
     // SQLite settings are authoritative and must not be replaced by old files.
     db.prepare(
@@ -123,14 +131,14 @@ describe("legacy JSON import", () => {
     expect(provider.api_key).toBe("sk-legacy-deepseek");
     expect(JSON.parse(provider.models)).toEqual(["deepseek-chat"]);
 
-    const usage = readSetting("usage_stats_snapshot");
+    const usage = readSetting(db, "usage_stats_snapshot");
     expect(usage.totalRequests).toBe(4);
     expect(usage.dailyHistory["2026-10-31"].tokens).toBe(200);
     expect(db.prepare("SELECT id FROM request_logs WHERE id = ?").get("req_legacy_001")).toBeDefined();
 
     // Pre-existing SQLite state wins over either JSON source.
-    expect(readSetting("tokensaver_config")).toEqual({ rtkEnabled: false, soulMode: "custom" });
-    expect(readSetting("proxy_config")).toEqual({
+    expect(readSetting(db, "tokensaver_config")).toEqual({ rtkEnabled: false, soulMode: "custom" });
+    expect(readSetting(db, "proxy_config")).toEqual({
       url: "http://user:secret@127.0.0.1:3128",
       strategy: "failover",
       pool: [{ id: "egress-1", label: "primary", url: "http://user:secret@127.0.0.1:3128", enabled: true, weight: 1 }],
@@ -154,12 +162,8 @@ describe("legacy JSON import", () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM custom_providers").get().count).toBe(1);
     expect(db.prepare("SELECT COUNT(*) AS count FROM request_logs").get().count).toBe(1);
     expect(db.prepare("SELECT COUNT(*) AS count FROM legacy_imports").get().count).toBe(5);
-  });
-
-  it("records invalid JSON as skipped and retries after the source changes", () => {
-    db = new Database(":memory:");
-    runMigrations(db);
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-state-"));
+  }));
+  it("records invalid JSON as skipped and retries after the source changes", () => withSandbox(false, ({ db, stateDir, legacyDir, readSetting }) => {
 
     const file = path.join(stateDir, "custom_providers.json");
     fs.writeFileSync(file, "{broken json", "utf8");
@@ -191,12 +195,8 @@ describe("legacy JSON import", () => {
       "SELECT status FROM legacy_imports WHERE source_key LIKE 'custom_providers:%'"
     ).get();
     expect(ledger.status).toBe("imported");
-  });
-
-  it("does not resurrect deleted providers from a stale JSON mirror", () => {
-    db = new Database(":memory:");
-    runMigrations(db);
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-state-"));
+  }));
+  it("does not resurrect deleted providers from a stale JSON mirror", () => withSandbox(false, ({ db, stateDir, legacyDir, readSetting }) => {
 
     db.prepare(`
       INSERT INTO custom_providers (
@@ -222,12 +222,8 @@ describe("legacy JSON import", () => {
 
     const ids = db.prepare("SELECT id FROM custom_providers ORDER BY id").all().map((row: any) => row.id);
     expect(ids).toEqual(["current-provider"]);
-  });
-
-  it("does not merge stale recent usage logs when a canonical SQLite snapshot exists", () => {
-    db = new Database(":memory:");
-    runMigrations(db);
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-state-"));
+  }));
+  it("does not merge stale recent usage logs when a canonical SQLite snapshot exists", () => withSandbox(false, ({ db, stateDir, legacyDir, readSetting }) => {
 
     db.prepare(
       "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)"
@@ -257,19 +253,14 @@ describe("legacy JSON import", () => {
     const report = importLegacyJson(db, stateDir, []);
     expect(report).toHaveLength(1);
     expect(report[0].details).toContain("Existing SQLite usage snapshot was retained");
-    expect(readSetting("usage_stats_snapshot")).toEqual({
+    expect(readSetting(db, "usage_stats_snapshot")).toEqual({
       totalRequests: 9,
       totalTokens: 900,
       recentLogs: [],
     });
     expect(db.prepare("SELECT COUNT(*) AS count FROM request_logs").get().count).toBe(0);
-  });
-
-  it("imports from the legacy bridge directory when the current state has no source file", () => {
-    db = new Database(":memory:");
-    runMigrations(db);
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-state-"));
-    legacyDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-legacy-"));
+  }));
+  it("imports from the legacy bridge directory when the current state has no source file", () => withSandbox(true, ({ db, stateDir, legacyDir, readSetting }) => {
 
     writeJson(legacyDir, "custom_providers.json", [
       {
@@ -285,5 +276,5 @@ describe("legacy JSON import", () => {
     expect(report).toHaveLength(1);
     expect(report[0].status).toBe("imported");
     expect(db.prepare("SELECT id FROM custom_providers WHERE id = ?").get("old-root-provider")).toBeDefined();
-  });
+  }));
 });
