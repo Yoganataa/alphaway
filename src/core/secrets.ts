@@ -38,6 +38,28 @@ function configuredKey(): Buffer | null {
   return value;
 }
 
+function readKeyFile(filePath: string): Buffer {
+  const pathStat = fs.lstatSync(filePath);
+  if (!pathStat.isFile() || pathStat.isSymbolicLink()) {
+    throw new Error("Secret encryption key path must be a regular file");
+  }
+  const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.dev !== pathStat.dev || stat.ino !== pathStat.ino) {
+      throw new Error("Secret encryption key path changed while it was being opened");
+    }
+    const value = fs.readFileSync(fd);
+    if (value.length !== KEY_BYTES) {
+      throw new Error("Secret encryption key file has an invalid length; restore the original key before continuing");
+    }
+    if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
+    return value;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
 function loadOrCreateKey(): Buffer {
   const override = configuredKey();
   if (override) return override;
@@ -56,22 +78,10 @@ function loadOrCreateKey(): Buffer {
 
   const filePath = path.join(directory, "secret-encryption.key");
   try {
-    const stat = fs.lstatSync(filePath);
-    if (!stat.isFile() || stat.isSymbolicLink()) {
-      throw new Error("Secret encryption key path must be a regular file");
-    }
-    const value = fs.readFileSync(filePath);
-    if (value.length !== KEY_BYTES) {
-      throw new Error("Secret encryption key file has an invalid length; restore the original key before continuing");
-    }
-    if (process.platform !== "win32") {
-      try { fs.chmodSync(filePath, 0o600); } catch {}
-    }
-    return value;
+    return readKeyFile(filePath);
   } catch (error: any) {
     if (error?.code !== "ENOENT") throw error;
   }
-
   const value = randomBytes(KEY_BYTES);
   try {
     const fd = fs.openSync(filePath, "wx", 0o600);
@@ -83,7 +93,7 @@ function loadOrCreateKey(): Buffer {
     }
   } catch (error: any) {
     if (error?.code !== "EEXIST") throw error;
-    const existing = fs.readFileSync(filePath);
+    const existing = readKeyFile(filePath);
     if (existing.length !== KEY_BYTES) {
       throw new Error("Concurrent secret encryption key creation produced an invalid file");
     }
