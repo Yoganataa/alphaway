@@ -86,6 +86,24 @@ describe("administrator authentication and managed gateway API keys", () => {
       expect((await response.json()).error.code).toBe("invalid_api_key");
     }
   });
+  it("rejects control characters in API key labels before logging them", async () => {
+    await adminHeaders();
+    const created = await adminRequest("/api/keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Client\\nForged log entry" }),
+    });
+    expect(created.status).toBe(400);
+
+    const issued = issueAPIKey("Valid Label");
+    const renamed = await adminRequest(`/api/keys/${issued.record.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Changed\\rLabel" }),
+    });
+    expect(renamed.status).toBe(400);
+  });
+
   it("issues a random key once, lists metadata only, and authorizes inference", async () => {
     await adminHeaders();
     const created = await adminRequest("/api/keys", {
