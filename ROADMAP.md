@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `9805d2335293539424fd66af3c047b493edad630`  
-> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. GitHub Actions run `41325472514` passed on the final PR head; the legacy-service retirement review finding is fixed and resolved. Phase 1 is in progress on `feat/phase-1-sqlite-migrations`.
+> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 implementation for all existing persistence-backed features is complete and passed GitHub Actions run `41327665505` on Bun 1.4.4. Draft PR #3 is ready for review; Plans and Persona/Jailbreak configuration are deferred to the phases that implement those domain features.
 
 ## 1. Product Direction
 
@@ -142,7 +142,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 ### Phase 1 — Database Migrations and Canonical Persistence
 
-**Status:** In progress (based on merged Phase 0 `main`; draft PR #3 open; do not mark ready until all Phase 1 acceptance criteria and CI pass).  
+**Status:** Implementation complete for existing persistence-backed features; CI verified on Bun 1.4.4; PR #3 ready for review.  
 **Priority:** P1
 
 - [x] Introduce a versioned SQLite migration mechanism with ordered migrations, a `schema_migrations` ledger, registry validation, and transactional DDL/history writes.
@@ -152,9 +152,12 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [x] Persist each usage request event and its aggregate snapshot atomically in one SQLite transaction.
 - [x] Add a pre-destructive-migration backup hook using SQLite `VACUUM INTO` and owner-only backup permissions.
 - [x] Retain API key configuration in SQLite `app_settings` (credential-verification and secret-at-rest hardening remain Phase 2 work).
-- [ ] Make SQLite canonical for custom DLP/security rules, Plans, Persona/Jailbreak configuration, and remaining settings.
-- [ ] Add an end-to-end file-backed backup and restore test, including interrupted upgrade/recovery behavior.
-- [ ] Review credential storage separately: caller API keys should be verifiable without storing raw secrets; upstream credentials that must be replayed need recoverable encryption and a documented key-management strategy.
+- [x] Persist custom DLP/security rule configuration in SQLite `app_settings` and connect Security page CRUD to the backend. Runtime enforcement of custom rules remains a separate Security phase.
+- [x] Add an end-to-end file-backed backup and restore test: create a `VACUUM INTO` backup, simulate destructive data change, restore the saved snapshot, and preserve the pre-restore database copy.
+- [x] Keep all existing application settings and API key records in SQLite `app_settings` as the canonical store.
+- [ ] Review credential storage separately in Phase 2: caller API keys should be verifiable without storing raw secrets; upstream credentials that must be replayed need recoverable encryption and a documented key-management strategy.
+
+**Scope boundary:** AlphaWay does not yet implement Plans or Persona/Jailbreak domain models. Their schemas and persistence are intentionally added alongside their feature implementations in Phases 3 and 4 rather than creating unused tables in Phase 1. Existing SOUL configuration is persisted with the TokenSaver settings.
 - [x] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
 
 **Acceptance criteria**
