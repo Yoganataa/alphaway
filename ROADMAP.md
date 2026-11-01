@@ -4,7 +4,7 @@
 >
 > **Last updated:** 2026-11-01  
 > **Planning baseline:** `main` at `9805d2335293539424fd66af3c047b493edad630`  
-> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 implementation for all existing persistence-backed features is complete and passed GitHub Actions run `41327959473` on the current PR head (`be5019f`). Draft PR #3 is ready for review; Plans and Persona/Jailbreak configuration are deferred to the phases that implement those domain features.
+> **Current state:** Phase 0 is merged into `main` at `9805d2335293539424fd66af3c047b493edad630`. Phase 1 is complete for all existing persistence-backed features and passed GitHub Actions run `41328142025` on current HEAD `cad5d8cea0e81221f46d23f484e2f66651a54a7c`. PR #3 is open, non-draft, and mergeable. Plans and Persona/Jailbreak persistence are introduced with their domain features in Phases 3 and 4.
 
 ## 1. Product Direction
 
@@ -155,7 +155,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [x] Persist custom DLP/security rule configuration in SQLite `app_settings` and connect Security page CRUD to the backend. Runtime enforcement of custom rules remains a separate Security phase.
 - [x] Add an end-to-end file-backed backup and restore test: create a `VACUUM INTO` backup, simulate destructive data change, restore the saved snapshot, and preserve the pre-restore database copy.
 - [x] Keep all existing application settings and API key records in SQLite `app_settings` as the canonical store.
-- [ ] Review credential storage separately in Phase 2: caller API keys should be verifiable without storing raw secrets; upstream credentials that must be replayed need recoverable encryption and a documented key-management strategy.
+- [ ] Credential storage hardening is intentionally Phase 2: caller API keys must be verifiable without storing raw secrets; upstream credentials that must be replayed need authenticated encryption and a documented key-management strategy.
 
 **Scope boundary:** AlphaWay does not yet implement Plans or Persona/Jailbreak domain models. Their schemas and persistence are intentionally added alongside their feature implementations in Phases 3 and 4 rather than creating unused tables in Phase 1. Existing SOUL configuration is persisted with the TokenSaver settings.
 - [x] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
@@ -164,8 +164,8 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 
 - [x] A fresh database and an existing pre-migration database converge to the initial schema without losing existing rows.
 - [x] Migrations are safe to rerun; failed DDL/history transactions roll back together.
-- [ ] All persistence-backed features use SQLite as the canonical source; this is still pending for API keys, security, Plans, and Persona.
-- [ ] File-backed backup/restore and recovery behavior is verified end to end.
+- [x] All existing persistence-backed features use SQLite as the canonical source, including API key records and Security rule configuration. Plans and Persona/Jailbreak are not yet implemented and will add persistence with their own domain models.
+- [x] File-backed backup/restore and recovery behavior is verified end to end, including integrity validation and preservation of the pre-restore database.
 
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
@@ -222,7 +222,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [ ] Preserve the existing SOUL.md engine, built-in presets, local/global discovery, and SOUL Studio editor/preview.
 - [ ] Provide one canonical prompt-transformation pipeline so SOUL, Persona, TokenSaver, and security processing do not inject or rewrite the same request unpredictably.
 - [ ] Add a preview/explain mode that shows which transformations and presets will apply without forwarding a request upstream.
-- [ ] Persist custom DLP/keyword rules in SQLite and use the same backend rule engine for both dashboard testing and live gateway traffic.
+- [ ] Use one backend DLP/keyword rule engine for dashboard sandbox testing and live gateway traffic; custom-rule persistence is completed in Phase 1.
 - [ ] If remote persona/Markdown import is added, enforce SSRF protections, redirect revalidation, private/link-local IP blocking, response-size limits, and timeouts. Prefer local Markdown import for the first implementation.
 
 **Acceptance criteria**
@@ -243,7 +243,7 @@ GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions
 - [ ] Consolidate usage event persistence in SQLite and remove inconsistent JSON summary/history mirrors after migration.
 - [ ] Correct streaming token accounting. Do not substitute fixed completion-token counts for unknown usage.
 - [ ] Label estimated metrics and savings separately from actual request usage and provider-reported cost.
-- [ ] Persist Security custom rules and route both sandbox testing and live requests through the same backend implementation.
+- [ ] Route Security sandbox testing and live gateway requests through the same backend DLP implementation; do not maintain divergent frontend-only rule logic.
 - [ ] Add typed frontend API contracts and consistent error responses for every dashboard action.
 - [ ] Verify Console Log streaming, filtering, and export against actual server events.
 - [ ] Verify Cloudflare Tunnel, daemon lifecycle, provider OAuth, and custom provider management end-to-end.
