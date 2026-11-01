@@ -25,10 +25,16 @@ describe("Hono application engine", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.object).toBe("list");
-    const ids = json.data.map((m: any) => m.id);
-    expect(ids).toContain("mimo-v2.6-flash-free");
-    expect(ids).toContain("deepseek-v4.1-flash");
-    expect(ids).toContain("glm-5.2");
+    const opencodeModels = json.data.filter(
+      (model: any) => model.owned_by === "opencode-free" || model.provider === "opencode"
+    );
+    const codebuddyModels = json.data.filter((model: any) => model.owned_by === "codebuddy");
+
+    // OpenCode's live model catalogue is dynamic; assert provider presence
+    // instead of pinning an upstream model ID that may be retired.
+    expect(opencodeModels.length).toBeGreaterThan(0);
+    expect(codebuddyModels.map((model: any) => model.id)).toContain("deepseek-v4.1-flash");
+    expect(codebuddyModels.map((model: any) => model.id)).toContain("glm-5.2");
   });
 
   it("returns tokensaver config on /api/tokensaver", async () => {
