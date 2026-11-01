@@ -6,14 +6,14 @@ This file gives AI coding agents (OpenCode, Claude Code, Cursor, Codex, Cline, A
 
 ## 1. Critical Rules (Read First)
 
-1. **Runtime MUST be Bun (`bun src/index.ts` or standalone binary `alphaway.exe`).**
-   - Do **not** run the production server under Node.js (`node src/index.ts` intentionally exits with code `1`).
-   - Reason: the official OpenCode CLI is compiled with Bun (BoringSSL). Upstream's free-tier gate inspects the TLS `ClientHello` fingerprint (17 ciphers, 12 extensions). Node.js (OpenSSL) offers 52 ciphers and is rejected with `403 FreeTierError`.
-   - `ALLOW_NODE=1` is strictly for offline unit tests with mocked `fetch`, never for live traffic.
+1. **Runtime MUST be Bun 1.4.3 or newer** (`bun src/index.ts` or a standalone Bun executable).
+   - Do **not** run production provider traffic under Node.js. The OpenCode free-tier path depends on a compatible TLS `ClientHello` fingerprint (BoringSSL).
+   - `ALLOW_NODE=1` is not a supported runtime mode; never use it for production or live provider requests.
+   - Keep the Bun version used in CI aligned with the recorded transport fingerprint baseline. Do not upgrade it without running `bun run fingerprint:check` and reviewing the result.
 2. **Strict TypeScript & Architecture Parity.**
    - All server, router, and provider code is written in clean, modular TypeScript located in `src/`.
    - Built on top of Hono.js runtime engine and Svelte 5 modern dashboard.
-   - Zero weakened tests: every feature must pass all 292 unit, integration, and E2E tests (`bun test`).
+   - Zero weakened tests: do not delete, skip, or relax assertions to make CI green. Run the current unit/integration and E2E scripts listed below.
 3. **Tri-Protocol Support.**
    - AlphaWay exposes three standard client protocols:
      - OpenAI Chat (`POST /v1/chat/completions`)
@@ -45,14 +45,26 @@ bun src/index.ts --status
 bun src/index.ts --stop
 ```
 
+### Installing a built application (Linux / macOS)
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yoganataa/alphaway/main/install.sh | bash
+```
+
+The installer stages the current TypeScript project, installs the frozen dependency graph, verifies the TLS fingerprint, builds the dashboard and standalone executable, and then swaps the application directory. By default, application files live in `~/.alphaway/app`; configuration and SQLite state remain under `~/.alphaway`. Use `SOURCE=local NO_START=1 bash install.sh` for an install-only check from a local checkout.
+
 ### Compiling Standalone Executable
 ```bash
-# Windows binary (alphaway.exe):
+# Windows x64 binary (alphaway.exe):
 bun run build:bin:win
 
-# Linux / macOS binary (alphaway):
+# Current Linux / macOS host (alphaway):
 bun run build:bin
+
+# Dashboard + host-platform binary:
+bun run build
 ```
+
+The build embeds the generated `dist/` dashboard assets into the standalone executable. Verify the artifact itself; do not assume an arbitrary compiled binary contains assets unless it was built with the repository's production build script.
 
 ### Verification Endpoints
 ```bash
@@ -130,14 +142,19 @@ Use these connection details in Cursor, Continue.dev, Cline, Roo-Code, Claude Co
 | `src/core/usage-tracker.ts` | Realtime usage accounting, native SVG chart bucket generation, activity heatmap, and persistence. |
 | `src/routes/` | Modular route handlers: `chat.ts`, `messages.ts`, `response.ts`, `usage.ts`, `custom-providers.ts`, `health.ts`, `models.ts`, `dashboard.ts`, `proxy.ts`, `tokensaver.ts`. |
 | `src/client/` | Svelte 5 + Tailwind 4 Modern Web Dashboard with 9Router-Go analytics architecture. |
-| `test/` | Complete 292-test suite covering units, protocols, DLP defense, and Playwright E2E browser tests. |
+| `test/` | Bun unit/integration tests plus Playwright browser E2E tests. |
 
 ### Mandatory verification before committing changes
 ```bash
-bun test test/
-bun src/core/transport-fingerprint.ts --check
-bun src/cli/gate-drill.ts
+bun install --frozen-lockfile
+bun run test:unit
+bun run fingerprint:check
+bun run test:e2e
+bun run build
+bash -n install.sh
 ```
+
+The live gate drill (`bun run drill`) sends requests to the real upstream service and may consume upstream allowance or be affected by IP throttling. It is intentionally excluded from normal CI and should be run manually when a live upstream verdict is needed.
 
 <!-- antislop:start -->
 ## antislop
