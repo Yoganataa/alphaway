@@ -6,6 +6,7 @@ import { describe, it, expect } from "bun:test";
 import { app } from "../src/app";
 import { adminRequest } from "./helpers/admin";
 import { issueAPIKey, revokeAPIKey } from "../src/core/api-keys";
+import { getDatabase } from "../src/core/database";
 import {
   addOrUpdateCustomProvider,
   loadCustomProviders,
@@ -56,6 +57,53 @@ describe("3rd-Party Custom Providers Engine", () => {
     const json: any = await res.json();
     expect(Array.isArray(json.providers)).toBe(true);
     expect(json.providers.some((p: any) => p.id === "test-deepseek")).toBe(true);
+  });
+
+  it("encrypts embedded provider URL credentials and redacts them from dashboard responses", async () => {
+    const id = "test-embedded-url-secrets";
+    const originalUrl = "https://url-user:url-password@provider.example.test/v1?api_key=url-query-secret&tenant=team-a";
+    const safeUrl = "https://provider.example.test/v1?tenant=team-a";
+
+    addOrUpdateCustomProvider({
+      id,
+      name: "Embedded URL Credential Test",
+      baseUrl: originalUrl,
+      apiKey: "",
+      protocol: "openai",
+      models: ["embedded-url-model"],
+      enabled: true,
+    });
+
+    const stored = getDatabase().prepare("SELECT base_url FROM custom_providers WHERE id = ?").get(id).base_url;
+    expect(stored).toMatch(/^awenc:v1:/);
+    expect(stored).not.toContain("url-user");
+    expect(stored).not.toContain("url-password");
+    expect(stored).not.toContain("url-query-secret");
+    expect(loadCustomProviders().find((provider) => provider.id === id)?.baseUrl).toBe(originalUrl);
+
+    const response = await adminRequest("/api/custom-providers");
+    expect(response.status).toBe(200);
+    const body: any = await response.json();
+    const publicRecord = body.providers.find((provider: any) => provider.id === id);
+    expect(publicRecord.baseUrl).toBe(safeUrl);
+    expect(publicRecord.hasApiKey).toBe(true);
+    expect(JSON.stringify(publicRecord)).not.toContain("url-user");
+    expect(JSON.stringify(publicRecord)).not.toContain("url-password");
+    expect(JSON.stringify(publicRecord)).not.toContain("url-query-secret");
+
+    // A metadata-only edit made with the redacted URL must not drop the
+    // encrypted original URL credential behind the dashboard form.
+    addOrUpdateCustomProvider({
+      id,
+      name: "Embedded URL Credential Test Updated",
+      baseUrl: safeUrl,
+      apiKey: "",
+      protocol: "openai",
+      models: ["embedded-url-model"],
+      enabled: true,
+    });
+    expect(loadCustomProviders().find((provider) => provider.id === id)?.baseUrl).toBe(originalUrl);
+    deleteCustomProvider(id);
   });
 
   it("redacts custom-provider API credentials from chat upstream error bodies", async () => {
