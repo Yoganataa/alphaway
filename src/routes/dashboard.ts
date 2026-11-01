@@ -14,9 +14,23 @@ import { adminRequestError } from "../core/admin-guard";
 export const dashboardRoute = new Hono();
 
 const configuredDist = process.env.ALPHAWAY_DASHBOARD_DIR?.trim();
+const isStandalone = typeof Bun !== "undefined" && Bun.isStandaloneExecutable;
 const DIST_DIR = configuredDist
   ? path.resolve(configuredDist)
-  : path.resolve(import.meta.dir, "../../dist");
+  : path.resolve(import.meta.dir, isStandalone ? "../dist" : "../../dist");
+
+if (process.env.ALPHAWAY_DEBUG_ASSETS === "1") {
+  console.info("[AlphaWay] dashboard asset diagnostics", {
+    standalone: isStandalone,
+    moduleDir: import.meta.dir,
+    distDir: DIST_DIR,
+    distExists: fs.existsSync(DIST_DIR),
+    distEntries: fs.existsSync(DIST_DIR) ? fs.readdirSync(DIST_DIR) : [],
+    embeddedFiles: isStandalone
+      ? (Bun.embeddedFiles || []).map((asset: File) => ({ name: asset.name, size: asset.size }))
+      : [],
+  });
+}
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
