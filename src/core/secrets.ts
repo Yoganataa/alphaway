@@ -43,9 +43,12 @@ function loadOrCreateKey(): Buffer {
   if (override) return override;
 
   const configuredDirectory = process.env.ALPHAWAY_STATE_DIR || process.env.OPENCODE_BRIDGE_STATE_DIR;
+  const homeDirectory = process.platform === "win32"
+    ? process.env.USERPROFILE || process.env.HOME || os.homedir()
+    : process.env.HOME || process.env.USERPROFILE || os.homedir();
   const directory = configuredDirectory && String(configuredDirectory).trim()
     ? String(configuredDirectory).trim()
-    : path.join(os.homedir(), ".alphaway");
+    : path.join(homeDirectory, ".alphaway");
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") {
     try { fs.chmodSync(directory, 0o700); } catch {}
