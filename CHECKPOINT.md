@@ -5,10 +5,11 @@
 > **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-1-sqlite-migrations` (based on merged Phase 0 main)  
-> **Last implementation HEAD before this checkpoint update:** `1846eb0314e7968ca137adf12feb19a22ee5a115`  
+> **Last implementation HEAD before this checkpoint update:** `1224a10187c28ac80e604ba1f30b01a9ac1c8125`  
 > **Base main HEAD:** `9805d2335293539424fd66af3c047b493edad630`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
-> **PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
+> **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
+> **Active Phase 1 draft PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)
 
 ## 1. Current Status
 
@@ -20,7 +21,7 @@
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
-- [~] Phase 1 — Database Migrations and Canonical Persistence (implementation started on `feat/phase-1-sqlite-migrations`, based on merged Phase 0 main; no Phase 1 PR opened yet).
+- [~] Phase 1 — Database Migrations and Canonical Persistence (draft PR #3 open against `main`; CI verification still pending).
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
@@ -28,7 +29,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Phase 1 is active on `feat/phase-1-sqlite-migrations`, now based directly on merged `main` at `9805d2335293539424fd66af3c047b493edad630`. The former diverged branch was rebuilt into a clean 14-file Phase 1 diff on top of the merged Phase 0 baseline. The E2E timing and legacy service retirement fixes are inherited from main, not duplicated. Phase 1 changes cover versioned SQLite migrations, legacy imports, and canonical persistence for custom providers, TokenSaver, usage, and proxy configuration. New Phase 1 tests have not yet been executed in GitHub Actions; local Bun execution is unavailable in this environment. Phase 0 evidence is GitHub Actions run `41325472514` on Bun 1.4.4: 271 unit/protocol tests passed, 8 Playwright E2E tests passed, build and fingerprint checks passed (17 ciphers, 12 extensions), and installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
+Phase 1 is active on `feat/phase-1-sqlite-migrations`, based directly on merged `main` at `9805d2335293539424fd66af3c047b493edad630`. Draft PR #3 is open against `main`. Implemented changes cover versioned SQLite migrations, backup hooks before destructive migrations, checksummed/idempotent JSON imports, and canonical persistence for custom providers, TokenSaver, usage, and proxy configuration. API key records already reside in the SQLite `app_settings` table; secret verification/encryption remains Phase 2. Current Phase 1 CI run `41326809174` is pending behind an earlier run. Previous Phase 1 attempt `41326124267` had 282 passing and 2 failing unit tests while build, installer smoke, and E2E passed. Those failures were traced to a stale upstream model ID in the test and an incorrect `importSetting` factory signature; the test now checks provider presence and the settings importer binds the correct key. Legacy importer tests now use isolated per-test SQLite databases. A full final CI pass on the latest head is still required; do not mark PR #3 ready or merge it until that result is green and file-backed backup/restore plus remaining persistence scope are complete. Phase 0 evidence is GitHub Actions run `41325472514` on Bun 1.4.4: 271 unit/protocol tests passed, 8 Playwright E2E tests passed, build and fingerprint checks passed (17 ciphers, 12 extensions), and installer smoke verified fresh install, upgrade preservation of `.env` and SQLite data, background startup, and standalone embedded dashboard/JS serving. The live upstream gate drill was intentionally skipped. CI verified Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
 
 ## 2. Agreed Product Direction
 
@@ -220,9 +221,9 @@ Current Phase 1 implementation files:
 - Tests: `test/migrations.test.ts`, `test/legacy-imports.test.ts`, plus database/proxy/usage regression coverage.
 
 Next actions:
-1. Run Phase 1 verification on Bun 1.4.4: `bun run test:unit`, `bun run test:e2e`, `bun run fingerprint:check`, and `bun run build`.
-2. Fix all test/type/runtime regressions; then open Phase 1 PR against `main`.
-3. Continue persistence coverage for API keys, security, Plans, and Persona; test file-backed backup/restore before marking Phase 1 complete.
+1. Finish the pending Phase 1 CI run for PR #3 on Bun 1.4.4; fix any remaining regressions.
+2. Keep PR #3 in draft until unit/protocol, E2E, installer, build, and fingerprint jobs pass.
+3. Add file-backed backup/restore verification and finish persistence coverage for DLP/security rules. Plans and Persona configuration will be persisted as those features are implemented.
 
 Copy this prompt into the next session:
 
