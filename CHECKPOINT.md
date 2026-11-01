@@ -2,14 +2,14 @@
 
 > Read this file first when resuming work in a new ChatGPT/agent session. Then read `ROADMAP.md`.
 >
-> **Checkpoint date:** 2026-11-01 (Asia/Jakarta)  
+> **Checkpoint date:** 2026-11-02 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active branch:** `feat/phase-1-sqlite-migrations` (based on merged Phase 0 main)  
-> **Latest CI-verified implementation HEAD:** `cc6eaf7bfa42993300757725cb0ec728fda48bbd`  
-> **Base main HEAD:** `9805d2335293539424fd66af3c047b493edad630`  
+> **Active branch:** `main` (Phase 1 merged; no Phase 2 branch created)  
+> **Merged Phase 1 branch HEAD:** `67f8ea1ccb0bfca719a80df312e6aaca214e92b5`  
+> **Current main HEAD:** `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`  
 > **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
-> **Active Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3) (open, non-draft, mergeable)
+> **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3) (merged)
 
 ## 1. Current Status
 
@@ -21,7 +21,7 @@
 - [x] `ROADMAP.md` created as the canonical plan.
 - [x] `CHECKPOINT.md` created for cross-session continuity.
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
-- [x] Phase 1 — Database Migrations and Canonical Persistence for existing AlphaWay persistence-backed features (CI verified; PR #3 ready for review).
+- [x] Phase 1 — Database Migrations and Canonical Persistence for existing AlphaWay persistence-backed features (PR #3 merged into `main`).
 - [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
@@ -29,7 +29,7 @@
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Phase 1 is complete for the persistence-backed domains that already exist in AlphaWay on `feat/phase-1-sqlite-migrations`, based on merged `main` at `9805d2335293539424fd66af3c047b493edad630`. PR #3 is open, non-draft, mergeable, and targets `main`. It includes ordered SQLite migrations, checksummed/idempotent legacy JSON imports, canonical SQLite persistence for custom providers, TokenSaver/SOUL, API key records, proxy settings, and custom Security rule configuration; atomic usage event/snapshot persistence; and a backup/restore utility with file-backed recovery tests. Custom Security rule persistence is complete, but the dashboard sandbox and live request pipeline still need to use the same backend rule engine in a later security phase. Plans and Persona/Jailbreak do not yet have domain models; their persistence will be added alongside those features in Phases 3 and 4. Credential verification, hashing, and authenticated encryption remain Phase 2 work. GitHub Actions run `41328662898` passed on Bun 1.4.4 at code HEAD `cc6eaf7bfa42993300757725cb0ec728fda48bbd`: 292 unit/protocol tests passed (0 failed) across 29 files, 8 dashboard E2E tests passed (0 failed), standalone build and installer/embedded-dashboard smoke passed, and the transport fingerprint matched 17 ciphers / 12 extensions. The Codex P2 finding about `ALPHAWAY_HOME` changing the SQLite path was fixed: SQLite path resolution remains backward-compatible, while JSON from `ALPHAWAY_HOME` is imported as legacy state; its regression test passed. The optional live upstream gate drill was skipped intentionally. Verification was on Linux x86_64; macOS launchd and Windows binary runtime are not yet covered.
+Phase 1 is complete for the persistence-backed domains that already exist in AlphaWay and is merged into `main` via PR #3 at `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`. The merged feature branch head was `67f8ea1ccb0bfca719a80df312e6aaca214e92b5`; GitHub Actions run `41328813739` passed for that exact PR head on Bun 1.4.4: the build, 292 unit/protocol tests, installer and embedded-dashboard smoke, and 8 dashboard browser E2E tests passed. The optional live upstream gate drill was skipped intentionally. The merge includes ordered SQLite migrations, checksummed/idempotent legacy JSON imports, canonical SQLite persistence for custom providers, TokenSaver/SOUL, API key records, proxy settings, and custom Security rule configuration; atomic usage event/snapshot persistence; and a backup/restore utility with file-backed recovery tests. Custom Security rule persistence is complete, but the dashboard sandbox and live request pipeline still need to use the same backend rule engine in a later security phase. Plans and Persona/Jailbreak do not yet have domain models; their persistence will be added alongside those features in Phases 3 and 4. Credential verification, hashing, and authenticated encryption remain Phase 2 work. The Codex P2 finding about `ALPHAWAY_HOME` changing the SQLite path was fixed: SQLite path resolution remains backward-compatible, while JSON from `ALPHAWAY_HOME` is imported as legacy state; its regression test passed. Verification was on Linux x86_64; macOS launchd and Windows binary runtime are not yet covered. **Phase 2 has not started; keep work paused here until the user explicitly requests it.**
 
 ## 2. Agreed Product Direction
 
@@ -198,7 +198,7 @@ test/verify-quick.test.ts
 
 ### Next phase
 
-Phase 0 acceptance criteria are met for the tested Linux x86_64 path and PR #1 is merged. Phase 1 is now implemented and CI-verified; review and merge PR #3 before beginning Phase 2 — Authentication, API Keys, and Administrative Access. Do not merge PR #3 without reviewing its diff.
+Phase 0 and Phase 1 acceptance criteria are met for the tested Linux x86_64 path. PR #1 and PR #3 are both merged. Phase 1 merge commit: `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`. Stop here: Phase 2 — Authentication, API Keys, and Administrative Access has not started. Do not create a Phase 2 branch or PR until the user explicitly instructs to continue.
 
 ## 6. Working Rules for the Next Session
 
@@ -221,11 +221,10 @@ Current Phase 1 implementation files:
 - Tests: `test/migrations.test.ts`, `test/legacy-imports.test.ts`, plus database/proxy/usage regression coverage.
 
 Next actions:
-1. Review PR #3 diff and address any reviewer feedback. PR #3 has passing CI but has not been merged.
-2. Once PR #3 is merged, create Phase 2 branch from the updated `main`.
-3. Implement API-key verification/hashing, recoverable encryption for upstream credentials, and authenticated administrator sessions/authorization.
-4. Implement Plans and Persona/Jailbreak models in Phases 3 and 4; persist them in SQLite from their first implementation.
-5. Implement one shared backend DLP rule engine used by both Security sandbox preview and the live request pipeline.
+1. Phase 1 is complete and PR #3 is merged into `main` at `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`.
+2. Keep the repository paused on `main`; do not create a Phase 2 branch or PR until the user explicitly requests it.
+3. When authorized to continue, re-check the live repository state and start Phase 2 from the then-current `main`.
+4. Future phase scope remains recorded in `ROADMAP.md`; do not begin Plans, Persona/Jailbreak, or the remaining DLP runtime work prematurely.
 
 Copy this prompt into the next session:
 
@@ -242,7 +241,7 @@ Target produk yang sudah diputuskan:
 - Tambahkan Plans serta Persona/Jailbreak.
 - Ikuti struktur TypeScript idiomatis; jangan membuat struktur ala Go secara menyeluruh.
 
-Phase 0 PR #1 sudah merged ke main pada `9805d2335293539424fd66af3c047b493edad630`. Phase 1 berada pada branch `feat/phase-1-sqlite-migrations`, PR #3 terbuka dan non-draft, serta CI run `41328142025` lulus pada HEAD `cad5d8cea0e81221f46d23f484e2f66651a54a7c` dengan Bun 1.4.4. Baca diff PR #3 sebelum memutuskan merge. Setelah Phase 1 merged, mulai Phase 2 — Authentication, API Keys, and Administrative Access sesuai ROADMAP.md. Pertahankan Bun 1.4.4, jangan melemahkan tes, dan update CHECKPOINT.md setiap blok kerja bermakna.
+Phase 0 PR #1 sudah merged ke `main` pada `9805d2335293539424fd66af3c047b493edad630`. Phase 1 PR #3 juga sudah merged ke `main` pada `1d34c45dbf2d7a2e947a62fd298642691c38f8e2` setelah CI run `41328813739` sukses pada head `67f8ea1ccb0bfca719a80df312e6aaca214e92b5` dengan Bun 1.4.4. Phase 2 belum dimulai. Jangan membuat branch atau PR Phase 2 sampai pengguna secara eksplisit meminta melanjutkan. Pertahankan Bun 1.4.4, jangan melemahkan tes, dan update CHECKPOINT.md setiap blok kerja bermakna.
 ```
 
 ---
