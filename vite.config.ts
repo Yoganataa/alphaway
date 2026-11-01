@@ -1,15 +1,18 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
-import path from "path";
+import path from "node:path";
 
-// https://vite.dev/config/
+const dashboardOutput = process.env.ALPHAWAY_DASHBOARD_DIR?.trim()
+  ? path.resolve(process.env.ALPHAWAY_DASHBOARD_DIR)
+  : path.resolve(import.meta.dirname, "dist");
+
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
   root: ".",
   publicDir: "public",
   build: {
-    outDir: "dist",
+    outDir: dashboardOutput,
     emptyOutDir: true,
   },
   server: {
@@ -22,7 +25,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
 });
