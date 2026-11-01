@@ -55,7 +55,7 @@ describe("legacy JSON import", () => {
       {
         id: "legacy-deepseek",
         name: "Legacy DeepSeek",
-        baseUrl: "https://api.deepseek.com/v1",
+        baseUrl: "https://legacy-user:legacy-password@api.deepseek.com/v1?api_key=legacy-url-query-secret&tenant=import-test",
         apiKey: "sk-legacy-deepseek",
         protocol: "openai",
         models: ["deepseek-chat"],
@@ -126,9 +126,14 @@ describe("legacy JSON import", () => {
     });
 
     const provider = db.prepare(
-      "SELECT id, api_key, models FROM custom_providers WHERE id = ?"
-    ).get("legacy-deepseek") as { id: string; api_key: string; models: string };
+      "SELECT id, base_url, api_key, models FROM custom_providers WHERE id = ?"
+    ).get("legacy-deepseek") as { id: string; base_url: string; api_key: string; models: string };
     expect(provider.id).toBe("legacy-deepseek");
+    expect(provider.base_url).toMatch(/^awenc:v1:/);
+    expect(provider.base_url).not.toContain("legacy-user");
+    expect(provider.base_url).not.toContain("legacy-password");
+    expect(provider.base_url).not.toContain("legacy-url-query-secret");
+    expect(decryptSecret(provider.base_url)).toBe("https://legacy-user:legacy-password@api.deepseek.com/v1?api_key=legacy-url-query-secret&tenant=import-test");
     expect(provider.api_key).toMatch(/^awenc:v1:/);
     expect(provider.api_key).not.toContain("sk-legacy-deepseek");
     expect(decryptSecret(provider.api_key)).toBe("sk-legacy-deepseek");
