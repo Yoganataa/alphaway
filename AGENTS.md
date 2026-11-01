@@ -50,7 +50,7 @@ bun src/index.ts --stop
 curl -fsSL https://raw.githubusercontent.com/Yoganataa/alphaway/main/install.sh | bash
 ```
 
-The installer stages the current TypeScript project, installs the frozen dependency graph, verifies the TLS fingerprint, builds the dashboard and standalone executable, and then swaps the application directory. By default, application files live in `~/.alphaway/app`; configuration and SQLite state remain under `~/.alphaway`. Use `SOURCE=local NO_START=1 bash install.sh` for an install-only check from a local checkout.
+The installer stages the current TypeScript project, installs the frozen dependency graph, verifies the TLS fingerprint, builds the dashboard and standalone executable, and then swaps the application directory. By default, application files live in `~/.alphaway/app`; configuration and SQLite state remain under `~/.alphaway`. Use `BINDIR="$(mktemp -d)" SOURCE=local NO_START=1 bash install.sh` for an isolated install-only check from a local checkout.
 
 ### Compiling Standalone Executable
 ```bash
