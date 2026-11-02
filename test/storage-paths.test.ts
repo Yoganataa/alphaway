@@ -186,18 +186,20 @@ describe("9router-style SQLite storage path contract", () => {
   });
 
   it("decodes double-quoted escapes once and preserves unknown escapes", () => {
-    const parsed = parseEnvFile(String.raw`PATH="C:\\Users\\Nata"
-NEWLINE="line\nnext"
-LITERAL="\\n"
-UNKNOWN="\\q"
-QUOTED="say \"hi\""
+    const parsed = parseEnvFile([
+      "PATH=\"C:\\\\Users\\\\Nata\"",
+      "NEWLINE=\"line\\nnext\"",
+      "LITERAL=\"\\\\n\"",
+      "UNKNOWN=\"\\\\q\"",
+      "QUOTED=\"say \\\"hi\\\"\"",
+    ].join("\n"));
 
     expect(parsed).toEqual({
       PATH: "C:\\Users\\Nata",
       NEWLINE: "line\nnext",
       LITERAL: "\\n",
       UNKNOWN: "\\q",
-      QUOTED: 'say "hi"',
+      QUOTED: "say \"hi\"",
     });
   });
 });
