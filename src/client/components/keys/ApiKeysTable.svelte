@@ -11,11 +11,16 @@
     updateApiKeyLabel,
     rotateApiKey,
     setActiveApiKey,
+    fetchPlans,
+    setApiKeyPolicy,
+    type PlanRecord,
     type APIKeyRecord,
     type IssuedAPIKey,
   } from "../../lib/api";
 
   let keys = $state<APIKeyRecord[]>([]);
+  let plans = $state<PlanRecord[]>([]);
+  let updatingPlanKeyId = $state<string | null>(null);
   let loading = $state(true);
   let isCreateModalOpen = $state(false);
   let newKeyName = $state("");
@@ -25,7 +30,9 @@
   async function loadKeys() {
     loading = true;
     try {
-      keys = await fetchApiKeys();
+      const [keyRecords, planRecords] = await Promise.all([fetchApiKeys(), fetchPlans()]);
+      keys = keyRecords;
+      plans = planRecords;
     } catch (error: any) {
       keys = [];
       notifications.error(error.message || "Failed to load API keys");
@@ -95,6 +102,20 @@
     }
   }
 
+  async function handlePlanChange(key: APIKeyRecord, planId: string) {
+    updatingPlanKeyId = key.id;
+    try {
+      await setApiKeyPolicy(key.id, { planId: planId || null });
+      await loadKeys();
+      notifications.success(planId ? "Plan assigned to API key" : "Plan removed; key is unrestricted by Plan");
+    } catch (error: any) {
+      notifications.error(error.message || "Failed to update API key Plan");
+      await loadKeys();
+    } finally {
+      updatingPlanKeyId = null;
+    }
+  }
+
   function closeModal() {
     isCreateModalOpen = false;
     createdKeyResult = null;
@@ -126,6 +147,7 @@
           <th class="px-4 py-3 font-semibold">Key Name</th>
           <th class="px-4 py-3 font-semibold">Prefix</th>
           <th class="px-4 py-3 font-semibold">Status</th>
+          <th class="px-4 py-3 font-semibold">Plan</th>
           <th class="px-4 py-3 font-semibold">Created</th>
           <th class="px-4 py-3 font-semibold">Last Used</th>
           <th class="px-4 py-3 font-semibold">Requests</th>
@@ -139,6 +161,24 @@
             <td class="px-4 py-3 text-text-muted">{key.prefix}…</td>
             <td class="px-4 py-3">
               <Badge tone={key.status === "active" ? "success" : "neutral"} size="sm" dot>{key.status}</Badge>
+            </td>
+            <td class="px-4 py-3">
+              {#if key.status === "active"}
+                <select
+                  aria-label={"Plan for " + key.name}
+                  value={key.planId || ""}
+                  disabled={updatingPlanKeyId === key.id}
+                  onchange={(event) => handlePlanChange(key, event.currentTarget.value)}
+                  class="max-w-36 rounded-md border border-border bg-surface-2 px-2 py-1 text-xs text-text-main"
+                >
+                  <option value="">Unassigned</option>
+                  {#each plans as plan (plan.id)}
+                    <option value={plan.id}>{plan.name}</option>
+                  {/each}
+                </select>
+              {:else}
+                <span class="text-text-muted">—</span>
+              {/if}
             </td>
             <td class="px-4 py-3 text-text-muted">{new Date(key.createdAt).toLocaleDateString()}</td>
             <td class="px-4 py-3 text-text-muted">
@@ -163,7 +203,7 @@
           </tr>
         {/each}
         {#if keys.length === 0 && !loading}
-          <tr><td colspan="7" class="px-4 py-6 text-center text-text-muted font-sans">
+          <tr><td colspan="8" class="px-4 py-6 text-center text-text-muted font-sans">
             No managed API keys have been created.
           </td></tr>
         {/if}
