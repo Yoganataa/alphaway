@@ -8,6 +8,8 @@ export interface EffectivePolicy {
   rpmLimit: number;
   tpmLimit: number;
   concurrencyLimit: number;
+  tokenQuota: number;
+  totalTokensUsed: number;
   allowedModels: string[];
 }
 
@@ -38,11 +40,14 @@ export function resolveEffectivePolicy(keyId: string): EffectivePolicy | null {
       k.rate_limit_rpm,
       k.rate_limit_tpm,
       k.concurrency_limit AS key_concurrency_limit,
+      k.token_quota AS key_token_quota,
+      k.total_tokens_used,
       k.allowed_models AS key_allowed_models,
       p.name AS plan_name,
       p.rpm_limit AS plan_rpm_limit,
       p.tpm_limit AS plan_tpm_limit,
       p.concurrency_limit AS plan_concurrency_limit,
+      p.token_quota AS plan_token_quota,
       p.allowed_models AS plan_allowed_models
     FROM api_keys k
     LEFT JOIN plans p ON p.id = k.plan_id
@@ -65,6 +70,8 @@ export function resolveEffectivePolicy(keyId: string): EffectivePolicy | null {
     rpmLimit: chooseLimit(row.rate_limit_rpm, row.plan_rpm_limit),
     tpmLimit: chooseLimit(row.rate_limit_tpm, row.plan_tpm_limit),
     concurrencyLimit: chooseLimit(row.key_concurrency_limit, row.plan_concurrency_limit),
+    tokenQuota: chooseLimit(row.key_token_quota, row.plan_token_quota),
+    totalTokensUsed: Number(row.total_tokens_used || 0),
     allowedModels,
   };
 }
