@@ -31,14 +31,12 @@ function releaseLoginKdfSlot(): void {
   }
 }
 
-function acquireLoginKdfSlot(): Promise<(() => void) | null> {
+function acquireLoginKdfSlot(): (() => void) | Promise<() => void> | null {
   if (activeLoginKdfs < MAX_CONCURRENT_LOGIN_KDFS) {
     activeLoginKdfs += 1;
-    return Promise.resolve(releaseLoginKdfSlot);
+    return releaseLoginKdfSlot;
   }
-  if (loginKdfWaiters.length >= MAX_QUEUED_LOGIN_KDFS) {
-    return Promise.resolve(null);
-  }
+  if (loginKdfWaiters.length >= MAX_QUEUED_LOGIN_KDFS) return null;
   return new Promise((resolve) => {
     loginKdfWaiters.push(() => resolve(releaseLoginKdfSlot));
   });
@@ -252,8 +250,9 @@ export async function loginAdmin(
   // Scrypt uses substantial memory per operation. Bound active work and queued
   // requests globally, then re-check this username after acquiring a slot so
   // concurrent guesses cannot bypass the per-user throttle.
-  const releaseSlot = await acquireLoginKdfSlot();
-  if (!releaseSlot) return { error: "rate_limited" };
+  const slot = acquireLoginKdfSlot();
+  if (!slot) return { error: "rate_limited" };
+  const releaseSlot = typeof slot === "function" ? slot : await slot;
 
   let ownsUsernameSlot = false;
   try {
