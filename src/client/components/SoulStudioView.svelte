@@ -150,7 +150,7 @@
           </span>
         {:else if soul.source === "global"}
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            <span>🌍</span> ~/.alphaway/SOUL.md (Global)
+            <span>🌍</span> $DATA_DIR/SOUL.md (Global)
           </span>
         {:else if soul.source === "preset"}
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -306,7 +306,7 @@
           </div>
           <div class="p-3 rounded-lg bg-card border border-border">
             <div class="font-bold text-foreground mb-1">2. Global Default</div>
-            <code class="text-[11px] text-muted-foreground">~/.alphaway/SOUL.md</code>
+            <code class="text-[11px] text-muted-foreground">$DATA_DIR/SOUL.md</code>
             <p class="text-[11px] text-muted-foreground mt-1">Applies globally across all coding directories without local souls.</p>
           </div>
           <div class="p-3 rounded-lg bg-card border border-border">
