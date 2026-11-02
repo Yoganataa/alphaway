@@ -222,6 +222,62 @@ describe("SQLite migration backup and restore", () => {
     });
   });
 
+  it("restores legacy v1 encrypted backup envelopes after the streaming v2 migration", () => {
+    withTempDirectory((directory) => {
+      const sourcePath = path.join(directory, "v1-source.sqlite");
+      const sourceDb = new Database(sourcePath);
+      sourceDb.exec("CREATE TABLE checkpoint_state (value TEXT NOT NULL)");
+      sourceDb.prepare("INSERT INTO checkpoint_state VALUES (?)").run("legacy-v1-value");
+      sourceDb.close();
+
+      const legacyEnvelope = encryptSecret(fs.readFileSync(sourcePath).toString("base64"));
+      expect(legacyEnvelope.startsWith("awenc:v1:")).toBe(true);
+      const legacyBackup = path.join(directory, "legacy-v1.sqlite.awenc");
+      fs.writeFileSync(legacyBackup, legacyEnvelope, { mode: 0o600 });
+
+      const restorePath = path.join(directory, "v1-restored.sqlite");
+      restoreDatabaseBackup(legacyBackup, restorePath);
+      const restored = new Database(restorePath, { readonly: true });
+      try {
+        expect(restored.prepare("SELECT value FROM checkpoint_state").get().value).toBe("legacy-v1-value");
+      } finally {
+        restored.close();
+      }
+    });
+  });
+
+  it("streams large SQLite snapshots to and from encrypted backup files", () => {
+    withTempDirectory((directory) => {
+      const databasePath = path.join(directory, "large.sqlite");
+      const db = new Database(databasePath);
+      db.exec("CREATE TABLE large_state (payload BLOB NOT NULL)");
+      db.prepare("INSERT INTO large_state VALUES (zeroblob(?))").run(24 * 1024 * 1024);
+
+      const backupPath = createMigrationBackup(db, databasePath, "large-snapshot");
+      db.close();
+
+      const fd = fs.openSync(backupPath, "r");
+      const prefix = Buffer.alloc(9);
+      try {
+        expect(fs.readSync(fd, prefix, 0, prefix.length, 0)).toBe(prefix.length);
+      } finally {
+        fs.closeSync(fd);
+      }
+      expect(prefix.toString("ascii")).toBe("awenc:v2:");
+
+      restoreDatabaseBackup(backupPath, databasePath);
+      const restored = new Database(databasePath, { readonly: true });
+      try {
+        const row = restored.prepare("SELECT length(payload) AS size FROM large_state").get() as { size: number };
+        expect(row.size).toBe(24 * 1024 * 1024);
+        const integrity = restored.query("PRAGMA quick_check").get() as Record<string, string>;
+        expect(Object.values(integrity)[0]).toBe("ok");
+      } finally {
+        restored.close();
+      }
+    });
+  });
+
   it("refuses destructive migration backups for in-memory databases", () => {
     const db = new Database(":memory:");
     try {
