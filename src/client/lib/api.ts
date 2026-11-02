@@ -415,8 +415,69 @@ export interface APIKeyRecord {
   rateLimitRpm: number | null;
   rateLimitTpm: number | null;
   concurrencyLimit: number | null;
+  tokenQuota: number | null;
   allowedModels: string[] | null;
   status: "active" | "revoked";
+}
+
+export interface PlanRecord {
+  id: string;
+  name: string;
+  description: string;
+  rpmLimit: number;
+  tpmLimit: number;
+  concurrencyLimit: number;
+  tokenQuota: number;
+  allowedModels: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type PlanInput = Omit<PlanRecord, "id" | "createdAt" | "updatedAt">;
+export type APIKeyPolicyPatch = {
+  planId?: string | null;
+  rateLimitRpm?: number | null;
+  rateLimitTpm?: number | null;
+  concurrencyLimit?: number | null;
+  tokenQuota?: number | null;
+  allowedModels?: string[] | null;
+};
+
+async function plansRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(BASE_URL + path, init);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || "Plan request failed: " + response.statusText);
+  return data as T;
+}
+
+export async function fetchPlans(): Promise<PlanRecord[]> {
+  const data = await plansRequest<{ plans: PlanRecord[] }>("/api/plans");
+  return data.plans || [];
+}
+
+export async function createPlan(input: PlanInput): Promise<PlanRecord> {
+  const data = await plansRequest<{ plan: PlanRecord }>("/api/plans", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  });
+  return data.plan;
+}
+
+export async function updatePlan(id: string, input: Partial<PlanInput>): Promise<PlanRecord> {
+  const data = await plansRequest<{ plan: PlanRecord }>("/api/plans/" + encodeURIComponent(id), {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  });
+  return data.plan;
+}
+
+export async function deletePlan(id: string): Promise<void> {
+  await plansRequest("/api/plans/" + encodeURIComponent(id), { method: "DELETE" });
+}
+
+export async function setApiKeyPolicy(id: string, patch: APIKeyPolicyPatch): Promise<APIKeyRecord> {
+  const data = await plansRequest<{ key: APIKeyRecord }>("/api/keys/" + encodeURIComponent(id) + "/policy", {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+  });
+  return data.key;
 }
 
 export interface IssuedAPIKey extends APIKeyRecord {
