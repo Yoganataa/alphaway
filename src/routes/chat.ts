@@ -28,7 +28,7 @@ import {
   type ResponsesRequest,
 } from "../core/protocol-translator";
 import { findCustomProviderForModel, forwardToCustomProvider } from "../core/custom-providers";
-import { embeddedProviderUrlSecrets } from "../core/provider-url-secrets";
+import { embeddedProviderUrlSecrets, redactCredentialEchoes } from "../core/provider-url-secrets";
 const identity = require("../core/identity");
 import * as tokensaver from "../features/tokensaver";
 import { recordRequestUsage, estimateTokensFromText } from "../core/usage-tracker";
@@ -75,11 +75,8 @@ async function dispatchToUpstream(
     if (!upstreamRes.ok) {
       const errText = await upstreamRes.text();
       const providerSecret = String(customMatch.provider.apiKey || "");
-      let safeError = errText;
       const providerSecrets = [providerSecret, ...embeddedProviderUrlSecrets(customMatch.provider.baseUrl)];
-      for (const secret of providerSecrets) {
-        if (secret) safeError = safeError.replaceAll(secret, "[REDACTED]");
-      }
+      const safeError = redactCredentialEchoes(errText, providerSecrets, 3000);
       return new Response(safeError, {
         status: upstreamRes.status,
         headers: { "Content-Type": "application/json" },
@@ -273,12 +270,12 @@ async function dispatchToUpstream(
         const errText = await upstreamRes.text();
         let errJson: any = null;
         try { errJson = JSON.parse(errText); } catch {}
-        const safeErrorText = apiKey ? errText.replaceAll(apiKey, "[REDACTED]") : errText;
+        const targetUrl = process.env.CODEBUDDY_INTL_URL || codebuddy.CODEBUDDY_INTL_URL;
+        const upstreamSecrets = [apiKey, ...embeddedProviderUrlSecrets(targetUrl)];
+        const safeErrorText = redactCredentialEchoes(errText, upstreamSecrets, 3000);
         if (errJson && errJson.code) {
           const classified = codebuddy.classifyCodebuddyError(upstreamRes.status, errJson);
-          const safeClassified = apiKey
-            ? JSON.parse(JSON.stringify(classified).replaceAll(apiKey, "[REDACTED]"))
-            : classified;
+          const safeClassified = JSON.parse(redactCredentialEchoes(JSON.stringify(classified), upstreamSecrets, 3000));
           return Response.json({ error: safeClassified }, { status: safeClassified.status as any });
         }
         return new Response(safeErrorText, { status: upstreamRes.status, headers: { "Content-Type": "application/json" } });
