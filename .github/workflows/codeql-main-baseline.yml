@@ -20,8 +20,10 @@ jobs:
           - actions
           - javascript-typescript
     steps:
-      - name: Checkout repository
+      - name: Checkout the current Phase 2 branch for direct SARIF verification
         uses: actions/checkout@v4
+        with:
+          ref: feat/phase-2-auth-admin-security
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -38,19 +40,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100" > codeql-open-alerts.json 2> codeql-open-alerts-error.txt; then
-            jq '[.[] | select(.tool.name == "CodeQL")] | length' codeql-open-alerts.json > codeql-open-alerts-count.txt
-            jq -r '.[] | select(.tool.name == "CodeQL") | [.number, .rule.id, (.rule.security_severity_level // "none"), .most_recent_instance.location.path, .most_recent_instance.location.start_line, .html_url] | @tsv' codeql-open-alerts.json > codeql-open-alerts.tsv
-          else
-            echo "CodeQL alert API query failed; inspect the error artifact." > codeql-open-alerts-count.txt
-          fi
-
-          if gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts" -f state=open -f pr=4 -f per_page=100 > codeql-feature-open-alerts.json 2> codeql-feature-open-alerts-error.txt; then
-            jq '[.[] | select(.tool.name == "CodeQL")] | length' codeql-feature-open-alerts.json > codeql-feature-open-alerts-count.txt
-            jq -r '.[] | select(.tool.name == "CodeQL") | [.number, .rule.id, (.rule.security_severity_level // "none"), .most_recent_instance.location.path, .most_recent_instance.location.start_line, .html_url] | @tsv' codeql-feature-open-alerts.json > codeql-feature-open-alerts.tsv
-          else
-            echo "CodeQL feature branch alert API query failed; inspect the error artifact." > codeql-feature-open-alerts-count.txt
-          fi
+          echo "$(git rev-parse HEAD)" > analyzed-source-head-sha.txt
 
       - name: Upload default-branch alert inventory
         uses: actions/upload-artifact@v4
@@ -61,10 +51,6 @@ jobs:
             codeql-open-alerts.tsv
             codeql-open-alerts-count.txt
             codeql-open-alerts-error.txt
-            codeql-feature-open-alerts.json
-            codeql-feature-open-alerts.tsv
-            codeql-feature-open-alerts-count.txt
-            codeql-feature-open-alerts-error.txt
           if-no-files-found: warn
           retention-days: 3
 
@@ -72,6 +58,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: codeql-main-baseline-${{ matrix.language }}
-          path: sarif-results/
+          path: |
+            sarif-results/
+            analyzed-source-head-sha.txt
           if-no-files-found: error
           retention-days: 3
