@@ -11,7 +11,7 @@ import {
   type CustomProvider,
 } from "../core/custom-providers";
 import { adminRequestError } from "../core/admin-guard";
-import { embeddedProviderUrlSecrets, hasEmbeddedProviderUrlSecrets, redactProviderBaseUrl } from "../core/provider-url-secrets";
+import { embeddedProviderUrlSecrets, hasEmbeddedProviderUrlSecrets, redactProviderBaseUrl, redactCredentialEchoes } from "../core/provider-url-secrets";
 
 function publicProvider(provider: CustomProvider) {
   const { apiKey, ...safe } = provider;
@@ -26,11 +26,7 @@ function publicProvider(provider: CustomProvider) {
 export const customProvidersRoute = new Hono();
 
 function redactUpstreamError(value: string, secrets: string[]): string {
-  let sanitized = String(value || "").slice(0, 300);
-  for (const secret of secrets) {
-    if (secret) sanitized = sanitized.replaceAll(secret, "[REDACTED]");
-  }
-  return sanitized;
+  return redactCredentialEchoes(value, secrets, 300);
 }
 
 // CSRF & Host header protection for admin routes
