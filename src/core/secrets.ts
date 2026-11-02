@@ -2,15 +2,14 @@
  * Authenticated encryption for upstream credentials persisted in SQLite.
  *
  * By default AlphaWay generates a 256-bit local master key at
- * ~/.alphaway/secret-encryption.key (0600 on POSIX). Operators may instead
+ * $DATA_DIR/secret-encryption.key (0600 on POSIX). Operators may instead
  * provide ALPHAWAY_ENCRYPTION_KEY as 64 hexadecimal characters or base64
  * encoding of exactly 32 bytes. Back up this key separately from the database.
  */
 
 import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { ensurePrivateDirectory, resolveDataDir } from "./storage-paths";
 
 
 const ENVELOPE_V1 = "awenc:v1:";
@@ -92,17 +91,8 @@ function loadOrCreateKey(): Buffer {
   const override = configuredKey();
   if (override) return override;
 
-  const configuredDirectory = process.env.ALPHAWAY_STATE_DIR || process.env.OPENCODE_BRIDGE_STATE_DIR;
-  const homeDirectory = process.platform === "win32"
-    ? process.env.USERPROFILE || process.env.HOME || os.homedir()
-    : process.env.HOME || process.env.USERPROFILE || os.homedir();
-  const directory = configuredDirectory && String(configuredDirectory).trim()
-    ? String(configuredDirectory).trim()
-    : path.join(homeDirectory, ".alphaway");
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  if (process.platform !== "win32") {
-    try { fs.chmodSync(directory, 0o700); } catch {}
-  }
+  const directory = resolveDataDir();
+  ensurePrivateDirectory(directory);
 
   const filePath = path.join(directory, "secret-encryption.key");
   try {
