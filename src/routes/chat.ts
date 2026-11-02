@@ -237,11 +237,14 @@ async function dispatchToUpstream(
               finish_reason: json.stop_reason === "max_tokens" ? "length" : "stop",
             },
           ],
-          usage: json.usage
+          usage: json.usage && (
+            Number.isFinite(json.usage.input_tokens) || Number.isFinite(json.usage.output_tokens)
+          )
             ? {
-                prompt_tokens: json.usage.input_tokens || 10,
-                completion_tokens: json.usage.output_tokens || 20,
-                total_tokens: (json.usage.input_tokens || 10) + (json.usage.output_tokens || 20),
+                prompt_tokens: Number.isFinite(json.usage.input_tokens) ? json.usage.input_tokens : undefined,
+                completion_tokens: Number.isFinite(json.usage.output_tokens) ? json.usage.output_tokens : undefined,
+                total_tokens: (Number.isFinite(json.usage.input_tokens) ? json.usage.input_tokens : 0)
+                  + (Number.isFinite(json.usage.output_tokens) ? json.usage.output_tokens : 0),
               }
             : undefined,
         };
