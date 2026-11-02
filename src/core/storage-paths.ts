@@ -55,7 +55,11 @@ function envFileCandidates(): string[] {
 
   // A compiled AlphaWay executable and an invoked TypeScript entry point both
   // keep their deployment .env beside the runnable artifact.
-  if (process.execPath) candidates.push(path.resolve(path.dirname(process.execPath), ".env"));
+  // A compiled standalone AlphaWay binary owns its adjacent .env; in source
+  // mode process.execPath is Bun itself, not the application directory.
+  if (process.execPath && /^alphaway(?:\.exe)?$/i.test(path.basename(process.execPath))) {
+    candidates.push(path.resolve(path.dirname(process.execPath), ".env"));
+  }
   const entryPoint = process.argv[1];
   if (entryPoint && (entryPoint.endsWith(".ts") || entryPoint.endsWith(".js") || entryPoint.endsWith(".mjs"))) {
     candidates.push(path.resolve(path.dirname(entryPoint), ".env"));
@@ -167,5 +171,9 @@ export function resolveEnvFilePath(): string {
 /** Create and re-assert an owner-only directory on POSIX. */
 export function ensurePrivateDirectory(directory: string): void {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const stat = fs.lstatSync(directory);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error("SQLite data directory must be a regular, non-symlink directory");
+  }
   if (process.platform !== "win32") fs.chmodSync(directory, 0o700);
 }
