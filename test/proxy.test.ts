@@ -6,9 +6,8 @@ const path = require("node:path");
 const http = require("node:http");
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ofb-proxy-test-"));
-process.env.OPENCODE_BRIDGE_STATE_DIR = tmpDir;
-process.env.ALPHAWAY_STATE_DIR = tmpDir;
-process.env.ALPHAWAY_DB_PATH = path.join(tmpDir, "alphaway.sqlite");
+process.env.DATA_DIR = tmpDir;
+process.env.DB_PATH = path.join(tmpDir, "db", "data.sqlite");
 delete process.env.UPSTREAM_PROXY_URL;
 
 const proxy = require("../src/core/proxy");
