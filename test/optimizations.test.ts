@@ -16,6 +16,15 @@ const {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const origFetch = global.fetch;
 
+function isRawGithubUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.toLowerCase() === "raw.githubusercontent.com";
+  } catch {
+    return false;
+  }
+}
+
 afterEach(() => {
   global.fetch = origFetch;
   sessionCache.clear();
@@ -26,7 +35,7 @@ describe("v1.5.2 optimizations", () => {
     let modelHits = 0;
     global.fetch = async (url: any) => {
       const u = String(url);
-      if (u.includes("raw.githubusercontent.com")) return { ok: false, status: 404 } as any;
+      if (isRawGithubUrl(u)) return { ok: false, status: 404 } as any;
       if (u.includes("releases.atom")) return { ok: true, text: async () => "<title>v2.0.29</title>" } as any;
       if (u.endsWith("/models")) {
         modelHits++;
@@ -50,7 +59,7 @@ describe("v1.5.2 optimizations", () => {
     let feedHits = 0;
     global.fetch = async (url: any) => {
       const u = String(url);
-      if (u.includes("raw.githubusercontent.com")) return { ok: false, status: 404 } as any;
+      if (isRawGithubUrl(u)) return { ok: false, status: 404 } as any;
       if (u.includes("releases.atom")) {
         feedHits++;
         await sleep(400);

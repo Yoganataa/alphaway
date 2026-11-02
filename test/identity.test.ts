@@ -4,6 +4,15 @@ const identity = require("../src/core/identity");
 
 const origFetch = global.fetch;
 
+function isRawGithubUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.toLowerCase() === "raw.githubusercontent.com";
+  } catch {
+    return false;
+  }
+}
+
 afterEach(() => {
   global.fetch = origFetch;
   identity.__reset();
@@ -150,7 +159,7 @@ function mockUpstream({
       };
     }
 
-    if (u.includes("raw.githubusercontent.com")) {
+    if (isRawGithubUrl(u)) {
       if (failSource) return { ok: false, status: 404 };
       const key = u.includes("session-id.ts")
         ? "sessionId"
@@ -508,7 +517,7 @@ describe("identity: refresh & update modes (reactive vs always)", () => {
     const res = await identity.refresh();
     assert.equal(res.reason, "up-to-date");
     const second = calls.slice(afterFirst);
-    const sourceReads = second.filter((u) => u.includes("raw.githubusercontent.com"));
+    const sourceReads = second.filter((u) => isRawGithubUrl(u));
     assert.equal(sourceReads.length, 0);
     assert.ok(second.some((u) => u.includes("/update/api/")));
   });
@@ -669,7 +678,7 @@ describe("identity: self-healing on gate rejection", () => {
       const calls = mockUpstream({ versions: ["2.0.32"] });
       await identity.refresh({ force: true });
       const afterFirst = calls.length;
-      assert.ok(calls.some((u) => u.includes("raw.githubusercontent.com")));
+      assert.ok(calls.some((u) => isRawGithubUrl(u)));
 
       // Even when cooldown is cleared and local session prefix is corrupted,
       // forced refresh at the same SHA heals from memoized source without
@@ -680,7 +689,7 @@ describe("identity: self-healing on gate rejection", () => {
       assert.equal(identity.getSessionPrefix(), "ses_");
       const secondCalls = calls.slice(afterFirst);
       assert.equal(
-        secondCalls.filter((u) => u.includes("raw.githubusercontent.com")).length,
+        secondCalls.filter((u) => isRawGithubUrl(u)).length,
         0,
         "must not re-fetch raw.githubusercontent.com files for the same commit SHA"
       );
