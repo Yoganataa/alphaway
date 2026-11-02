@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "../src/core/secrets";
 
-const stateDir = process.env.ALPHAWAY_STATE_DIR;
-if (!stateDir) throw new Error("test/setup.ts must set ALPHAWAY_STATE_DIR before secret tests run");
+const stateDir = process.env.DATA_DIR;
+if (!stateDir) throw new Error("test/setup.ts must set DATA_DIR before secret tests run");
 const keyPath = path.join(stateDir, "secret-encryption.key");
 
 describe("authenticated secret storage", () => {
