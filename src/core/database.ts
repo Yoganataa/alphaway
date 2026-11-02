@@ -321,7 +321,7 @@ export function dbInsertRequestLog(entry: RequestLogRow): void {
   const stmt = db.prepare(`
     INSERT INTO request_logs (
       id, timestamp, protocol, model, provider, status,
-      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream
+      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream, client_api_key_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `);
   stmt.run(
@@ -586,7 +586,7 @@ export function dbInsertRequestLogWithSnapshot(entry: RequestLogRow, snapshot: u
   const insert = db.prepare(`
     INSERT INTO request_logs (
       id, timestamp, protocol, model, provider, status,
-      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream
+      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream, client_api_key_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const upsert = db.prepare(`
