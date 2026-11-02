@@ -15,11 +15,11 @@ The backup must be an encrypted AlphaWay SQLite snapshot (.awenc).`);
   process.exit(2);
 }
 
-function acquireRestoreLock(): () => void {
-  // This is the same atomic lock held by every AlphaWay server process. It
-  // fails closed for foreground and service-manager launches as well as daemon
-  // mode, and prevents a new server from starting during the restore window.
-  return acquireAlphaWayProcessLock();
+function acquireRestoreLock(databasePath: string): () => void {
+  // Lock both the configured data root and the actual restore destination.
+  // This remains safe when DB_PATH points outside DATA_DIR or a restore target
+  // differs from the database currently configured for this CLI process.
+  return acquireAlphaWayProcessLock(databasePath);
 }
 
 const [command, ...args] = process.argv.slice(2).filter((argument) => argument !== "--");
@@ -35,10 +35,10 @@ if (command === "backup") {
 } else if (command === "restore") {
   const backupPath = args[0] ? path.resolve(args[0]) : "";
   const databasePath = args[1] ? path.resolve(args[1]) : getDbFilePath();
-  if (!backupPath || !backupPath.endsWith(".awenc") || !fs.existsSync(backupPath)) usage();
+  if (!backupPath || !backupPath.endsWith(".awenc") || !fs.existsSync(backupPath) || databasePath === ":memory:") usage();
   let releaseLock: (() => void) | undefined;
   try {
-    releaseLock = acquireRestoreLock();
+    releaseLock = acquireRestoreLock(databasePath);
     restoreDatabaseBackup(backupPath, databasePath);
     console.log(`SQLite database restored from ${backupPath} to ${databasePath}`);
   } catch (error) {
