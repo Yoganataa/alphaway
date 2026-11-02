@@ -260,14 +260,16 @@ Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field 
 
 ```text
 Lanjutkan AlphaWay dari repository https://github.com/Yoganataa/alphaway.
-
-Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Setelah itu periksa live main, branch feat/phase-2-auth-admin-security, PR #4, dan GitHub Actions. Jangan mengulang Phase 0 atau Phase 1 yang sudah merged. Main saat checkpoint: e2492fb3a995677d24f3078b7925a2c48c877ca7. PR #4 adalah satu-satunya PR aktif, open dan draft, target main.
-
 Phase 2 mencakup admin bootstrap/login/session, default-deny admin API gate, managed inference keys hashed dan lifecycle/scopes, AES-256-GCM persistence untuk provider/proxy/relay/CodeBuddy OAuth secrets, pemisahan gateway dan CodeBuddy upstream credentials, OAuth state/authUrl flow, health/error redaction, isolated Bun test state, login KDF concurrency cap (4 active/16 queued), SQLite v3 residue cleanup, v4 SQLite CodeBuddy credential encryption, v5 removal of the retired JSON import ledger, encrypted streaming SQLite backups, bounded request bodies, dan proxy-health cache limits.
-
-Code head d4ef382c328ad3a26e2fa30f524bc3ade85c7828 passed CI run 41371688949: 331 unit/protocol tests, 8 dashboard E2E, TLS fingerprint (17 ciphers/12 extensions), build, installer smoke. Documentation-synchronized PR head 9fdba247c1779885978e8357636358c2244c8649 passed CI run 41372136690 dengan hasil yang sama. Optional live upstream drill sengaja skipped.
-
+The last verified implementation before the SQLite-only removal passed CI #252 on Bun 1.4.4 (340 unit/protocol tests, 8 dashboard E2E, TLS fingerprint, build, installer smoke). The current SQLite-only cleanup is newer and awaits a fresh CI run; do not use the previous CI result as verification of the new head.
 Gap tersisa: independent security review PR #4 dan Windows ACL verification (Phase 7). Standalone JSON import/recovery sengaja tidak didukung; SQLite adalah satu-satunya persistent application-state backend. Assignment Plan ke key dilakukan pada Phase 3 bersama model Plan. Jangan merge PR #4 atau mulai Phase 3 sampai syarat Phase 2 dipenuhi.
+Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Periksa live main, branch `feat/phase-2-auth-admin-security`, PR #4, dan GitHub Actions. Phase 0 dan Phase 1 sudah merged; PR #4 adalah satu-satunya PR aktif, open dan draft, target `main`.
+
+Phase 2 mencakup keamanan admin/session, managed inference keys, AES-256-GCM untuk provider/proxy/relay/CodeBuddy credentials, pemisahan gateway dan upstream credentials, OAuth, redaction, login KDF limits, SQLite secret cleanup migrations v3/v4, schema v5 yang menghapus tabel `legacy_imports`, streaming encrypted SQLite backups v1/v2, bounded JSON HTTP request bodies, dan bounded proxy health cache.
+
+AlphaWay sekarang menggunakan SQLite sebagai satu-satunya persistent application-state backend. Importer file JSON mandiri dan CLI `--restore-legacy-backup` telah dihapus. File JSON lama tidak diimpor, dimodifikasi, atau dihapus. Jangan mengedit ulang migrasi historis v1-v4.
+
+Implementasi SQLite-only masih menunggu CI baru. Independent security review PR #4 juga belum dilakukan. Windows ACL verification tetap Phase 7; Plan assignment/quota enforcement tetap Phase 3. Jangan merge PR #4 atau mulai Phase 3 sampai CI dan security review memenuhi syarat.
 
 Backend tetap Bun 1.4.4 + TypeScript + Hono; jangan port backend Go dari 9router-go dan jangan melemahkan test.
 ```
