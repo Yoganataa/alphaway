@@ -4,6 +4,7 @@ import path from "node:path";
 import { createMigrationBackup, restoreDatabaseBackup } from "../core/migrations/backup";
 import { closeDatabase, getDatabase, getDbFilePath } from "../core/database";
 import { resolveDataDir } from "../core/storage-paths";
+import { acquireAlphaWayProcessLock } from "../core/process-lock";
 
 function usage(): never {
   console.error(`Usage:
@@ -15,20 +16,11 @@ The backup must be an encrypted AlphaWay SQLite snapshot (.awenc).`);
   process.exit(2);
 }
 
-function assertNoManagedDaemon(): void {
-  const pidFile = path.join(resolveDataDir(), "alphaway.pid");
-  if (!fs.existsSync(pidFile)) return;
-  const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
-  if (!Number.isSafeInteger(pid) || pid <= 0) return;
-  try {
-    process.kill(pid, 0);
-    throw new Error(`AlphaWay daemon PID ${pid} appears to be running. Stop it before restoring a database.`);
-  } catch (error: any) {
-    if (error?.code === "EPERM") {
-      throw new Error(`AlphaWay daemon PID ${pid} appears to be running. Stop it before restoring a database.`);
-    }
-    if (error?.code !== "ESRCH") throw error;
-  }
+function acquireRestoreLock(): () => void {
+  // This is the same atomic lock held by every AlphaWay server process. It
+  // fails closed for foreground and service-manager launches as well as daemon
+  // mode, and prevents a new server from starting during the restore window.
+  return acquireAlphaWayProcessLock();
 }
 
 const [command, ...args] = process.argv.slice(2).filter((argument) => argument !== "--");
@@ -45,13 +37,16 @@ if (command === "backup") {
   const backupPath = args[0] ? path.resolve(args[0]) : "";
   const databasePath = args[1] ? path.resolve(args[1]) : getDbFilePath();
   if (!backupPath || !backupPath.endsWith(".awenc") || !fs.existsSync(backupPath)) usage();
-  assertNoManagedDaemon();
+  let releaseLock: (() => void) | undefined;
   try {
+    releaseLock = acquireRestoreLock();
     restoreDatabaseBackup(backupPath, databasePath);
     console.log(`SQLite database restored from ${backupPath} to ${databasePath}`);
   } catch (error) {
     console.error("SQLite database restore failed:", error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
+  } finally {
+    releaseLock?.();
   }
 } else {
   usage();
