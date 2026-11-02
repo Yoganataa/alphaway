@@ -104,7 +104,7 @@ STAGE="$(mktemp -d "$BINDIR/.stage.XXXXXX")"
 STAGED_APP="$STAGE/app"
 BACKUP=""
 SERVICE_SCOPE="none"
-mkdir -p "$STAGED_APP" "$BINDIR/db"
+mkdir -p "$STAGED_APP"
 
 cleanup() {
   rm -rf "$STAGE"
@@ -184,35 +184,52 @@ if [ ! -f "$BINDIR/.env" ]; then
   say "Created configuration at $BINDIR/.env"
 fi
 
-# Keep manual launches, daemon mode, systemd, and launchd on one persistent root.
-# Preserve an explicitly configured DATA_DIR. If the template leaves it empty,
-# bind it to BINDIR so all startup modes use the same data files.
-configured_data_dir=""
-while IFS= read -r env_line; do
-  case "$env_line" in
-    DATA_DIR=*) configured_data_dir="${env_line#DATA_DIR=}" ;;
-  esac
-done < "$BINDIR/.env"
+# Resolve persistent data exactly once so the service, daemon CLI, database,
+# encryption key, and manual binary launch all use the same directory.
+configured_data_dir="${DATA_DIR:-}"
 if [ -z "$configured_data_dir" ]; then
-  if grep -q '^DATA_DIR=' "$BINDIR/.env"; then
-    ENV_TMP="$BINDIR/.env.storage.tmp"
-    while IFS= read -r env_line || [ -n "$env_line" ]; do
-      case "$env_line" in
-        DATA_DIR=*) printf 'DATA_DIR=%s\n' "$BINDIR" ;;
-        *) printf '%s\n' "$env_line" ;;
-      esac
-    done < "$BINDIR/.env" > "$ENV_TMP"
-    chmod 600 "$ENV_TMP"
-    mv "$ENV_TMP" "$BINDIR/.env"
-  else
-    printf '\nDATA_DIR=%s\n' "$BINDIR" >> "$BINDIR/.env"
-  fi
+  configured_data_dir="${ALPHAWAY_STATE_DIR:-${OPENCODE_BRIDGE_STATE_DIR:-}}"
+fi
+if [ -z "$configured_data_dir" ]; then
+  env_file_data_dir=""
+  env_file_legacy_data_dir=""
+  while IFS= read -r env_line || [ -n "$env_line" ]; do
+    case "$env_line" in
+      DATA_DIR=*) env_file_data_dir="${env_line#DATA_DIR=}" ;;
+      ALPHAWAY_STATE_DIR=*) env_file_legacy_data_dir="${env_line#ALPHAWAY_STATE_DIR=}" ;;
+      OPENCODE_BRIDGE_STATE_DIR=*) env_file_legacy_data_dir="${env_line#OPENCODE_BRIDGE_STATE_DIR=}" ;;
+    esac
+  done < "$BINDIR/.env"
+  configured_data_dir="${env_file_data_dir:-$env_file_legacy_data_dir}"
+fi
+if [ -z "$configured_data_dir" ]; then
   configured_data_dir="$BINDIR"
+fi
+case "$configured_data_dir" in *$'\n'*|*$'\r'*) die "DATA_DIR cannot contain a newline" ;; esac
+
+# Persist the resolved location so a later manual launch without the installer
+# environment still uses the same data root. This also canonicalizes old aliases.
+if grep -q '^DATA_DIR=' "$BINDIR/.env"; then
+  ENV_TMP="$BINDIR/.env.storage.tmp"
+  while IFS= read -r env_line || [ -n "$env_line" ]; do
+    case "$env_line" in
+      DATA_DIR=*) printf 'DATA_DIR=%s\n' "$configured_data_dir" ;;
+      *) printf '%s\n' "$env_line" ;;
+    esac
+  done < "$BINDIR/.env" > "$ENV_TMP"
+  chmod 600 "$ENV_TMP"
+  mv "$ENV_TMP" "$BINDIR/.env"
+else
+  printf '\nDATA_DIR=%s\n' "$configured_data_dir" >> "$BINDIR/.env"
+  chmod 600 "$BINDIR/.env"
 fi
 
 DATA_DIR="$configured_data_dir"
 export DATA_DIR
-mkdir -p "$DATA_DIR"
+mkdir -p "$DATA_DIR/db"
+if [ "$(uname -s)" != "Darwin" ] && [ "$(uname -s)" != "MINGW"* ]; then
+  chmod 700 "$DATA_DIR" "$DATA_DIR/db"
+fi
 
 # --------------------------------------------------------- service stop ---
 stop_managed_background() {
