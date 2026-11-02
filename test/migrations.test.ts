@@ -21,10 +21,11 @@ describe("SQLite migration runner", () => {
     const result = runMigrations(db);
 
     expect(result).toEqual({
-      currentVersion: 2,
+      currentVersion: 3,
       applied: [
         { version: 1, name: "initial-schema" },
         { version: 2, name: "auth-security" },
+        { version: 3, name: "secret-residue-cleanup" },
       ],
     });
 
@@ -45,7 +46,12 @@ describe("SQLite migration runner", () => {
     const history = db
       .prepare("SELECT version, name FROM schema_migrations")
       .all();
-    expect(history).toEqual([{ version: 1, name: "initial-schema" }, { version: 2, name: "auth-security" }]);
+    expect(history).toEqual([
+      { version: 1, name: "initial-schema" },
+      { version: 2, name: "auth-security" },
+      { version: 3, name: "secret-residue-cleanup" },
+    ]);
+    expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub").value).toBe(JSON.stringify("pending"));
   });
 
   it("hashes legacy plaintext API keys and removes the legacy setting atomically", () => {
@@ -72,7 +78,7 @@ describe("SQLite migration runner", () => {
       .update(legacySecret, "utf8")
       .digest("hex");
 
-    expect(result.currentVersion).toBe(2);
+    expect(result.currentVersion).toBe(4);
     expect(stored.name).toBe("Legacy Integration");
     expect(stored.key_prefix).toBe(legacySecret.slice(0, 16));
     expect(stored.secret_hash).toBe(expectedHash);
@@ -180,11 +186,11 @@ describe("SQLite migration runner", () => {
     const first = runMigrations(db);
     const second = runMigrations(db);
 
-    expect(first.applied).toHaveLength(2);
+    expect(first.applied).toHaveLength(3);
     expect(second.applied).toHaveLength(0);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(2);
+    ).toBe(4);
   });
 
   it("rolls back migration DDL and history when a migration fails", () => {
@@ -192,7 +198,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const failingMigration: Migration = {
-      version: 3,
+      version: 4,
       name: "failing-test-migration",
       up(database) {
         database.exec("CREATE TABLE should_rollback (id INTEGER PRIMARY KEY)");
@@ -201,7 +207,7 @@ describe("SQLite migration runner", () => {
     };
 
     expect(() => runMigrations(db, [...MIGRATIONS, failingMigration])).toThrow(
-      /Migration 3 .* simulated interruption/
+      /Migration 4 .* simulated interruption/
     );
 
     const table = db
@@ -212,7 +218,7 @@ describe("SQLite migration runner", () => {
       .get().count;
 
     expect(table).toBeNull();
-    expect(count).toBe(2);
+    expect(count).toBe(3);
   });
 
   it("can retry a migration after its failed attempt was rolled back", () => {
@@ -220,7 +226,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const recoveredMigration: Migration = {
-      version: 3,
+      version: 4,
       name: "recovered-test-migration",
       up(database) {
         database.exec("CREATE TABLE recovered_state (value TEXT NOT NULL)");
@@ -228,9 +234,9 @@ describe("SQLite migration runner", () => {
     };
 
     const result = runMigrations(db, [...MIGRATIONS, recoveredMigration]);
-    expect(result.currentVersion).toBe(3);
+    expect(result.currentVersion).toBe(4);
     expect(result.applied).toEqual([
-      { version: 3, name: "recovered-test-migration" },
+      { version: 4, name: "recovered-test-migration" },
     ]);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
@@ -242,7 +248,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const destructiveMigration: Migration = {
-      version: 3,
+      version: 4,
       name: "destructive-test-migration",
       destructive: true,
       up(database) {
