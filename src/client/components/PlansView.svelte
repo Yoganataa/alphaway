@@ -82,13 +82,14 @@
     event.preventDefault();
     if (saving) return;
     saving = true;
+    const wasEditing = Boolean(editingId);
     try {
       const input = buildInput();
       if (editingId) await updatePlan(editingId, input);
       else await createPlan(input);
       await loadPlans();
       resetForm();
-      notifications.success(editingId ? "Plan updated" : "Plan created");
+      notifications.success(wasEditing ? "Plan updated" : "Plan created");
     } catch (error: any) {
       notifications.error(error.message || "Plan could not be saved");
     } finally {
