@@ -16,8 +16,9 @@ describe("SQLite backup and restore operator CLI", () => {
     expect(cli).toContain('command === "backup"');
     expect(cli).toContain('command === "restore"');
     expect(cli).toContain('backupPath.endsWith(".awenc")');
-    expect(cli).toContain("acquireRestoreLock");
-    expect(cli).toContain("acquireAlphaWayProcessLock");
+    expect(cli).toContain("function acquireRestoreLock(databasePath: string)");
+    expect(cli).toContain("acquireAlphaWayProcessLock(databasePath)");
+    expect(cli).toContain('databasePath === ":memory:"');
     expect(cli).toContain('process.argv.slice(2).filter((argument) => argument !== "--")');
     expect(cli).toContain("restoreDatabaseBackup");
     expect(cli).toContain("createMigrationBackup");
