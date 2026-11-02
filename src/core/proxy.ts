@@ -384,7 +384,7 @@ function writeHealthNow(now = Date.now()) {
     removeHealthFile();
     return;
   }
-  const serialized = `${JSON.stringify(healthSnapshot(now), null, 2)}\\n`;
+  const serialized = `${JSON.stringify(healthSnapshot(now), null, 2)}\n`;
   if (Buffer.byteLength(serialized, "utf8") > MAX_HEALTH_FILE_BYTES) return;
   const filePath = healthFile();
   const tmp = `${filePath}.${crypto.randomUUID()}.tmp`;
