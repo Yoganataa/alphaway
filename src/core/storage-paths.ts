@@ -86,7 +86,11 @@ export function resolveStoragePaths(options: StoragePathOptions = {}): ResolvedS
   const envFile = options.envFile ?? readEnvFile().values;
   const cwd = options.cwd ?? process.cwd();
   const platform = options.platform ?? process.platform;
-  const homeDir = options.homeDir ?? os.homedir();
+  const homeDir = options.homeDir ?? (
+    platform === "win32"
+      ? nonEmpty(env.USERPROFILE) ?? nonEmpty(env.HOME) ?? os.homedir()
+      : nonEmpty(env.HOME) ?? nonEmpty(env.USERPROFILE) ?? os.homedir()
+  );
 
   // Process environment always wins over .env, including when the old
   // AlphaWay variable is used by an existing service unit.
