@@ -185,10 +185,29 @@ if [ ! -f "$BINDIR/.env" ]; then
 fi
 
 # Keep manual launches, daemon mode, systemd, and launchd on one persistent root.
-# Respect a non-empty operator-specified DATA_DIR; otherwise bind the new
-# installation's .env to BINDIR so the application finds the same files
-# regardless of how it is started.
-if ! grep -Eq '^[[:space:]]*DATA_DIR[[:space:]]*=.+
+# Preserve an explicitly configured DATA_DIR. If the template leaves it empty,
+# bind it to BINDIR so all startup modes use the same data files.
+configured_data_dir=""
+while IFS= read -r env_line; do
+  case "$env_line" in
+    DATA_DIR=*) configured_data_dir="${env_line#DATA_DIR=}" ;;
+  esac
+done < "$BINDIR/.env"
+if [ -z "$configured_data_dir" ]; then
+  if grep -q '^DATA_DIR=' "$BINDIR/.env"; then
+    ENV_TMP="$BINDIR/.env.storage.tmp"
+    while IFS= read -r env_line || [ -n "$env_line" ]; do
+      case "$env_line" in
+        DATA_DIR=*) printf 'DATA_DIR=%s\n' "$BINDIR" ;;
+        *) printf '%s\n' "$env_line" ;;
+      esac
+    done < "$BINDIR/.env" > "$ENV_TMP"
+    chmod 600 "$ENV_TMP"
+    mv "$ENV_TMP" "$BINDIR/.env"
+  else
+    printf '\nDATA_DIR=%s\n' "$BINDIR" >> "$BINDIR/.env"
+  fi
+fi
 
 # --------------------------------------------------------- service stop ---
 stop_managed_background() {
