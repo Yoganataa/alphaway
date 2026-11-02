@@ -274,7 +274,7 @@ describe("SQLite migration runner", () => {
       .get().count;
 
     expect(table).toBeNull();
-    expect(count).toBe(4);
+    expect(count).toBe(5);
   });
 
   it("can retry a migration after its failed attempt was rolled back", () => {
@@ -325,7 +325,7 @@ describe("SQLite migration runner", () => {
     });
 
     expect(backupWasCreated).toBe(true);
-    expect(result.currentVersion).toBe(5);
+    expect(result.currentVersion).toBe(6);
   });
 
   it("rejects a database created by a newer application schema", () => {
