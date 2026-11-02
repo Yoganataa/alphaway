@@ -222,6 +222,27 @@ describe("SQLite migration backup and restore", () => {
     });
   });
 
+  it("retains only the newest three encrypted physical database backups", () => {
+    withTempDirectory((directory) => {
+      const databasePath = path.join(directory, "alphaway.sqlite");
+      const db = new Database(databasePath);
+      db.exec("CREATE TABLE backup_retention_probe (value TEXT NOT NULL)");
+      const created: string[] = [];
+
+      for (let index = 0; index < 4; index += 1) {
+        created.push(createMigrationBackup(db, databasePath, `manual-${index}`));
+      }
+      db.close();
+
+      const backupDir = path.join(directory, "backups");
+      const retained = fs.readdirSync(backupDir)
+        .filter((name) => name.startsWith("alphaway-before-") && name.endsWith(".sqlite.awenc"));
+      expect(retained).toHaveLength(3);
+      expect(fs.existsSync(created[0])).toBe(false);
+      expect(created.slice(1).every((backup) => fs.existsSync(backup))).toBe(true);
+    });
+  });
+
   it("refuses destructive migration backups for in-memory databases", () => {
     const db = new Database(":memory:");
     try {
