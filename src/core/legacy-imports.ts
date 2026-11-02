@@ -455,8 +455,9 @@ function importSourceFile(
   // source in plaintext, secure it after checking its ledger entry below.
   let sourceFd: number | undefined;
   let stat: fs.Stats;
+  let pathStat: fs.Stats;
   try {
-    const pathStat = fs.lstatSync(filePath);
+    pathStat = fs.lstatSync(filePath);
     if (pathStat.isSymbolicLink() || !pathStat.isFile()) {
       return { sourceKey, status: "skipped", rowCount: 0, details: "Only regular, non-symlink legacy JSON files can be imported." };
     }
