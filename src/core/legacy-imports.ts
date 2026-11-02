@@ -32,6 +32,27 @@ type ImportHandler = (db: any, payload: any) => ImportOutcome;
 
 const MAX_LEGACY_JSON_BYTES = 50 * 1024 * 1024;
 
+/**
+ * Read at most maxBytes plus one sentinel byte from an already-open regular
+ * file. A concurrent writer must not be able to grow a small-at-fstat source
+ * into an unbounded allocation before the importer notices.
+ */
+function readUtf8WithinLimit(fd: number, maxBytes: number): string | null {
+  const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, maxBytes + 1));
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  while (true) {
+    const remaining = maxBytes + 1 - total;
+    if (remaining <= 0) return null;
+    const bytesRead = fs.readSync(fd, chunk, 0, Math.min(chunk.length, remaining), null);
+    if (bytesRead === 0) return Buffer.concat(chunks, total).toString("utf8");
+    total += bytesRead;
+    if (total > maxBytes) return null;
+    chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
+  }
+}
+
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -474,7 +495,29 @@ function importSourceFile(
         details: `File exceeds the ${MAX_LEGACY_JSON_BYTES}-byte import limit. Import was skipped without parsing or replacing the source. Preserve it until a verified encrypted archive exists, then move it out of configured import directories; do not delete it before verifying the archive.`,
       };
     }
-    raw = fs.readFileSync(sourceFd!, "utf8");
+    const bounded = readUtf8WithinLimit(sourceFd!, MAX_LEGACY_JSON_BYTES);
+    if (bounded === null) {
+      return {
+        sourceKey,
+        status: "skipped",
+        rowCount: 0,
+        details: `File grew beyond the ${MAX_LEGACY_JSON_BYTES}-byte import limit while being read. Import was skipped without parsing or replacing the source. Preserve it until a verified encrypted archive exists, then move it out of configured import directories.`,
+      };
+    }
+    raw = bounded;
+    const afterRead = fs.fstatSync(sourceFd!);
+    if (
+      afterRead.size !== stat.size ||
+      afterRead.mtimeMs !== stat.mtimeMs ||
+      afterRead.ctimeMs !== stat.ctimeMs
+    ) {
+      return {
+        sourceKey,
+        status: "skipped",
+        rowCount: 0,
+        details: "Legacy source changed while it was being read. Import was skipped without parsing or replacing the source.",
+      };
+    }
   } finally {
     if (sourceFd !== undefined) fs.closeSync(sourceFd);
   }
