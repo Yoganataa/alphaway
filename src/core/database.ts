@@ -11,7 +11,6 @@ import path from "node:path";
 import os from "node:os";
 import { runMigrations } from "./migrations";
 import { createMigrationBackup, encryptExistingMigrationBackups } from "./migrations/backup";
-import { importLegacyJson } from "./legacy-imports";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "./secrets";
 import { hasEmbeddedProviderUrlSecrets } from "./provider-url-secrets";
 
@@ -42,9 +41,6 @@ export interface RequestLogRow {
 }
 
 export function resolveDbDir(): string {
-  // ALPHAWAY_HOME was a legacy JSON-config directory, not the SQLite database
-  // root in prior releases. Keep the database location stable; import legacy
-  // JSON from ALPHAWAY_HOME below instead of silently switching to a new DB.
   const customState =
     process.env.ALPHAWAY_STATE_DIR ||
     process.env.OPENCODE_BRIDGE_STATE_DIR;
@@ -166,26 +162,6 @@ export function getDatabase(): any {
     try { dbInstance.close(); } catch {}
     dbInstance = null;
     throw error;
-  }
-
-  // Import pre-SQLite JSON data exactly once. Each source file and all of
-  // its row/settings writes are committed in one transaction with its ledger
-  // record. Processed legacy sources are replaced by encrypted rollback envelopes.
-  const legacyDirs = [
-    process.env.ALPHAWAY_HOME,
-    path.join(os.homedir(), ".opencode-free-bridge"),
-  ].filter((dir): dir is string => typeof dir === "string" && dir.trim().length > 0);
-  const importReports = importLegacyJson(dbInstance, resolveDbDir(), legacyDirs);
-  for (const report of importReports) {
-    if (report.status === "skipped" || report.details) {
-      console.warn(
-        `[AlphaWay] Legacy import ${report.sourceKey}: ${report.details || report.status}`
-      );
-    } else if (report.status === "imported" && report.rowCount > 0) {
-      console.info(
-        `[AlphaWay] Legacy import ${report.sourceKey}: ${report.rowCount} row(s) imported`
-      );
-    }
   }
 
   return dbInstance;
