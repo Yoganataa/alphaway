@@ -24,6 +24,30 @@
   let oauthStatusText = $state<string | null>(null);
   let pollIntervalHandle: any = null;
 
+  const trustedOAuthDomains = ["codebuddy.ai", "workbuddy.ai"];
+  function safeCodeBuddyAuthUrl(value: string | undefined): string | null {
+    if (!value || value.length > 2048) return null;
+    try {
+      const parsed = new URL(value);
+      const hostname = parsed.hostname.toLowerCase();
+      const trusted = trustedOAuthDomains.some((domain) =>
+        hostname === domain || hostname.endsWith(`.${domain}`)
+      );
+      if (
+        parsed.protocol !== "https:" ||
+        !trusted ||
+        parsed.username !== "" ||
+        parsed.password !== "" ||
+        (parsed.port !== "" && parsed.port !== "443")
+      ) return null;
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  const oauthAuthUrl = $derived(oauthData ? safeCodeBuddyAuthUrl(oauthData.authUrl) : null);
+
   // Custom provider modal / form state
   let showProviderModal = $state(false);
   let isEditing = $state(false);
@@ -337,11 +361,11 @@
         </Button>
       </div>
 
-      {#if oauthData && oauthPolling}
+      {#if oauthData && oauthPolling && oauthAuthUrl}
         <div class="mt-3 p-3 rounded-[10px] bg-surface border border-brand-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           <div>
             <span class="text-text-muted">Open in browser:</span>
-            <a href={oauthData.authUrl} target="_blank" rel="noopener noreferrer" class="ml-1 text-brand-400 font-semibold underline">
+            <a href={oauthAuthUrl} target="_blank" rel="noopener noreferrer" class="ml-1 text-brand-400 font-semibold underline">
               {oauthData.authUrl}
             </a>
           </div>
