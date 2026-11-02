@@ -29,7 +29,7 @@ export function redactCredentialEchoes(input: string, secrets: string[], maxLeng
     if (!secret) continue;
     candidates.add(secret);
     candidates.add(encodeURIComponent(secret));
-    const token = secret.replace(/^Bearer\\s+/i, "");
+    const token = secret.replace(/^Bearer\s+/i, "");
     candidates.add(token);
     if (token) candidates.add("Bearer " + token);
     try { candidates.add(decodeURIComponent(secret)); } catch {}
@@ -40,7 +40,7 @@ export function redactCredentialEchoes(input: string, secrets: string[], maxLeng
   }
   // Redact URL authority credentials even when the exact configured secret
   // was not included in the caller-provided secret list.
-  return sanitized.replace(/(https?:\\/\\/)[^/@\\s]+@/gi, "$1[REDACTED]@").slice(0, maxLength);
+  return sanitized.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1[REDACTED]@").slice(0, maxLength);
 }
 export function hasEmbeddedProviderUrlSecrets(input: string): boolean {
   return embeddedProviderUrlSecrets(input).length > 0;
@@ -59,10 +59,10 @@ export function redactProviderBaseUrl(input: string): string {
     const safe = url.toString();
     return raw.endsWith("/") && !safe.endsWith("/") ? safe + "/" : safe;
   } catch {
-    let safe = raw.replace(/(https?:\\/\\/)[^/@\\s]+@/gi, "$1");
+    let safe = raw.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1");
     safe = safe.replace(/([?&])([^=&#]+)=([^&#]*)/g, (match, separator, name) =>
       SENSITIVE_QUERY_NAME.test(name) ? separator + name + "=[REDACTED]" : match
     );
-    return safe.replace(/\\?&/, "?").replace(/[?&]$/, "");
+    return safe.replace(/\?&/, "?").replace(/[?&]$/, "");
   }
 }
