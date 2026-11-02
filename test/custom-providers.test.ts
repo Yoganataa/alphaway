@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from "bun:test";
 import { app } from "../src/app";
+import { embeddedProviderUrlSecrets, redactCredentialEchoes } from "../src/core/provider-url-secrets";
 import { adminRequest } from "./helpers/admin";
 import { issueAPIKey, revokeAPIKey } from "../src/core/api-keys";
 import { getDatabase } from "../src/core/database";
@@ -106,10 +107,29 @@ describe("3rd-Party Custom Providers Engine", () => {
     deleteCustomProvider(id);
   });
 
+  it("redacts raw, encoded, bearer-prefixed, and URL-encoded credential echoes", () => {
+    const secret = "user:token +/= with spaces";
+    const url = "https://provider.example.test/v1?api_key=" + encodeURIComponent(secret);
+    const secrets = embeddedProviderUrlSecrets(url);
+    const response = JSON.stringify({
+      raw: secret,
+      encoded: encodeURIComponent(secret),
+      bearer: "Bearer " + secret,
+      bearerEncoded: "Bearer " + encodeURIComponent(secret),
+      url: "https://user:password@provider.example.test/v1",
+    });
+    const redacted = redactCredentialEchoes(response, secrets, 3000);
+    expect(redacted).not.toContain(secret);
+    expect(redacted).not.toContain(encodeURIComponent(secret));
+    expect(redacted).not.toContain("Bearer " + secret);
+    expect(redacted).not.toContain("Bearer " + encodeURIComponent(secret));
+    expect(redacted).not.toContain("user:password@");
+    expect(redacted).toContain("[REDACTED]");
+  });
   it("redacts embedded URL credentials from provider connection-test errors", async () => {
-    const urlSecret = "provider-url-query-secret-123456789";
+    const urlSecret = "provider-url-query-secret+/= with spaces";
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response(JSON.stringify({ error: `Rejected URL credential ${urlSecret}` }), {
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: `Rejected URL credential ${encodeURIComponent(urlSecret)} and ${urlSecret}` }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
@@ -119,7 +139,7 @@ describe("3rd-Party Custom Providers Engine", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          baseUrl: `https://provider.example.test/v1?api_key=${urlSecret}`,
+          baseUrl: `https://provider.example.test/v1?api_key=${encodeURIComponent(urlSecret)}`,
           apiKey: "",
           protocol: "openai",
           model: "redaction-test-model",
@@ -127,7 +147,7 @@ describe("3rd-Party Custom Providers Engine", () => {
       });
       expect(response.status).toBe(200);
       const body = await response.text();
-      expect(body).not.toContain(urlSecret);
+      expect(body).not.toContain(urlSecret);\n      expect(body).not.toContain(encodeURIComponent(urlSecret));
       expect(body).toContain("[REDACTED]");
     } finally {
       globalThis.fetch = originalFetch;
