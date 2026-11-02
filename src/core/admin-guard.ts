@@ -116,6 +116,68 @@ export function adminRequestError(c: any): string | null {
   return null;
 }
 
+export const MAX_ADMIN_AUTH_BODY_BYTES = 16 * 1024;
+
+/** Parse a small JSON request body without allowing an unbounded stream allocation. */
+export async function readJsonRequestBody(req: any, maxBytes: number = MAX_ADMIN_AUTH_BODY_BYTES): Promise<any | null> {
+  const raw = req?.raw || req;
+  const contentLength = typeof req?.header === "function"
+    ? req.header("content-length")
+    : raw?.headers?.get?.("content-length");
+  if (contentLength != null && contentLength !== "") {
+    if (!/^\\d+$/.test(String(contentLength))) {
+      const error: any = new Error("Request Content-Length is invalid");
+      error.statusCode = 400;
+      throw error;
+    }
+    const declared = Number(contentLength);
+    if (!Number.isSafeInteger(declared)) {
+      const error: any = new Error("Request Content-Length is invalid");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (declared > maxBytes) {
+      const error: any = new Error(`Request body exceeds limit of ${maxBytes} bytes`);
+      error.statusCode = 413;
+      error.code = "payload_too_large";
+      throw error;
+    }
+  }
+
+  const stream = raw?.body;
+  if (!stream || typeof stream.getReader !== "function") return null;
+
+  const reader = stream.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const chunk = Buffer.from(value);
+      totalBytes += chunk.length;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        const error: any = new Error(`Request body exceeds limit of ${maxBytes} bytes`);
+        error.statusCode = 413;
+        error.code = "payload_too_large";
+        throw error;
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+
+  const text = Buffer.concat(chunks, totalBytes).toString("utf8");
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 export const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 export function readRequestBody(req: any, maxBytes: number = MAX_BODY_BYTES): Promise<string> {
