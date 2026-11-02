@@ -17,6 +17,7 @@ export interface APIKeyRecord {
   rateLimitTpm: number | null;
   concurrencyLimit: number | null;
   allowedModels: string[] | null;
+  totalTokensUsed: number;
 }
 
 export interface APIKeyCredential {
@@ -69,6 +70,7 @@ function toRecord(row: any): APIKeyRecord {
     rateLimitTpm: row.rate_limit_tpm == null ? null : Number(row.rate_limit_tpm),
     concurrencyLimit: row.concurrency_limit == null ? null : Number(row.concurrency_limit),
     allowedModels: row.allowed_models == null ? null : (() => { try { const value = JSON.parse(row.allowed_models); return normalizeAllowedModels(value); } catch { return []; } })(),
+    totalTokensUsed: Number(row.total_tokens_used || 0),
   };
 }
 
