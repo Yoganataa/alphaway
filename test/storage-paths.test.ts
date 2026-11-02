@@ -190,7 +190,7 @@ describe("9router-style SQLite storage path contract", () => {
 NEWLINE="line\nnext"
 LITERAL="\\n"
 UNKNOWN="\\q"
-QUOTED="say \\"hi\\""`);
+QUOTED="say \"hi\""
 
     expect(parsed).toEqual({
       PATH: "C:\\Users\\Nata",
