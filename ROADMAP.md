@@ -114,7 +114,7 @@
 
 **3.1 — SQLite schema and policy model**
 - [ ] Add migration v6 with a reusable `plans` table and nullable `api_keys.plan_id` foreign-key assignment plus explicitly nullable per-key override columns.
-- [ ] Define and validate a typed Plan/PlanInput model: name, description, RPM, TPM, concurrency, lifetime token quota, optional period token budget (daily/weekly/monthly/total), alert percentage, hard cutoff, and allowed-model patterns.
+- [ ] Define and validate a typed Plan/PlanInput model: name, description, RPM, prompt TPM, concurrency, lifetime token quota, and allowed-model patterns.
 - [ ] Add a single `resolveEffectivePolicy` function with precedence: configured global defaults → assigned Plan → explicit key overrides. Unassigned/no-plan remains unrestricted.
 - [ ] Define model allowlist matching semantics (exact IDs and explicit wildcard rules); default empty list means unrestricted. Normalize aliases before evaluating the list.
 - [ ] Add transactional repository operations: create/list/get/update/delete Plans, count keys assigned to a Plan, and set/clear a managed key's Plan/overrides. Reject deleting a Plan while keys still reference it unless an explicit reassignment is part of the same transaction.
@@ -130,7 +130,7 @@
 **3.3 — Enforcement**
 - [ ] Implement bounded per-key RPM sliding windows, prompt TPM window/token bucket, and concurrency gates. Reject excess usage with consistent 429 responses and `Retry-After`; do not create unbounded queues.
 - [ ] Apply effective model allowlists to normalized models across OpenAI, Anthropic, and Codex routes before dispatch.
-- [ ] Enforce lifetime and optional period token budgets only after metering semantics are reliable. Return documented 429/402-style response semantics consistently across protocols; never silently reset a budget.
+- [ ] Enforce lifetime token quotas with concurrent reservations, bounded output tokens, and authoritative usage settlement. Period token budgets are deferred until rollover boundaries and time-zone semantics are designed. Return documented 429 responses consistently across protocols.
 - [ ] Release concurrency slots for every completion/error/cancellation path, including streaming responses. Add leak and double-release tests.
 - [ ] Keep provider-specific upstream quota separate from AlphaWay per-client policy. Never represent synthetic provider RPM/TPM as real provider quota.
 
@@ -142,7 +142,7 @@
 - [ ] Add accurate per-key usage view and clear empty/loading/error states.
 
 **3.5 — Verification**
-- [ ] Unit tests for policy precedence, validation, wildcard model access, RPM/TPM/concurrency windows, budget rollover, token accounting, map bounds, retries, cancellation, and concurrency release.
+- [ ] Unit tests for policy precedence, validation, wildcard model access, RPM/TPM/concurrency windows, lifetime quota reservation/settlement, token accounting, map bounds, retries, cancellation, and concurrency release.
 - [ ] Integration tests for Plan CRUD/assignment/deletion constraints and enforcement across OpenAI Chat, Anthropic Messages, Codex Responses, and aliases.
 - [ ] Regression tests prove legacy env keys and unassigned managed keys keep current behavior.
 - [ ] Dashboard browser tests cover Plan CRUD, assignment, policy display, and truthful Quota Tracker values.
@@ -150,6 +150,7 @@
 
 **Out of scope / deferred**
 - Provider-specific quota probing unless an upstream API provides authoritative quota values.
+- Period token budgets until rollover/time-zone semantics are specified.
 - USD spend budgets and cost alerts until accurate, versioned model/provider pricing and request-cost attribution exist.
 - Multi-tenant Plan ownership; AlphaWay remains a single-tenant local gateway.
 - Plan billing, subscriptions, account provisioning, and payment integrations.
