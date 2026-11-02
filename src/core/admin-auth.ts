@@ -90,6 +90,16 @@ function removeBootstrapToken(): void {
   try { fs.unlinkSync(getAdminBootstrapTokenPath()); } catch {}
 }
 
+const MAX_BOOTSTRAP_TOKEN_BYTES = 64;
+
+function sameBootstrapTokenSnapshot(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
 function readBootstrapToken(): string | null {
   const filePath = getAdminBootstrapTokenPath();
   try {
@@ -100,12 +110,40 @@ function readBootstrapToken(): string | null {
     const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
     const fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
     try {
-      const stat = fs.fstatSync(fd);
-      if (!stat.isFile() || stat.dev !== pathStat.dev || stat.ino !== pathStat.ino) {
+      const opened = fs.fstatSync(fd);
+      if (!opened.isFile() || opened.dev !== pathStat.dev || opened.ino !== pathStat.ino) {
         throw new Error("Administrator bootstrap token path changed while it was being opened");
       }
       if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
-      return fs.readFileSync(fd, "utf8").trim();
+      // Bootstrap files contain a 43-character base64url token. Bound the
+      // descriptor read independently of fstat to prevent unbounded allocation.
+      const baseline = fs.fstatSync(fd);
+      if (!baseline.isFile() || baseline.size > MAX_BOOTSTRAP_TOKEN_BYTES) {
+        throw new Error("Administrator bootstrap token file has an invalid length");
+      }
+      const chunks: Buffer[] = [];
+      const chunk = Buffer.allocUnsafe(MAX_BOOTSTRAP_TOKEN_BYTES + 1);
+      let total = 0;
+      while (true) {
+        const remaining = MAX_BOOTSTRAP_TOKEN_BYTES + 1 - total;
+        if (remaining <= 0) throw new Error("Administrator bootstrap token file exceeds the size limit");
+        const bytesRead = fs.readSync(fd, chunk, 0, Math.min(chunk.length, remaining), null);
+        if (bytesRead === 0) break;
+        total += bytesRead;
+        if (total > MAX_BOOTSTRAP_TOKEN_BYTES) {
+          throw new Error("Administrator bootstrap token file exceeds the size limit");
+        }
+        chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
+      }
+      const afterRead = fs.fstatSync(fd);
+      if (!sameBootstrapTokenSnapshot(baseline, afterRead)) {
+        throw new Error("Administrator bootstrap token file changed while it was being read");
+      }
+      const token = Buffer.concat(chunks, total).toString("utf8").trim();
+      if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+        throw new Error("Administrator bootstrap token file has an invalid value");
+      }
+      return token;
     } finally {
       fs.closeSync(fd);
     }
