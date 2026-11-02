@@ -129,6 +129,11 @@ function masterKey(): Buffer {
   return cachedKey;
 }
 
+/** Reset only the in-memory key cache between isolated unit tests. */
+export function __resetSecretKeyCacheForTests(): void {
+  cachedKey = null;
+}
+
 export function isEncryptedSecret(value: string | null | undefined): boolean {
   return typeof value === "string" &&
     (value.startsWith(ENVELOPE_V1) || value.startsWith(ENVELOPE_V2));
