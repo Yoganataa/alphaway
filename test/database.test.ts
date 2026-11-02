@@ -95,11 +95,18 @@ describe("AlphaWay SQLite Database Engine", () => {
     expect(tables).toContain("api_keys");
     expect(tables).toContain("admin_users");
     expect(tables).toContain("admin_sessions");
+    expect(tables).toContain("plans");
 
     const schemaVersion = db
       .prepare("SELECT MAX(version) AS version FROM schema_migrations")
       .get()?.version;
     expect(schemaVersion).toBe(6);
+    const requestColumns = db.prepare("PRAGMA table_info(request_logs)").all().map((row: any) => row.name);
+    expect(requestColumns).toContain("client_api_key_id");
+    const keyColumns = db.prepare("PRAGMA table_info(api_keys)").all().map((row: any) => row.name);
+    expect(keyColumns).toContain("plan_id");
+    expect(keyColumns).toContain("total_tokens_used");
+    expect(keyColumns).toContain("token_quota");
 
     const secureDelete = db.prepare("PRAGMA secure_delete").get();
     expect(Number(secureDelete?.secure_delete)).toBe(1);
