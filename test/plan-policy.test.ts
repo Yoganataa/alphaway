@@ -57,6 +57,34 @@ describe("Plan management and effective managed-key policy", () => {
     expect(listPlans()).toHaveLength(0);
   });
 
+
+  it("rejects unknown Plan and key policy input fields", async () => {
+    await adminHeaders();
+    const invalidPlan = await adminRequest("/api/plans", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Unexpected", description: "", rpmLimit: 0, tpmLimit: 0, concurrencyLimit: 0, tokenQuota: 0, allowedModels: [], maxTokens: 999 }),
+    });
+    expect(invalidPlan.status).toBe(400);
+
+    const plan = createPlan({
+      name: "Strict fields",
+      description: "",
+      rpmLimit: 0,
+      tpmLimit: 0,
+      concurrencyLimit: 0,
+      tokenQuota: 0,
+      allowedModels: [],
+    });
+    const key = issueAPIKey("Strict key");
+    const invalidPolicy = await adminRequest("/api/keys/" + key.record.id + "/policy", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planId: plan.id, maxTokens: 123 }),
+    });
+    expect(invalidPolicy.status).toBe(400);
+  });
+
   it("rejects invalid Plan limits, malformed model patterns, and duplicate names", async () => {
     await adminHeaders();
     const invalidLimit = await adminRequest("/api/plans", {
