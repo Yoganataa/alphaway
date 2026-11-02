@@ -27,6 +27,7 @@
  */
 
 const crypto = require("crypto");
+const { resolveDataDir } = require("./storage-paths");
 // Identity sync is egress too: the update handshake, GitHub source reads, and
 // the provider catalog all travel through the same proxy the panel configures.
 // `proxy.netFetch` is a thin wrapper over `fetch`, so tests that replace
@@ -118,7 +119,7 @@ function getCatalogCacheDir() {
     if (!trimmed || /^(off|0|false|none)$/i.test(trimmed)) return null;
     return trimmed;
   }
-  return require("path").join(require("os").homedir(), ".alphaway", "cache");
+  return require("path").join(resolveDataDir(), "cache");
 }
 function getCatalogCacheFile() {
   const dir = getCatalogCacheDir();
