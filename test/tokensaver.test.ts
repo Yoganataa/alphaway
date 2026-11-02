@@ -5,6 +5,20 @@ describe("tokensaver module", () => {
   beforeEach(() => {
     tokensaver.saveConfig(tokensaver.DEFAULT_CONFIG);
   });
+  it("drops unknown credential fields from TokenSaver persistence", () => {
+    const saved = tokensaver.saveConfig({
+      rtkEnabled: true,
+      soulMode: "custom",
+      soulCustomContent: "Preserve this prompt.",
+      apiKey: "tokensaver-secret-must-not-persist",
+      authorization: "Bearer tokensaver-auth-must-not-persist",
+    } as any);
+
+    expect(saved.rtkEnabled).toBe(true);
+    expect(saved.soulCustomContent).toBe("Preserve this prompt.");
+    expect((saved as any).apiKey).toBeUndefined();
+    expect((saved as any).authorization).toBeUndefined();
+  });
   it("compresses conversational pleasantries from user input", () => {
     const raw = "Halo, can you please help me to write a quicksort algorithm? Terima kasih banyak!";
     const compressed = tokensaver.compressInputText(raw);
