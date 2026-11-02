@@ -260,26 +260,26 @@ describe("legacy JSON import", () => {
     const file = path.join(stateDir, "custom_providers.json");
     writeJson(stateDir, "custom_providers.json", []);
     const limit = 50 * 1024 * 1024;
-    const originalReadSync = (fs as any).readSync;
-    const mutableFs = fs as any;
-    let grew = false;
+    fs.truncateSync(file, limit + 1);
 
-    mutableFs.readSync = function (...args: any[]) {
-      if (!grew) {
-        grew = true;
-        fs.ftruncateSync(args[0], limit + 1);
-      }
-      return originalReadSync.apply(fs, args);
+    // Simulate a stale fstat size while the opened descriptor points to the
+    // full sparse file. The bounded reader must stop at maxBytes + 1.
+    const originalFstatSync = (fs as any).fstatSync;
+    const mutableFs = fs as any;
+    mutableFs.fstatSync = function (...args: any[]) {
+      const actual = originalFstatSync.apply(fs, args);
+      const stale = Object.assign(Object.create(Object.getPrototypeOf(actual)), actual);
+      stale.size = 2;
+      return stale;
     };
 
     let reports;
     try {
       reports = importLegacyJson(db, stateDir, []);
     } finally {
-      mutableFs.readSync = originalReadSync;
+      mutableFs.fstatSync = originalFstatSync;
     }
 
-    expect(grew).toBe(true);
     expect(reports).toHaveLength(1);
     expect(reports[0].status).toBe("skipped");
     expect(reports[0].details).toContain("grew beyond");
@@ -295,6 +295,7 @@ describe("legacy JSON import", () => {
     expect(prefix.toString("utf8")).toBe("[]");
     expect(db.prepare("SELECT COUNT(*) AS count FROM custom_providers").get().count).toBe(0);
   }));
+
 
   it("refuses symlinked legacy JSON sources instead of reading through them", () => withSandbox(false, ({ db, stateDir }) => {
     const target = path.join(stateDir, "provider-data.json");
