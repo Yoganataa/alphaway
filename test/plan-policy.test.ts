@@ -3,7 +3,7 @@ import { app } from "../src/app";
 import { adminHeaders, adminRequest } from "./helpers/admin";
 import { issueAPIKey, listAPIKeys, setAPIKeyPolicy } from "../src/core/api-keys";
 import { recordRequestUsage } from "../src/core/usage-tracker";
-import { createPlan, deletePlan, listPlans, updatePlan } from "../src/core/plans";
+import { createPlan, deletePlan, listPlans } from "../src/core/plans";
 import { resolveEffectivePolicy, isModelAllowedByPolicy } from "../src/core/policy";
 import { getDatabase } from "../src/core/database";
 
@@ -160,7 +160,7 @@ describe("Plan management and effective managed-key policy", () => {
       clientApiKeyId: key.record.id,
     });
 
-    const log = getDatabase().prepare("SELECT client_api_key_id, total_tokens FROM request_logs ORDER BY timestamp DESC LIMIT 1").get();
+    const log = getDatabase().prepare("SELECT client_api_key_id, total_tokens FROM request_logs WHERE client_api_key_id = ? ORDER BY timestamp DESC LIMIT 1").get(key.record.id);
     expect(log.client_api_key_id).toBe(key.record.id);
     expect(log.total_tokens).toBe(50);
 
