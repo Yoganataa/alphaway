@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Phase 2 implementation and hardening remain active on `feat/phase-2-auth-admin-security`. SQLite-only storage cleanup at code head `8e45a4a2977c109e292981557b3336f9aed52038` passed CI #268 (`41386143754`): 331 unit/protocol tests across 30 files, 8 dashboard E2E, UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint. Draft PR #4 remains open pending independent security review. SQLite is the only persistent application-state backend.
+**Status:** Phase 2 implementation and hardening remain active on `feat/phase-2-auth-admin-security`. The SQLite-only backend and 9router-go-style `DATA_DIR`/`DB_PATH` storage contract at code head `3e0621d96714aa703d30c5bf43a837ea347fadd4` passed CI #345 (`41394994247`): 346 unit/protocol tests across 32 files (841 assertions), 8 dashboard E2E (52 assertions), UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint. CodeQL run `41394989743` passed both analysis jobs and the prior double-unescaping finding is resolved. Draft PR #4 remains open pending independent human security review. SQLite is the only persistent application-state backend.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -25,6 +25,8 @@
 - [x] Make `/health` recognize an encrypted CodeBuddy credential without exposing its value.
 - [x] Add AES-GCM tests for nonce uniqueness, authenticated decryption/tamper rejection, symlink refusal, and POSIX owner-only key-file permissions.
 - [x] Retire the pre-SQLite standalone JSON importer and `--restore-legacy-backup` CLI. Runtime persistence now uses SQLite only; existing standalone JSON files are left untouched and are not imported.
+- [x] Align persistent storage configuration with 9router-go's `DATA_DIR`/`DB_PATH` conventions, including the default `db/data.sqlite` location and directory-layout fallback, while preserving AlphaWay compatibility aliases and its existing database filename fallback.
+- [x] Decode double-quoted `.env` escapes in a single pass; preserve unknown escape sequences and cover Windows-style paths, literal backslash sequences, newlines, and escaped quotes with regression tests.
 - [x] Add schema migration v5 to remove the obsolete `legacy_imports` ledger from existing databases while preserving canonical SQLite application data and immutable v1–v4 migration history.
 - [x] Normalize and rewrite older SQLite analytics, TokenSaver, and proxy settings through allowlisted schemas before exposing them to application/dashboard code.
 - [x] Encrypt destructive-migration SQLite snapshots as AES-256-GCM `.sqlite.awenc` envelopes and migrate historical plaintext migration/pre-restore snapshots before they are used.
@@ -50,7 +52,9 @@
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- Verified implementation head [`bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d`](https://github.com/Yoganataa/alphaway/commit/bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d), CI run [`41384043687`](https://github.com/Yoganataa/alphaway/actions/runs/41384043687) (#250): **340 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. Tests include streaming 24 MiB SQLite backup/restore, v1 encrypted backup compatibility, oversized proxy health-cache handling, and the 10 MiB default streamed request-body cap. The optional live upstream gate drill was skipped by design.
+- Verified implementation head [`3e0621d96714aa703d30c5bf43a837ea347fadd4`](https://github.com/Yoganataa/alphaway/commit/3e0621d96714aa703d30c5bf43a837ea347fadd4), CI run [`41394994247`](https://github.com/Yoganataa/alphaway/actions/runs/41394994247) (#345): **346 unit/protocol tests passed, 0 failed** across 32 files (841 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. The optional live upstream gate drill was skipped by design.
+- CodeQL run [`41394989743`](https://github.com/Yoganataa/alphaway/actions/runs/41394989743) passed JavaScript/TypeScript and Actions analysis. The previous double-unescaping thread in `src/core/storage-paths.ts` is resolved after the single-pass `.env` decoder change.
+- No independent human security review has been submitted. The automated CodeQL result does not satisfy the independent review requirement.
 - Repository Ruleset `Protect main` is active and enforces the four required jobs with strict up-to-date checks. Its required approval count is 0 for the solo developer; no bypass actors are configured.
 - Do not merge PR #4 or begin Phase 3 until the independent security review is complete, findings are resolved, and CI is green on the final PR head.
 
