@@ -36,6 +36,7 @@ export interface RequestLogEntry {
   totalTokens: number;
   savedTokens: number;
   stream: boolean;
+  clientApiKeyId?: string | null;
 }
 
 export interface ModelUsageSummary {
@@ -298,6 +299,7 @@ export function recordRequestUsage(entry: {
   completionTokens: number;
   savedTokens?: number;
   stream?: boolean;
+  clientApiKeyId?: string | null;
 }): RequestLogEntry {
   const prompt = Math.max(0, entry.promptTokens || 0);
   const completion = Math.max(0, entry.completionTokens || 0);
@@ -320,6 +322,7 @@ export function recordRequestUsage(entry: {
     totalTokens: total,
     savedTokens: saved,
     stream: Boolean(entry.stream),
+    clientApiKeyId: entry.clientApiKeyId ?? null,
   };
 
   const previousStats = inMemoryStats;
