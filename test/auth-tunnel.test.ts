@@ -82,6 +82,24 @@ describe("auth & tunnel configuration", () => {
     expect(caught?.statusCode).toBe(413);
   });
 
+  it("returns 413 for oversized gateway chat JSON before provider dispatch", async () => {
+    const body = JSON.stringify({
+      model: "mimo-v2.6-flash-free",
+      messages: [{ role: "user", content: "x".repeat(MAX_BODY_BYTES + 1) }],
+    });
+    const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer sk-test-secret-123",
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    expect(response.status).toBe(413);
+    const payload: any = await response.json();
+    expect(payload.error.code).toBe("request_too_large");
+  });
+
   it("enforces the default 10 MiB JSON limit for streamed bodies without Content-Length", async () => {
     const oversizedChunk = new Uint8Array(MAX_BODY_BYTES + 1);
     const stream = new ReadableStream<Uint8Array>({
