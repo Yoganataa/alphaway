@@ -8,6 +8,7 @@
  */
 
 import fs from "node:fs";
+import path from "node:path";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { ensurePrivateDirectory, resolveDataDir } from "./storage-paths";
 
