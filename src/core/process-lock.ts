@@ -59,12 +59,10 @@ export function acquireAlphaWayProcessLock(): () => void {
       if (isProcessAlive(existingPid)) {
         throw new Error(`AlphaWay process PID ${existingPid} is already holding the data-directory lock`);
       }
-      // A dead owner left a stale PID file. Unlink it and retry the atomic
-      // exclusive create; only one contender can acquire the lock.
-      try { fs.unlinkSync(lockPath); } catch (unlinkError: any) {
-        if (unlinkError?.code !== "ENOENT") throw unlinkError;
-      }
-      continue;
+      // Fail closed on stale locks. Automatic unlink after a separate PID check
+      // has a TOCTOU race with a concurrent startup; use --status to remove a
+      // stale PID file after confirming that no AlphaWay process is running.
+      throw new Error("A stale AlphaWay process lock exists. Run 'alphaway --status' to clear it after confirming the service is stopped.");
     }
 
     try {
