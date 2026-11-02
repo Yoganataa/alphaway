@@ -68,6 +68,31 @@ describe("managed-key sliding-window limiter", () => {
     second.release();
   });
 
+
+  it("reserves lifetime token quota across concurrent requests and settles actual usage", () => {
+    const p = policy({ tokenQuota: 100, totalTokensUsed: 0 });
+    const first = acquireManagedKeyRequest("quota-key", p, 40, 1_000, 80);
+    expect(first.allowed).toBe(true);
+
+    const blocked = acquireManagedKeyRequest("quota-key", p, 10, 1_001, 30);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.axis).toBe("token_quota");
+    expect(blocked.status).toBe(429);
+
+    first.settleQuota(55, true);
+    first.release();
+    const remaining = acquireManagedKeyRequest(
+      "quota-key",
+      policy({ tokenQuota: 100, totalTokensUsed: 55 }),
+      20,
+      1_002,
+      45
+    );
+    expect(remaining.allowed).toBe(true);
+    remaining.settleQuota(42, true);
+    remaining.release();
+  });
+
   it("bounds per-key limiter state and fails closed at capacity", () => {
     const releases: Array<() => void> = [];
     const p = policy({ concurrencyLimit: 1 });
