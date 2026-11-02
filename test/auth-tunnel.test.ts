@@ -1,5 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect } from "bun:test";
 import { app } from "../src/app";
+import { readJsonRequestBody } from "../src/core/admin-guard";
 
 describe("auth & tunnel configuration", () => {
   let server: any;
@@ -62,6 +63,23 @@ describe("auth & tunnel configuration", () => {
       body: JSON.stringify({ model: "mimo-v2.6-flash-free", messages: [{ role: "user", content: "hi" }] }),
     });
     expect(res.status).toBe(401);
+  });
+
+  it("enforces the admin auth body limit while streaming without Content-Length", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(17)));
+        controller.close();
+      },
+    });
+    const request = { raw: { headers: new Headers(), body: stream } };
+    let caught: any;
+    try {
+      await readJsonRequestBody(request, 16);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught?.statusCode).toBe(413);
   });
 
   it("rejects oversized bootstrap and login payloads before JSON parsing", async () => {
