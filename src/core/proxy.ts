@@ -39,6 +39,8 @@ const CONFIG_SETTING_KEY = "proxy_config";
 const CONFIG_SETTING_LABEL = `SQLite app_settings.${CONFIG_SETTING_KEY}`;
 const HEALTH_FILE_NAME = "pool-health.json";
 const HEALTH_VERSION = 1;
+const MAX_HEALTH_FILE_BYTES = 1024 * 1024;
+const MAX_HEALTH_RECORDS = 512;
 const ENV_OVERRIDE = "UPSTREAM_PROXY_URL";
 const POOL_ENV = "UPSTREAM_PROXY_POOL";
 const STRATEGY_ENV = "UPSTREAM_PROXY_STRATEGY";
@@ -292,6 +294,12 @@ function healthFor(url) {
   const key = keyOf(url);
   let h = health.get(key);
   if (!h) {
+    // Runtime health is a best-effort cache. Keep it bounded when an operator
+    // repeatedly changes egress identities or a provider emits many endpoints.
+    if (health.size >= MAX_HEALTH_RECORDS) {
+      const oldest = health.keys().next().value;
+      if (oldest !== undefined) health.delete(oldest);
+    }
     h = { failures: 0, cooldownUntil: 0, lastError: null, lastOkAt: 0, lastUsedAt: 0, lastStatus: null };
     health.set(key, h);
   }
@@ -376,17 +384,28 @@ function writeHealthNow(now = Date.now()) {
     removeHealthFile();
     return;
   }
+  const serialized = `${JSON.stringify(healthSnapshot(now), null, 2)}\\n`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_HEALTH_FILE_BYTES) return;
+  const filePath = healthFile();
+  const tmp = `${filePath}.${crypto.randomUUID()}.tmp`;
+  let fd;
   try {
-    fs.mkdirSync(path.dirname(healthFile()), { recursive: true });
-    const tmp = `${healthFile()}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify(healthSnapshot(now), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    fs.renameSync(tmp, healthFile());
-    fs.chmodSync(healthFile(), 0o600);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+    if (process.platform !== "win32") fs.chmodSync(path.dirname(filePath), 0o700);
+    fd = fs.openSync(tmp, "wx", 0o600);
+    fs.writeFileSync(fd, serialized, "utf8");
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tmp, filePath);
+    if (process.platform !== "win32") fs.chmodSync(filePath, 0o600);
   } catch {
     // Best effort: the bridge keeps running with in-memory health.
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
+    try { fs.unlinkSync(tmp); } catch {}
   }
 }
-
 /**
  * Coalesce rapid writes. A success arrives with every request, and rewriting a
  * file per request would turn a cheap memory update into disk churn.
@@ -409,13 +428,54 @@ function scheduleHealthWrite(delayMs = 1000) {
  * that leaves the map empty, so a live record is by definition at least as
  * fresh as the file.
  */
-function restoreHealth(entries, now = Date.now()) {
-  let raw;
+function sameHealthFileSnapshot(left, right) {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
+/** Read only a small, regular health cache; it contains no configuration secrets. */
+function readHealthFileWithinLimit() {
+  let fd;
   try {
-    raw = fs.readFileSync(healthFile(), "utf8");
+    const filePath = healthFile();
+    const pathStat = fs.lstatSync(filePath);
+    if (pathStat.isSymbolicLink() || !pathStat.isFile()) return null;
+    const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    const opened = fs.fstatSync(fd);
+    if (!opened.isFile() || opened.dev !== pathStat.dev || opened.ino !== pathStat.ino) return null;
+    if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
+    const baseline = fs.fstatSync(fd);
+    if (baseline.size > MAX_HEALTH_FILE_BYTES) return null;
+
+    const chunks = [];
+    const chunk = Buffer.allocUnsafe(64 * 1024);
+    let total = 0;
+    while (true) {
+      const remaining = MAX_HEALTH_FILE_BYTES + 1 - total;
+      if (remaining <= 0) return null;
+      const bytesRead = fs.readSync(fd, chunk, 0, Math.min(chunk.length, remaining), null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > MAX_HEALTH_FILE_BYTES) return null;
+      chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
+    }
+
+    if (!sameHealthFileSnapshot(baseline, fs.fstatSync(fd))) return null;
+    return Buffer.concat(chunks, total).toString("utf8");
   } catch {
-    return 0;
+    return null;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
   }
+}
+
+function restoreHealth(entries, now = Date.now()) {
+  const raw = readHealthFileWithinLimit();
+  if (raw === null) return 0;
 
   let json = null;
   try {
