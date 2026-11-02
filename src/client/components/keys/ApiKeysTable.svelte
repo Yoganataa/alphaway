@@ -208,7 +208,7 @@
           </td></tr>
         {/if}
         {#if loading}
-          <tr><td colspan="7" class="px-4 py-6 text-center text-text-muted font-sans">Loading keys…</td></tr>
+          <tr><td colspan="8" class="px-4 py-6 text-center text-text-muted font-sans">Loading keys…</td></tr>
         {/if}
       </tbody>
     </table>
