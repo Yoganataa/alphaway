@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Core implementation and in-repository hardening are implemented on `feat/phase-2-auth-admin-security`. Code head `ceb97284108fdd0e13879886fe3fb6c9e311f47f` passed CI run `41382850587` (#235) on Bun 1.4.4: 338 unit/protocol tests, 8 dashboard E2E, standalone build, installer smoke, and TLS fingerprint passed. The new hardening adds streaming SQLite backup/restore with v1 compatibility and bounded proxy health-cache reads. Current checkpoint/roadmap commits are documentation-only after that verified implementation head; re-check Actions on the live branch before merge. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and the independent security review decision.
+**Status:** Core implementation and in-repository hardening are implemented on `feat/phase-2-auth-admin-security`. Code head `bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d` passed CI run `41384043687` (#250) on Bun 1.4.4: 340 unit/protocol tests, 8 dashboard E2E, standalone build, installer smoke, and TLS fingerprint passed. The new hardening caps all admin/configuration and gateway JSON request bodies at 10 MiB with a streaming limit while retaining a stricter 16 KiB public admin-auth cap. Current checkpoint/roadmap commits are documentation-only after that verified implementation head; re-check Actions on the live branch before merge. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and the independent security review decision.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -18,7 +18,8 @@
 - [x] Isolate Bun unit-test SQLite state using a preload before application modules are imported.
 - [x] Bound administrator login inputs and failed-login tracking memory; reject control characters in API-key labels.
 - [x] Bound administrator password KDF concurrency globally (4 active, 16 queued), reject queue overflow, and serialize KDF checks per username to prevent parallel throttle bypass.
-- [x] Cap public administrator bootstrap/login JSON bodies at 16 KiB using Content-Length validation and a streaming byte limit; reject oversized requests with 413 before JSON parsing/KDF work.
+- [x] Cap all admin settings/configuration and OpenAI/Anthropic/Codex gateway JSON request bodies at 10 MiB using Content-Length validation and a streaming byte limit; oversized requests return 413 before JSON parsing or provider dispatch.
+- [x] Keep public administrator bootstrap/login request bodies on a stricter 16 KiB limit and reject oversized requests before parsing or password KDF work.
 - [x] Bound master encryption-key reads to exactly 32 bytes plus a sentinel and bootstrap-token file reads to 64 bytes; validate file identity/metadata and strict token format.
 - [x] Bound proxy health cache reads to 1 MiB using no-follow descriptors and metadata checks, and cap the in-memory health map at 512 egress records; this cache remains best-effort and independent of canonical proxy configuration.
 - [x] Make `/health` recognize an encrypted CodeBuddy credential without exposing its value.
@@ -50,7 +51,7 @@
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- Verified implementation head [`ceb97284108fdd0e13879886fe3fb6c9e311f47f`](https://github.com/Yoganataa/alphaway/commit/ceb97284108fdd0e13879886fe3fb6c9e311f47f), CI run [`41382850587`](https://github.com/Yoganataa/alphaway/actions/runs/41382850587) (#235): **338 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. Tests include streaming 24 MiB SQLite backup/restore and v1 encrypted backup compatibility. The optional live upstream gate drill was skipped by design.
+- Verified implementation head [`bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d`](https://github.com/Yoganataa/alphaway/commit/bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d), CI run [`41384043687`](https://github.com/Yoganataa/alphaway/actions/runs/41384043687) (#250): **340 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. Tests include streaming 24 MiB SQLite backup/restore, v1 encrypted backup compatibility, oversized proxy health-cache handling, and the 10 MiB default streamed request-body cap. The optional live upstream gate drill was skipped by design.
 - Repository Ruleset `Protect main` is active and enforces the four required jobs with strict up-to-date checks. Its required approval count is 0 for the solo developer; no bypass actors are configured.
 - Do not merge PR #4 or begin Phase 3 until the preserve-and-skip exception is accepted by the project owner, the independent security review decision/findings are resolved, and CI is green on the final PR head.
 
