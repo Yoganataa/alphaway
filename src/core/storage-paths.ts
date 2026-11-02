@@ -77,21 +77,23 @@ function readEnvFile(): { path?: string; values: Record<string, string> } {
   return { values: {} };
 }
 
-function resolveStoragePaths(options: StoragePathOptions = {}): ResolvedStoragePaths {
+export function resolveStoragePaths(options: StoragePathOptions = {}): ResolvedStoragePaths {
   const env = options.env ?? process.env;
   const envFile = options.envFile ?? readEnvFile().values;
   const cwd = options.cwd ?? process.cwd();
   const platform = options.platform ?? process.platform;
   const homeDir = options.homeDir ?? os.homedir();
 
+  // Process environment always wins over .env, including when the old
+  // AlphaWay variable is used by an existing service unit.
   const configuredDataDir =
     nonEmpty(env.DATA_DIR) ??
-    nonEmpty(envFile.DATA_DIR) ??
-    // Keep AlphaWay's previous state-directory variables as compatibility
-    // aliases; new deployments should use DATA_DIR, as 9router-go does.
     nonEmpty(env.ALPHAWAY_STATE_DIR) ??
-    nonEmpty(envFile.ALPHAWAY_STATE_DIR) ??
     nonEmpty(env.OPENCODE_BRIDGE_STATE_DIR) ??
+    nonEmpty(envFile.DATA_DIR) ??
+    // Retain old variable names as compatibility aliases; new installs use
+    // DATA_DIR, matching 9router-go.
+    nonEmpty(envFile.ALPHAWAY_STATE_DIR) ??
     nonEmpty(envFile.OPENCODE_BRIDGE_STATE_DIR);
 
   let dataDir: string;
@@ -105,8 +107,8 @@ function resolveStoragePaths(options: StoragePathOptions = {}): ResolvedStorageP
   }
 
   const dbSetting = nonEmpty(env.DB_PATH) ??
-    nonEmpty(envFile.DB_PATH) ??
     nonEmpty(env.ALPHAWAY_DB_PATH) ??
+    nonEmpty(envFile.DB_PATH) ??
     nonEmpty(envFile.ALPHAWAY_DB_PATH);
   const explicitDatabasePath = Boolean(dbSetting);
   const databasePath = dbSetting
