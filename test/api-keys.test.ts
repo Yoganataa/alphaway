@@ -86,7 +86,7 @@ describe("administrator authentication and managed gateway API keys", () => {
   });
 
   it("bounds global password KDF concurrency and queue size", async () => {
-    const usernames = Array.from({ length: 24 }, () => `alphaway-parallel-${randomUUID()}`);
+    const usernames = Array.from({ length: 24 }, () => `aw-p-${randomUUID().slice(0,12)}`);
     const attempts = usernames.map((username) => loginAdmin(username, "wrong-password"));
     // loginAdmin awaits the slot-acquisition promise before starting KDF work.
     await Promise.resolve();
@@ -104,7 +104,7 @@ describe("administrator authentication and managed gateway API keys", () => {
   });
 
   it("serializes concurrent password checks for the same username", async () => {
-    const username = `alphaway-same-account-${randomUUID()}`;
+    const username = `aw-s-${randomUUID().slice(0,12)}`;
     const attempts = Array.from({ length: 8 }, () => loginAdmin(username, "wrong-password"));
     await Promise.resolve();
 
