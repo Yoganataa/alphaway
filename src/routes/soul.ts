@@ -3,7 +3,7 @@
 import { Hono } from "hono";
 import tokensaver from "../features/tokensaver";
 import * as soulEngine from "../features/soul-engine";
-import { adminRequestError } from "../core/admin-guard";
+import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
 
 const router = new Hono();
 
@@ -36,9 +36,11 @@ router.post("/", async (c) => {
 
   let body: any = {};
   try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ ok: false, error: "Invalid JSON body" }, 400);
+    body = await readJsonRequestBody(c.req);
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw Object.assign(new Error("Invalid JSON body"), { statusCode: 400 });
+  } catch (err: any) {
+    const status = err?.statusCode === 413 ? 413 : 400;
+    return c.json({ ok: false, error: status === 413 ? "Request body exceeds the 10 MiB limit" : "Invalid JSON body" }, status);
   }
 
   const updates: any = {};
@@ -87,9 +89,11 @@ router.post("/", async (c) => {
 router.post("/preview", async (c) => {
   let body: any = {};
   try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ ok: false, error: "Invalid JSON body" }, 400);
+    body = await readJsonRequestBody(c.req);
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw Object.assign(new Error("Invalid JSON body"), { statusCode: 400 });
+  } catch (err: any) {
+    const status = err?.statusCode === 413 ? 413 : 400;
+    return c.json({ ok: false, error: status === 413 ? "Request body exceeds the 10 MiB limit" : "Invalid JSON body" }, status);
   }
 
   const prompt = body.prompt || "How do I optimize database connections?";

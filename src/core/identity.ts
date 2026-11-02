@@ -27,6 +27,7 @@
  */
 
 const crypto = require("crypto");
+const { resolveDataDir, ensurePrivateDirectory } = require("./storage-paths");
 // Identity sync is egress too: the update handshake, GitHub source reads, and
 // the provider catalog all travel through the same proxy the panel configures.
 // `proxy.netFetch` is a thin wrapper over `fetch`, so tests that replace
@@ -118,7 +119,7 @@ function getCatalogCacheDir() {
     if (!trimmed || /^(off|0|false|none)$/i.test(trimmed)) return null;
     return trimmed;
   }
-  return require("path").join(require("os").homedir(), ".alphaway", "cache");
+  return require("path").join(resolveDataDir(), "cache");
 }
 function getCatalogCacheFile() {
   const dir = getCatalogCacheDir();
@@ -127,6 +128,13 @@ function getCatalogCacheFile() {
 function getSourceCacheFile() {
   const dir = getCatalogCacheDir();
   return dir ? require("path").join(dir, "source-recipe.json") : null;
+}
+
+function ensureCatalogCacheDirectory(dir) {
+  const fs = require("fs");
+  ensurePrivateDirectory(resolveDataDir());
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
 }
 const BOOT_FETCH = global.fetch;
 const CATALOG_CACHE_DIR = getCatalogCacheDir();
@@ -1304,8 +1312,8 @@ function writeCachedCatalog(json) {
     const file = getCatalogCacheFile();
     if (!dir || !file) return;
     const fs = require("fs");
-    fs.mkdirSync(dir, { recursive: true });
-    const tmp = `${file}.tmp.${process.pid}`;
+    ensureCatalogCacheDirectory(dir);
+    const tmp = `${file}.tmp.${process.pid}`
     fs.writeFileSync(tmp, JSON.stringify(json));
     fs.renameSync(tmp, file);
   } catch {
@@ -1342,7 +1350,7 @@ function writeCachedSource(ref, extracted) {
     const file = getSourceCacheFile();
     if (!dir || !file) return;
     const fs = require("fs");
-    fs.mkdirSync(dir, { recursive: true });
+    ensureCatalogCacheDirectory(dir);
     const tmp = `${file}.tmp.${process.pid}`;
     fs.writeFileSync(tmp, JSON.stringify({ ref, extracted, savedAt: Date.now() }));
     fs.renameSync(tmp, file);

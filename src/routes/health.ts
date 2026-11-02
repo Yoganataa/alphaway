@@ -9,6 +9,7 @@ import * as opencode from "../providers/opencode";
 import * as tokensaver from "../features/tokensaver";
 import * as egress from "../core/egress";
 import * as identity from "../core/identity";
+import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
 
 export const healthRoute = new Hono();
 
@@ -26,13 +27,8 @@ function getPublicEndpoint(): string {
   return withProto.replace(/\/+$/, "");
 }
 
-function getBridgeApiKey(): string {
-  return (process.env.BRIDGE_API_KEY || process.env.API_KEY || "").trim();
-}
-
 healthRoute.get("/health", (c) => {
-  const codebuddyKey = process.env.CODEBUDDY_API_KEY || process.env.CODEBUDDY_TOKEN || "";
-  const apiKey = getBridgeApiKey();
+  const codebuddyKey = getCodeBuddyApiKey() || process.env.CODEBUDDY_TOKEN || "";
   const publicEp = getPublicEndpoint();
   const host = c.req.header("host") || "127.0.0.1:20129";
   const idState = identity.getState();
@@ -52,9 +48,9 @@ healthRoute.get("/health", (c) => {
     framework: "Hono.js",
     discoveredModels: opencode.getActiveModels().length,
     auth: {
-      required: Boolean(apiKey),
+      required: true,
     },
-    authRequired: Boolean(apiKey),
+    authRequired: true,
     endpoint: {
       publicUrl,
       tunnel: Boolean(publicEp),

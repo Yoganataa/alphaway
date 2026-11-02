@@ -30,8 +30,21 @@ describe("current AlphaWay installer and distribution contract", () => {
     const installer = read("install.sh");
     expect(installer).toContain('APPDIR="$BINDIR/app"');
     expect(installer).toContain('"$BINDIR/.env"');
-    expect(installer).toContain("ALPHAWAY_STATE_DIR=$BINDIR");
+    expect(installer).toContain("DATA_DIR=$DATA_DIR");
+    expect(installer.match(/Environment=\"DATA_DIR=\$DATA_DIR\"/g)?.length).toBe(2);
     expect(installer).toContain(".backup-app-");
+  });
+
+  it("resolves and persists DATA_DIR for manual starts and managed services", () => {
+    const installer = read("install.sh");
+    expect(installer).toContain('configured_data_dir="${DATA_DIR:-}"');
+    expect(installer).toContain('DATA_DIR=*)\n        env_file_data_dir="${env_line#DATA_DIR=}"');
+    expect(installer).toContain('configured_data_dir="$BINDIR/$configured_data_dir"');
+    expect(installer).toContain('pwd -P)');
+    expect(installer).toContain('configured_data_dir="$BINDIR"');
+    expect(installer).toContain('printf \'\\nDATA_DIR=%s\\n\' "$configured_data_dir"');
+    expect(installer).toContain('export DATA_DIR');
+    expect(installer).toContain('chmod 700 "$DATA_DIR" "$DATA_DIR/db"');
   });
 
   it("validates TLS compatibility and the standalone binary before installation", () => {
@@ -40,6 +53,16 @@ describe("current AlphaWay installer and distribution contract", () => {
     expect(installer).toContain("run build");
     expect(installer).toContain("./alphaway --version");
     expect(installer).toContain('MIN_BUN_VERSION="1.4.4"');
+  });
+
+  it("uses the resolved DATA_DIR for daemon metadata and preserves one installer body", () => {
+    const installer = read("install.sh");
+    expect(installer).toContain('local pid_file="$DATA_DIR/alphaway.pid"');
+    expect(installer).toContain('local log_file="$DATA_DIR/alphaway.log"');
+    expect(installer).toContain('echo $! > "$DATA_DIR/alphaway.pid"');
+    expect(installer).not.toContain('local pid_file="$BINDIR/alphaway.pid"');
+    expect(installer.match(/stop_existing_services\(\) \{/g)?.length).toBe(1);
+    expect(installer.match(/say "AlphaWay is healthy"/g)?.length).toBe(1);
   });
 
   it("retires legacy system and user services before replacing the installed app", () => {
@@ -109,7 +132,7 @@ describe("current AlphaWay installer and distribution contract", () => {
     const pkg = JSON.parse(read("package.json"));
     const ci = read(".github/workflows/ci.yml");
 
-    expect(pkg.scripts["test:unit"]).toBe("bun run build:ui && bun test test/*.test.ts");
+    expect(pkg.scripts["test:unit"]).toBe("bun run build:ui && bun test --preload ./test/setup.ts test/*.test.ts");
     expect(pkg.scripts["test:e2e"]).toBe("bun test test/e2e/");
     expect(ci).toContain("bun run test:unit");
     expect(ci).toContain("bun run test:e2e");

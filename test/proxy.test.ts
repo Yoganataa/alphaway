@@ -6,13 +6,17 @@ const path = require("node:path");
 const http = require("node:http");
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ofb-proxy-test-"));
-process.env.OPENCODE_BRIDGE_STATE_DIR = tmpDir;
+process.env.DATA_DIR = tmpDir;
+process.env.DB_PATH = path.join(tmpDir, "db", "data.sqlite");
 delete process.env.UPSTREAM_PROXY_URL;
 
 const proxy = require("../src/core/proxy");
 const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("../src/core/database");
+const { decryptSecret } = require("../src/core/secrets");
 const panel = require("../src/core/panel");
 const { app } = require("../src/app");
+const { getAdminCookie } = require("./helpers/admin.ts");
+let adminCookie = "";
 
 function request(port, method, urlPath, body, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -25,6 +29,7 @@ function request(port, method, urlPath, body, headers = {}) {
         method,
         headers: {
           ...(payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}),
+          ...(urlPath.startsWith("/api/") && adminCookie ? { Cookie: adminCookie } : {}),
           ...headers,
         },
       },
@@ -50,7 +55,7 @@ function emptyStateDir() {
   // the directory instead of assuming an earlier suite left it in place.
   fs.mkdirSync(tmpDir, { recursive: true });
   for (const f of fs.readdirSync(tmpDir)) {
-    if (f.endsWith(".sqlite") || f.endsWith(".sqlite-wal") || f.endsWith(".sqlite-shm")) continue;
+    if (f.endsWith(".sqlite") || f.endsWith(".sqlite-wal") || f.endsWith(".sqlite-shm") || f === "secret-encryption.key") continue;
     try {
       fs.rmSync(path.join(tmpDir, f), { force: true });
     } catch {}
@@ -64,11 +69,6 @@ describe("egress proxy", () => {
     proxy.__reload();
   });
 
-  after(() => {
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
-  });
 
   it("accepts http and https proxies with optional percent-encoded credentials", () => {
     assert.deepEqual(proxy.parseProxyUrl("http://127.0.0.1:8080"), { ok: true, url: "http://127.0.0.1:8080" });
@@ -105,7 +105,9 @@ describe("egress proxy", () => {
     assert.equal(proxy.configStore(), "SQLite app_settings.proxy_config");
 
     const stored = dbGetSetting("proxy_config", null);
-    assert.equal(stored.url, "http://user:secret@10.0.0.5:8080");
+    assert.match(stored.url, /^awenc:v1:/);
+    assert.equal(JSON.stringify(stored).includes("user:secret"), false);
+    assert.equal(decryptSecret(stored.url), "http://user:secret@10.0.0.5:8080");
 
     // A fresh runtime reload reads the same canonical SQLite setting.
     proxy.__restart();
@@ -113,6 +115,32 @@ describe("egress proxy", () => {
     assert.equal(proxy.describe().source, "database");
   });
 
+  it("removes unknown credential-bearing fields from legacy persisted proxy settings", () => {
+    dbSetSetting("proxy_config", {
+      strategy: "round-robin",
+      apiKey: "proxy-config-api-key-must-not-persist",
+      headers: { authorization: "Bearer proxy-header-must-not-persist" },
+      pool: [{
+        id: "direct-cleanup",
+        label: "Direct",
+        direct: true,
+        enabled: true,
+        password: "pool-password-must-not-persist",
+        headers: { cookie: "pool-cookie-must-not-persist" },
+      }],
+    });
+
+    proxy.__restart();
+    const sanitized = dbGetSetting("proxy_config", null);
+    assert.equal(sanitized.apiKey, undefined);
+    assert.equal(sanitized.headers, undefined);
+    assert.equal(sanitized.pool[0].password, undefined);
+    assert.equal(sanitized.pool[0].headers, undefined);
+    assert.equal(JSON.stringify(sanitized).includes("proxy-config-api-key-must-not-persist"), false);
+    assert.equal(JSON.stringify(sanitized).includes("proxy-header-must-not-persist"), false);
+    assert.equal(JSON.stringify(sanitized).includes("pool-password-must-not-persist"), false);
+    assert.equal(JSON.stringify(sanitized).includes("pool-cookie-must-not-persist"), false);
+  });
   it("clearing the URL returns to direct egress and deletes the SQLite setting", () => {
     proxy.setProxyUrl("http://127.0.0.1:8080");
     const cleared = proxy.setProxyUrl("");
@@ -203,6 +231,23 @@ describe("egress proxy", () => {
       assert.equal(refused.ok, false);
       assert.equal(refused.apiStatus, 403);
       assert.match(refused.error, /403/);
+
+      const credentialProxy = "http://proxy-user:proxy-password@127.0.0.1:8080";
+      global.fetch = async () => { throw new Error("connect failed via " + credentialProxy); };
+      const connectionError = await proxy.testProxy(credentialProxy);
+      assert.equal(connectionError.ok, false);
+      assert.equal(connectionError.error.includes("proxy-user"), false);
+      assert.equal(connectionError.error.includes("proxy-password"), false);
+      assert.equal(connectionError.error.includes("[REDACTED]"), true);
+
+      global.fetch = async (url) => {
+        if (String(url).includes("cdn-cgi/trace")) throw new Error("trace failed via " + credentialProxy);
+        return { ok: true, status: 200 };
+      };
+      const traceError = await proxy.testProxy(credentialProxy);
+      assert.equal(traceError.ok, true);
+      assert.equal(traceError.exitError.includes("proxy-user"), false);
+      assert.equal(traceError.exitError.includes("proxy-password"), false);
     } finally {
       global.fetch = original;
     }
@@ -214,6 +259,7 @@ describe("proxy HTTP surface", () => {
   let server;
 
   before(async () => {
+    adminCookie = await getAdminCookie();
     emptyStateDir();
     proxy.__reload();
     const testServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: app.fetch });
@@ -228,6 +274,7 @@ describe("proxy HTTP surface", () => {
 
   after(async () => {
     await new Promise((resolve) => server.close(resolve));
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   });
 
   it("serves the panel at / and keeps /health as JSON", async () => {
@@ -413,6 +460,8 @@ describe("egress pool", () => {
     assert.equal(stored.pool.length, 2);
     assert.equal(stored.strategy, "failover");
     expectNoSecretValue(stored);
+    assert.match(stored.pool[0].url, /^awenc:v1:/);
+    assert.equal(decryptSecret(stored.pool[0].url), "http://u:secret@a:1");
 
     // A fresh process reads the same pool.
     proxy.__reload();
@@ -641,14 +690,14 @@ describe("egress pool: health survives a restart", () => {
     const raw = fs.readFileSync(proxy.healthFile(), "utf8");
     if (process.platform !== "win32") assert.equal(fs.statSync(proxy.healthFile()).mode & 0o777, 0o600);
     // A second copy of every proxy token would be a second thing to leak. The
-    // record is keyed by an opaque hash of the egress identity, and the label
-    // carries only what `describe()` already exposes (host:port).
+    // ID is a keyed HMAC of the complete egress identity; the label carries only
+    // what `describe()` already exposes (host:port).
     assert.equal(raw.includes("secret"), false);
     assert.equal(raw.includes("user:"), false);
     assert.equal(raw.includes("http://"), false);
     const parsed = JSON.parse(raw);
     assert.equal(parsed.entries.length, 1);
-    assert.match(parsed.entries[0].id, /^[0-9a-f]{16}$/);
+    assert.match(parsed.entries[0].id, /^[0-9a-f]{32}$/);
   });
 
   it("ignores a corrupt health file instead of losing the pool", () => {
@@ -659,6 +708,16 @@ describe("egress pool: health survives a restart", () => {
     assert.equal(proxy.describe().mode, "pool");
     assert.equal(proxy.describe().pool.entries[0].state, "ready");
     assert.equal(fs.existsSync(proxy.healthFile()), false);
+  });
+
+  it("skips an oversized health cache without reading it into memory or losing the pool", () => {
+    proxy.setPool({ entries: ["http://a:1"] });
+    proxy.markFailure("http://a:1", { cooldownMs: 60000 });
+    fs.writeFileSync(proxy.healthFile(), Buffer.alloc(1024 * 1024 + 1, 0x61));
+
+    assert.doesNotThrow(() => proxy.__restart());
+    assert.equal(proxy.describe().mode, "pool");
+    assert.equal(proxy.describe().pool.entries[0].state, "ready");
   });
 
   it("drops health for an entry that leaves the pool", () => {

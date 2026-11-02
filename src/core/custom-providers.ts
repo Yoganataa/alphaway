@@ -6,6 +6,7 @@
  */
 
 import { openAIToAnthropicRequest } from "./protocol-translator";
+import { hasEmbeddedProviderUrlSecrets, redactProviderBaseUrl } from "./provider-url-secrets";
 import {
   dbLoadCustomProviders,
   dbSaveCustomProvider,
@@ -41,33 +42,39 @@ export function getCustomProvider(id: string): CustomProvider | undefined {
 export function addOrUpdateCustomProvider(provider: Partial<CustomProvider> & { name: string; baseUrl: string }): CustomProvider {
   const providers = loadCustomProviders();
   const id = provider.id || provider.name.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 32);
+  const existingIndex = providers.findIndex((p) => p.id === id);
+  const existing = existingIndex >= 0 ? providers[existingIndex] : undefined;
 
-  // Normalize API Key with sk- prefix if provided
-  let apiKey = (provider.apiKey || "").trim();
+  // An empty API key on an edit means "keep the current credential".
+  let apiKey = typeof provider.apiKey === "string" ? provider.apiKey.trim() : "";
   if (apiKey && !apiKey.startsWith("sk-") && apiKey !== "none") {
     apiKey = `sk-${apiKey}`;
   }
+  if (!apiKey || apiKey === "none") apiKey = existing?.apiKey || "";
 
-  // Normalize Base URL (strip trailing slashes)
-  let baseUrl = (provider.baseUrl || "").trim().replace(/\/+$/, "");
-
-  const existingIndex = providers.findIndex((p) => p.id === id);
+  const submittedBaseUrl = (provider.baseUrl || "").trim().replace(/\/+$/, "");
+  const keepExistingEmbeddedCredential = Boolean(
+    existing &&
+    hasEmbeddedProviderUrlSecrets(existing.baseUrl) &&
+    redactProviderBaseUrl(existing.baseUrl).replace(/\/+$/, "") === submittedBaseUrl &&
+    (!provider.apiKey || provider.apiKey === "none")
+  );
+  // The dashboard receives a redacted base URL. Preserve the encrypted source
+  // URL when an edit only changes metadata and does not provide a new key.
+  const baseUrl = keepExistingEmbeddedCredential ? existing!.baseUrl : submittedBaseUrl;
   const updated: CustomProvider = {
     id,
     name: provider.name.trim(),
     baseUrl,
-    apiKey: apiKey || "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    apiKey,
     protocol: provider.protocol === "anthropic" ? "anthropic" : "openai",
     models: Array.isArray(provider.models) && provider.models.length > 0 ? provider.models : ["default-model"],
     enabled: provider.enabled !== false,
-    createdAt: existingIndex >= 0 ? providers[existingIndex].createdAt : Date.now(),
+    createdAt: existing?.createdAt || Date.now(),
   };
 
-  if (existingIndex >= 0) {
-    providers[existingIndex] = updated;
-  } else {
-    providers.push(updated);
-  }
+  if (existingIndex >= 0) providers[existingIndex] = updated;
+  else providers.push(updated);
 
   saveCustomProviders(providers);
   return updated;
@@ -112,6 +119,13 @@ export function findCustomProviderForModel(modelName: string): {
  * Dispatches an OpenAI Chat Completion request to a 3rd party custom provider.
  * Supports both OpenAI and Anthropic upstream wire protocols.
  */
+function appendProviderEndpoint(baseUrl: string, endpoint: string): string {
+  const url = new URL(baseUrl);
+  const suffix = `/${endpoint.replace(/^\/+/, "")}`;
+  const currentPath = url.pathname.replace(/\/+$/, "");
+  if (!currentPath.endsWith(suffix)) url.pathname = `${currentPath}${suffix}`;
+  return url.toString();
+}
 export async function forwardToCustomProvider(
   provider: CustomProvider,
   actualModel: string,
@@ -126,9 +140,7 @@ export async function forwardToCustomProvider(
 
   if (isAnthropic) {
     // Anthropic Upstream
-    const anthropicUrl = provider.baseUrl.endsWith("/messages")
-      ? provider.baseUrl
-      : `${provider.baseUrl}/messages`;
+    const anthropicUrl = appendProviderEndpoint(provider.baseUrl, "messages");
 
     const anthropicPayload = openAIToAnthropicRequest({
       model: actualModel,
@@ -149,9 +161,7 @@ export async function forwardToCustomProvider(
     });
   } else {
     // OpenAI Upstream
-    const openAiUrl = provider.baseUrl.endsWith("/chat/completions")
-      ? provider.baseUrl
-      : `${provider.baseUrl}/chat/completions`;
+    const openAiUrl = appendProviderEndpoint(provider.baseUrl, "chat/completions");
 
     const openAiPayload = {
       model: actualModel,

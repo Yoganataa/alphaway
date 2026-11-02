@@ -4,9 +4,13 @@
 
 import { describe, it, expect, beforeEach } from "bun:test";
 import os from "node:os";
+import fs from "node:fs";
 import path from "node:path";
 import {
   getDatabase,
+  getDbFilePath,
+  getDatabaseStorageStats,
+  vacuumDatabase,
   resolveDbDir,
   closeDatabase,
   dbLoadCustomProviders,
@@ -25,26 +29,47 @@ import {
 } from "../src/core/database";
 
 describe("AlphaWay SQLite Database Engine", () => {
-  it("keeps the existing SQLite root when ALPHAWAY_HOME only identifies legacy JSON state", () => {
+  it("ignores retired ALPHAWAY_HOME and keeps the canonical SQLite state root", () => {
     const previous = {
-      home: process.env.ALPHAWAY_HOME,
+      alphaWayHome: process.env.ALPHAWAY_HOME,
+      dataDir: process.env.DATA_DIR,
+      dbPath: process.env.DB_PATH,
       stateDir: process.env.ALPHAWAY_STATE_DIR,
       legacyStateDir: process.env.OPENCODE_BRIDGE_STATE_DIR,
+      envFile: process.env.ALPHAWAY_ENV_FILE,
+      home: process.env.HOME,
+      userProfile: process.env.USERPROFILE,
     };
+    const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-homedir-test-"));
 
     try {
-      process.env.ALPHAWAY_HOME = path.join(os.tmpdir(), "alphaway-legacy-json-home");
+      process.env.HOME = isolatedHome;
+      process.env.USERPROFILE = isolatedHome;
+      process.env.ALPHAWAY_HOME = path.join(isolatedHome, "legacy-json");
+      const emptyEnv = path.join(isolatedHome, "empty.env");
+      fs.writeFileSync(emptyEnv, "");
+      process.env.ALPHAWAY_ENV_FILE = emptyEnv;
+      delete process.env.DATA_DIR;
+      delete process.env.DB_PATH;
       delete process.env.ALPHAWAY_STATE_DIR;
       delete process.env.OPENCODE_BRIDGE_STATE_DIR;
 
-      expect(resolveDbDir()).toBe(path.join(os.homedir(), ".alphaway"));
+      expect(resolveDbDir()).toBe(path.join(isolatedHome, ".alphaway"));
     } finally {
-      if (previous.home === undefined) delete process.env.ALPHAWAY_HOME;
-      else process.env.ALPHAWAY_HOME = previous.home;
+      fs.rmSync(isolatedHome, { recursive: true, force: true });
+      if (previous.alphaWayHome === undefined) delete process.env.ALPHAWAY_HOME;
+      else process.env.ALPHAWAY_HOME = previous.alphaWayHome;
+      if (previous.dataDir === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = previous.dataDir;
+      if (previous.dbPath === undefined) delete process.env.DB_PATH; else process.env.DB_PATH = previous.dbPath;
+      if (previous.envFile === undefined) delete process.env.ALPHAWAY_ENV_FILE; else process.env.ALPHAWAY_ENV_FILE = previous.envFile;
       if (previous.stateDir === undefined) delete process.env.ALPHAWAY_STATE_DIR;
       else process.env.ALPHAWAY_STATE_DIR = previous.stateDir;
       if (previous.legacyStateDir === undefined) delete process.env.OPENCODE_BRIDGE_STATE_DIR;
       else process.env.OPENCODE_BRIDGE_STATE_DIR = previous.legacyStateDir;
+      if (previous.home === undefined) delete process.env.HOME;
+      else process.env.HOME = previous.home;
+      if (previous.userProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previous.userProfile;
     }
   });
 
@@ -53,7 +78,9 @@ describe("AlphaWay SQLite Database Engine", () => {
     const db = getDatabase();
     db.exec("DELETE FROM custom_providers;");
     db.exec("DELETE FROM request_logs;");
-    db.exec("DELETE FROM app_settings;");
+    // Preserve the startup scrub marker; this is a security invariant, not test data.
+    db.exec("DELETE FROM app_settings WHERE key <> 'alpha_security_secret_scrub';");
+    db.exec("DELETE FROM api_keys;");
   });
 
   it("initializes SQLite database with WAL mode and tables", () => {
@@ -64,12 +91,46 @@ describe("AlphaWay SQLite Database Engine", () => {
     expect(tables).toContain("request_logs");
     expect(tables).toContain("app_settings");
     expect(tables).toContain("schema_migrations");
-    expect(tables).toContain("legacy_imports");
+    expect(tables).not.toContain("legacy_imports");
+    expect(tables).toContain("api_keys");
+    expect(tables).toContain("admin_users");
+    expect(tables).toContain("admin_sessions");
 
     const schemaVersion = db
       .prepare("SELECT MAX(version) AS version FROM schema_migrations")
       .get()?.version;
-    expect(schemaVersion).toBe(1);
+    expect(schemaVersion).toBe(5);
+
+    const secureDelete = db.prepare("PRAGMA secure_delete").get();
+    expect(Number(secureDelete?.secure_delete)).toBe(1);
+    expect(Number(db.query("PRAGMA busy_timeout").get()?.timeout)).toBe(5000);
+    expect(Number(db.query("PRAGMA foreign_keys").get()?.foreign_keys)).toBe(1);
+    expect(db.query("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
+    expect(getDbFilePath()).toBe(process.env.DB_PATH);
+
+    const scrubMarker = db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub");
+    expect(scrubMarker?.value).toBe(JSON.stringify("complete"));
+  });
+
+  it("reports SQLite page/freelist/WAL statistics and compacts through a checkpointed VACUUM", () => {
+    const db = getDatabase();
+    db.exec("CREATE TABLE IF NOT EXISTS storage_stats_probe (value TEXT NOT NULL);");
+    db.prepare("INSERT INTO storage_stats_probe (value) VALUES (?)").run("reclaimable-test-row");
+    db.prepare("DELETE FROM storage_stats_probe").run();
+
+    const before = getDatabaseStorageStats();
+    expect(before.path).toBe(getDbFilePath());
+    expect(before.pageCount).toBeGreaterThan(0);
+    expect(before.pageSize).toBeGreaterThan(0);
+    expect(before.databaseSizeBytes).toBe(before.pageCount * before.pageSize);
+    expect(before.reclaimableBytes).toBe(before.freelistCount * before.pageSize);
+    expect(before.requestLogsCount).toBe(0);
+    expect(before.customProvidersCount).toBe(0);
+
+    const after = vacuumDatabase();
+    expect(after.path).toBe(before.path);
+    expect(after.databaseSizeBytes).toBeGreaterThan(0);
+    expect(after.walSizeBytes).toBe(0);
   });
 
   it("performs CRUD operations on custom providers", () => {
@@ -90,6 +151,10 @@ describe("AlphaWay SQLite Database Engine", () => {
     expect(list.length).toBe(1);
     expect(list[0].id).toBe("deepseek-test");
     expect(list[0].name).toBe("DeepSeek Provider");
+    expect(list[0].apiKey).toBe("sk-test-key");
+    const stored = getDatabase().prepare("SELECT api_key FROM custom_providers WHERE id = ?").get("deepseek-test") as { api_key: string };
+    expect(stored.api_key).toMatch(/^awenc:v1:/);
+    expect(stored.api_key).not.toContain("sk-test-key");
     expect(list[0].models).toContain("deepseek-chat");
 
     const deleted = dbDeleteCustomProvider("deepseek-test");

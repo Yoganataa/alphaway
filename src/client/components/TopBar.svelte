@@ -11,12 +11,14 @@
     onRefresh,
     onOpenSearch,
     onToggleMobileMenu,
+    onLogout,
   }: {
     activeTab: string;
     health?: HealthResponse | null;
     onRefresh?: () => void;
     onOpenSearch?: () => void;
     onToggleMobileMenu?: () => void;
+    onLogout?: () => void;
   } = $props();
 
   let copied = $state(false);
@@ -171,6 +173,13 @@
       <span class="material-symbols-outlined text-[16px] text-text-subtle">content_copy</span>
       <span>{copied ? "Copied!" : "http://127.0.0.1:20129/v1"}</span>
     </button>
+
+    {#if onLogout}
+      <Button variant="ghost" size="sm" onclick={onLogout} title="Sign out of administrator session">
+        <span class="material-symbols-outlined text-[16px]">logout</span>
+        <span class="hidden sm:inline">Sign out</span>
+      </Button>
+    {/if}
 
     <!-- Theme Toggle -->
     <ThemeToggle />

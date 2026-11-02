@@ -20,6 +20,7 @@ import {
   dbGetDailyUsageHistory,
   dbGetHourlyUsageHistory,
   dbGetSetting,
+  dbSetSetting,
 } from "./database";
 
 export interface RequestLogEntry {
@@ -130,25 +131,131 @@ function createEmptyStats(): UsageStats {
 
 let inMemoryStats: UsageStats = loadStatsFromDatabase();
 
-function normalizeStats(parsed: Partial<UsageStats> | null | undefined): UsageStats {
-  const defaults = createEmptyStats();
-  if (!parsed || typeof parsed !== "object") return defaults;
+function safeMetric(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(number, Number.MAX_SAFE_INTEGER)) : 0;
+}
 
+function safeMetricText(value: unknown, maxLength = 160): string {
+  return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, maxLength) : "";
+}
+
+function normalizeSummaryMap(value: any, fields: string[]): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, any> = {};
+  for (const [key, source] of Object.entries(value).slice(0, 1000)) {
+    const safeKey = safeMetricText(key, 128);
+    if (!safeKey || !source || typeof source !== "object" || Array.isArray(source)) continue;
+    const summary: Record<string, any> = {};
+    for (const field of fields) {
+      summary[field] = field === "lastUsed" ? safeMetricText((source as any)[field], 64) : safeMetric((source as any)[field]);
+    }
+    result[safeKey] = summary;
+  }
+  return result;
+}
+
+function normalizeProtocolSummary(value: any, fallback: ProtocolUsageSummary): ProtocolUsageSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...fallback };
   return {
-    ...defaults,
-    ...parsed,
-    byModel: parsed.byModel && typeof parsed.byModel === "object" ? parsed.byModel : {},
-    byProtocol: { ...defaults.byProtocol, ...(parsed.byProtocol || {}) },
-    byProvider: { ...defaults.byProvider, ...(parsed.byProvider || {}) },
-    dailyHistory: parsed.dailyHistory && typeof parsed.dailyHistory === "object" ? parsed.dailyHistory : {},
-    hourlyHistory: parsed.hourlyHistory && typeof parsed.hourlyHistory === "object" ? parsed.hourlyHistory : {},
-    recentLogs: Array.isArray(parsed.recentLogs) ? parsed.recentLogs.slice(0, MAX_RECENT_LOGS) : [],
+    requests: safeMetric(value.requests),
+    tokens: safeMetric(value.tokens),
+    promptTokens: safeMetric(value.promptTokens),
+    completionTokens: safeMetric(value.completionTokens),
+    lastUsed: safeMetricText(value.lastUsed, 64),
   };
 }
 
+function normalizeProviderSummary(value: any, fallback: ProviderUsageSummary): ProviderUsageSummary {
+  return normalizeProtocolSummary(value, fallback);
+}
+
+function normalizeHistory(value: any, kind: "daily" | "hourly"): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, any> = {};
+  for (const [key, source] of Object.entries(value).slice(0, 1000)) {
+    const safeKey = safeMetricText(key, 32);
+    const valid = kind === "daily"
+      ? /^\d{4}-\d{2}-\d{2}$/.test(safeKey)
+      : /^\d{4}-\d{2}-\d{2}T\d{2}:00$/.test(safeKey);
+    if (!valid || !source || typeof source !== "object" || Array.isArray(source)) continue;
+    if (kind === "daily") {
+      result[safeKey] = { requests: safeMetric((source as any).requests), tokens: safeMetric((source as any).tokens) };
+    } else {
+      const byModel: Record<string, number> = {};
+      const sourceModels = (source as any).byModel;
+      if (sourceModels && typeof sourceModels === "object" && !Array.isArray(sourceModels)) {
+        for (const [model, tokens] of Object.entries(sourceModels).slice(0, 500)) {
+          const safeModel = safeMetricText(model, 128);
+          if (safeModel) byModel[safeModel] = safeMetric(tokens);
+        }
+      }
+      result[safeKey] = { tokens: safeMetric((source as any).tokens), cost: safeMetric((source as any).cost), byModel };
+    }
+  }
+  return result;
+}
+
+function normalizeRecentLogs(value: any): RequestLogEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_RECENT_LOGS).flatMap((source: any) => {
+    if (!source || typeof source !== "object" || Array.isArray(source) || typeof source.timestamp !== "string" || !Number.isFinite(Date.parse(source.timestamp))) return [];
+    const promptTokens = safeMetric(source.promptTokens);
+    const completionTokens = safeMetric(source.completionTokens);
+    return [{
+      id: safeMetricText(source.id, 128),
+      timestamp: new Date(source.timestamp).toISOString(),
+      protocol: ["openai", "anthropic", "responses"].includes(source.protocol) ? source.protocol : "openai",
+      model: safeMetricText(source.model) || "unknown",
+      provider: ["opencode", "codebuddy", "custom"].includes(source.provider) ? source.provider : "opencode",
+      status: Math.min(599, Math.max(100, Math.round(safeMetric(source.status) || 200))),
+      latencyMs: safeMetric(source.latencyMs),
+      promptTokens,
+      completionTokens,
+      totalTokens: safeMetric(source.totalTokens) || promptTokens + completionTokens,
+      savedTokens: safeMetric(source.savedTokens),
+      stream: Boolean(source.stream),
+    }];
+  });
+}
+
+function normalizeStats(parsed: Partial<UsageStats> | null | undefined): UsageStats {
+  const defaults = createEmptyStats();
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return defaults;
+  return {
+    totalRequests: safeMetric(parsed.totalRequests),
+    successfulRequests: safeMetric(parsed.successfulRequests),
+    failedRequests: safeMetric(parsed.failedRequests),
+    totalPromptTokens: safeMetric(parsed.totalPromptTokens),
+    totalCompletionTokens: safeMetric(parsed.totalCompletionTokens),
+    totalTokens: safeMetric(parsed.totalTokens),
+    savedTokens: safeMetric(parsed.savedTokens),
+    estimatedSavingsUsd: safeMetric(parsed.estimatedSavingsUsd),
+    byModel: normalizeSummaryMap(parsed.byModel, ["requests", "promptTokens", "completionTokens", "totalTokens", "lastUsed"]),
+    byProtocol: {
+      openai: normalizeProtocolSummary(parsed.byProtocol?.openai, defaults.byProtocol.openai),
+      anthropic: normalizeProtocolSummary(parsed.byProtocol?.anthropic, defaults.byProtocol.anthropic),
+      responses: normalizeProtocolSummary(parsed.byProtocol?.responses, defaults.byProtocol.responses),
+    },
+    byProvider: {
+      opencode: normalizeProviderSummary(parsed.byProvider?.opencode, defaults.byProvider.opencode),
+      codebuddy: normalizeProviderSummary(parsed.byProvider?.codebuddy, defaults.byProvider.codebuddy),
+      custom: normalizeProviderSummary(parsed.byProvider?.custom, defaults.byProvider.custom),
+    },
+    dailyHistory: normalizeHistory(parsed.dailyHistory, "daily"),
+    hourlyHistory: normalizeHistory(parsed.hourlyHistory, "hourly"),
+    recentLogs: normalizeRecentLogs(parsed.recentLogs),
+  };
+}
 function loadStatsFromDatabase(): UsageStats {
   const stored = dbGetSetting<Partial<UsageStats> | null>("usage_stats_snapshot", null);
-  if (stored) return normalizeStats(stored);
+  if (stored) {
+    const normalized = normalizeStats(stored);
+    if (JSON.stringify(normalized) !== JSON.stringify(stored)) {
+      try { dbSetSetting("usage_stats_snapshot", normalized); } catch {}
+    }
+    return normalized;
+  }
 
   // Rebuild the projection from canonical request events when an older SQLite
   // database has request rows but no aggregate snapshot yet.

@@ -5,6 +5,31 @@ const path = require("path");
 const os = require("os");
 const { spawn, execSync } = require("child_process");
 
+function extractQuickTunnelUrl(outputLine) {
+  const candidate = outputLine.match(/https:\/\/[^\s"'<>]+/i)?.[0];
+  if (!candidate) return null;
+
+  const value = candidate.replace(/[),.;\]}]+$/, "");
+  try {
+    const parsed = new URL(value);
+    const hostname = parsed.hostname.toLowerCase();
+    const suffix = ".trycloudflare.com";
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.port ||
+      !hostname.endsWith(suffix) ||
+      hostname.length <= suffix.length
+    ) {
+      return null;
+    }
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
 function findCloudflaredBinary() {
   if (process.env.CLOUDFLARED_BIN && fs.existsSync(process.env.CLOUDFLARED_BIN)) {
     return process.env.CLOUDFLARED_BIN;
@@ -181,13 +206,13 @@ function startTunnel(options = {}) {
           connectedReported = true;
           console.log(`[AlphaWay] Cloudflare Tunnel connected! Public URL: ${publicUrl || "(active)"}`);
         }
-      } else if (line.includes(".trycloudflare.com")) {
-        const match = line.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
-        if (match) {
-          console.log(`[AlphaWay] Quick Tunnel URL: ${match[0]}`);
+      } else {
+        const quickTunnelUrl = extractQuickTunnelUrl(line);
+        if (quickTunnelUrl) {
+          console.log(`[AlphaWay] Quick Tunnel URL: ${quickTunnelUrl}`);
         }
-      } else if (line.includes("ERR") || line.includes("error") || line.includes("failed")) {
-        if (!line.includes("Retrying") && !line.includes("context canceled")) {
+        if ((line.includes("ERR") || line.includes("error") || line.includes("failed"))
+          && !line.includes("Retrying") && !line.includes("context canceled")) {
           console.warn(`[AlphaWay] [tunnel] ${line.trim()}`);
         }
       }
@@ -226,6 +251,7 @@ function startTunnel(options = {}) {
 module.exports = {
   findCloudflaredBinary,
   autoDownloadCloudflared,
+  extractQuickTunnelUrl,
   startTunnel,
 };
 

@@ -4,34 +4,80 @@
 >
 > **Checkpoint date:** 2026-11-02 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active branch:** `main` (Phase 1 merged; no Phase 2 branch created)  
-> **Merged Phase 1 branch HEAD:** `67f8ea1ccb0bfca719a80df312e6aaca214e92b5`  
-> **Current main HEAD:** `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`  
-> **Last code-audited baseline:** `1fa0f434bfc3d140cdb8fe574e0c49da081eb70f`  
+> **Active branch:** `feat/phase-2-auth-admin-security`  
+> **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
+> **Latest verified PR code head:** `ee317f3ea051e1754d3070c09e9704a7375fe464` on `feat/phase-2-auth-admin-security`; `main` remains `e2492fb3a995677d24f3078b7925a2c48c877ca7`.  
+> **Latest CI verification:** CI run [`41425478647`](https://github.com/Yoganataa/alphaway/actions/runs/41425478647) (#419) passed on Bun 1.4.4; unit/protocol tests, dashboard browser tests, UI/standalone build, installer/embedded-dashboard smoke, and TLS fingerprint all passed. Optional live upstream drill was skipped by design.  
+> **Latest CodeQL verification:** PR CodeQL run [`41425470119`](https://github.com/Yoganataa/alphaway/actions/runs/41425470119) (#207) completed both JavaScript/TypeScript and Actions jobs. Result check [`125211158149`](https://github.com/Yoganataa/alphaway/runs/125211158149) passed with “No new alerts in code changed by this pull request.” A separate full SARIF scan of source head `ee317f3ea051e1754d3070c09e9704a7375fe464` ([diagnostic run](https://github.com/Yoganataa/alphaway/actions/runs/41426255599)) produced **0 JavaScript/TypeScript results and 0 GitHub Actions results**. A default-branch inventory of `main` at `e2492fb3a995677d24f3078b7925a2c48c877ca7` found 14 open CodeQL alerts; their remediations are included in PR #4, but the alerts remain on `main` until the PR is merged and the default branch is re-analyzed. Temporary diagnostic workflow file removed after SARIF review.  
+> **Remaining review gate:** Independent human security review is still outstanding. Codex review and CodeQL are automated and do not substitute for that review. Do not merge PR #4 until review is completed and all findings are resolved.
+> **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
-> **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3) (merged)  
-> **Superseded Phase 1 PR:** [#2 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/2) (closed; old stacked PR targeting the Phase 0 branch)
+> **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
+> **Superseded Phase 1 PR:** [#2 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/2) (closed without merge)
 
 ## 1. Current Status
 
-**Phase 0 is complete and merged into `main` at `9805d2335293539424fd66af3c047b493edad630`.** Final GitHub Actions run `41325472514` passed on Bun 1.4.4. The P1 legacy-systemd retirement finding was fixed and the review thread resolved. PR #1 is merged.
+**Phase 0 and Phase 1 are complete and merged into `main`. Phase 2 implementation and CodeQL remediation are complete on `feat/phase-2-auth-admin-security` at code head `ee317f3`. CI #419 passes; direct full SARIF analysis returns zero results for JavaScript/TypeScript and Actions. The 14 alerts recorded on the unchanged `main` baseline remain open until PR #4 is merged and the default branch is re-analyzed. Independent human security review remains the final pre-merge gate; do not merge PR #4 or begin Phase 3 before that review is complete.
 
-- [x] Repository and baseline structure inspected.
-- [x] Existing product capabilities and major implementation risks recorded.
-- [x] Target product direction and dashboard information architecture agreed.
-- [x] `ROADMAP.md` created as the canonical plan.
-- [x] `CHECKPOINT.md` created for cross-session continuity.
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
-- [x] Phase 1 — Database Migrations and Canonical Persistence for existing AlphaWay persistence-backed features (PR #3 merged into `main`).
-- [ ] Phase 2 — Authentication, API Keys, and Administrative Access.
+- [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
+- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (implementation, required CI, and CodeQL PR check are green; independent human security review remains before merge).
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
-Phase 1 is complete for the persistence-backed domains that already exist in AlphaWay and is merged into `main` via PR #3 at `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`. The merged feature branch head was `67f8ea1ccb0bfca719a80df312e6aaca214e92b5`; GitHub Actions run `41328813739` passed for that exact PR head on Bun 1.4.4: the build, 292 unit/protocol tests, installer and embedded-dashboard smoke, and 8 dashboard browser E2E tests passed. The optional live upstream gate drill was skipped intentionally. The merge includes ordered SQLite migrations, checksummed/idempotent legacy JSON imports, canonical SQLite persistence for custom providers, TokenSaver/SOUL, API key records, proxy settings, and custom Security rule configuration; atomic usage event/snapshot persistence; and a backup/restore utility with file-backed recovery tests. Custom Security rule persistence is complete, but the dashboard sandbox and live request pipeline still need to use the same backend rule engine in a later security phase. Plans and Persona/Jailbreak do not yet have domain models; their persistence will be added alongside those features in Phases 3 and 4. Credential verification, hashing, and authenticated encryption remain Phase 2 work. The Codex P2 finding about `ALPHAWAY_HOME` changing the SQLite path was fixed: SQLite path resolution remains backward-compatible, while JSON from `ALPHAWAY_HOME` is imported as legacy state; its regression test passed. Verification was on Linux x86_64; macOS launchd and Windows binary runtime are not yet covered. **Phase 2 has not started; keep work paused here until the user explicitly requests it.**
+Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging because it was superseded by PR #3. Phase 1 merge commit: `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final Phase 1 CI run `41328813739` passed on Bun 1.4.4. The one-time flat-file JSON importer introduced during Phase 1 was retired by Phase 2 schema v5; AlphaWay now uses SQLite-only persistence.
 
+### Phase 2 implementation on the active branch
+
+- First-admin bootstrap token, CLI-only token display, scrypt password hashes, bounded login throttling, hashed admin sessions, expiry/revocation, HttpOnly/SameSite cookie, and dashboard login/logout.
+- Administrator login KDF concurrency is bounded globally (4 active, 16 queued); same-username password checks are serialized so parallel guesses cannot race the failed-login throttle. Overload is rejected as rate-limited.
+- Default-deny administrator session gate for `/api/*`; only status/session/bootstrap/login endpoints are public. Host/Origin validation compares scheme, host, and port and rejects same-host cross-port requests.
+- Managed inference keys stored as salted SHA-256 hashes with prefix lookup; create/list metadata/rename/rotate/revoke, inference scope, last-used timestamps, and request counts. Legacy `API_KEY` and `BRIDGE_API_KEY` remain supported.
+- Gateway inference authentication covers OpenAI, Anthropic, and Codex routes including aliases. Gateway caller credentials are not reused as upstream CodeBuddy credentials.
+- AES-256-GCM at-rest encryption for custom-provider API keys, proxy/pool/relay credentials, CodeBuddy OAuth credentials, and destructive-migration SQLite snapshots.
+- Existing plaintext SQLite migration/pre-restore snapshots are migrated to encrypted `.awenc` envelopes at startup or before restore. New SQLite snapshots use streaming AES-256-GCM envelope v2 with bounded 96 KiB file I/O; restore streams both v1 and v2 envelopes into a staged file, runs `PRAGMA quick_check`, then replaces the database. No arbitrary maximum database size is imposed.
+- Migration v3 enables connection-local `PRAGMA secure_delete=ON` and records a retryable one-time cleanup marker. Startup checkpoints/truncates WAL, runs `VACUUM`, checkpoints again, and marks cleanup complete only after success. This removes logical SQLite page/WAL residue from the v2 credential migration; it is not a physical-media or filesystem-snapshot sanitization guarantee.
+- Migration v4 encrypts a previously plaintext, JSON-serialized `codebuddy_api_key` value inside SQLite `app_settings` and re-arms the secret-residue cleanup marker. This is a SQLite value migration, not a standalone JSON-file importer.
+- Migration v5 removes the obsolete `legacy_imports` bookkeeping table. Historical migrations v1–v4 remain unchanged; provider, API-key, usage, and settings rows in SQLite are preserved.
+- Custom providers, usage analytics, TokenSaver, proxy settings, API keys, and admin sessions use canonical SQLite persistence. Existing SQLite analytics/TokenSaver/proxy values are normalized through explicit allowlists before use.
+- The pre-SQLite standalone JSON importer and JSON rollback restore CLI have been removed. SQLite schema v5 drops the obsolete import ledger; existing standalone JSON files are ignored and left untouched.
+- Persistent storage configuration follows the 9router-go contract: `DATA_DIR` and `DB_PATH`, default `$DATA_DIR/db/data.sqlite`, directory-layout fallback (`db/data.sqlite`, `data.sqlite`, `9router.db`, then legacy `alphaway.sqlite`), and compatibility aliases for existing AlphaWay installations. Double-quoted `.env` escapes are decoded in one pass.
+- Proxy pool health is a credential-free best-effort cache: restore reads are no-follow and capped at 1 MiB with file identity/metadata checks; the in-memory cache is capped at 512 egress records. Oversized/corrupt cache data is ignored without affecting proxy configuration.
+- All JSON request bodies across admin settings/configuration routes and the three gateway protocols are capped at 10 MiB using Content-Length validation plus streaming byte limits; oversized requests return 413 before JSON parsing or provider dispatch. Public administrator bootstrap/login use a stricter 16 KiB cap before parsing or KDF work.
+- Master encryption-key files are read as exactly 32 bytes plus a one-byte sentinel, and bootstrap token files are capped at 64 bytes with strict 43-character base64url validation; both verify descriptor identity/metadata stability.
+- Provider and CodeBuddy upstream diagnostic redaction covers raw, decoded, percent-encoded, Bearer-prefixed credentials; proxy connection-test diagnostics redact proxy authority credentials.
+- CodeBuddy OAuth returns no upstream access/refresh token to the browser; the dashboard uses the provider `state`/`authUrl` polling contract. The configured CodeBuddy token is read from encrypted SQLite or the environment override. The CLI prints the validated authorization URL for manual opening, no longer invokes `child_process`, `exec`, or `spawn`, and reports only a generic credential-configured status instead of logging JWT identity claims derived from the token.
+- Bun test preload isolates SQLite state before importing app modules. Tests cover admin sessions, key lifecycle/scope/revocation, CSRF origin ports, analytics/settings allowlists, encrypted SQLite backups (including v1 restore compatibility and a 24 MiB streaming snapshot), v5 removal of the obsolete JSON-import ledger without losing canonical records, oversized proxy health caches, AES-GCM tamper rejection, nonce uniqueness, POSIX key-file permissions, database-path locking across different `DATA_DIR` roots and explicit restore destinations, and rejection of symlink database targets.
+- Login-throttle capacity pressure fails closed: active per-username records are never evicted to make room for attacker-chosen usernames, preventing username spraying from resetting an account lockout.
+- Every server mode (foreground, daemon, systemd, and launchd) holds both the compatibility `DATA_DIR/alphaway.lock` and a second lock beside the canonical SQLite file (`<canonical-DB_PATH>.alphaway.lock`). This prevents distinct `DATA_DIR` roots from writing the same `DB_PATH`; restore passes its actual destination path to the same locking API, including explicit CLI destination overrides. Lock acquisition is atomic and rolls back the first lock if the second cannot be acquired. `alphaway.pid` remains daemon-only metadata.
+- Credential-transform migrations v2 and v4 are explicitly destructive and require encrypted pre-migration SQLite backups before changing existing credentials or managed keys.
+- Installer canonicalizes quoted and relative `DATA_DIR` values to an absolute path rooted at `BINDIR`, so service and manual starts use the same persistent directory.
+- Installer smoke verifies the encryption master-key file survives an upgrade unchanged.
+
+### GitHub / CI state at checkpoint
+
+- PR #4 remains the only open PR. It targets `main`, is **open and draft**, and its latest head is `d5e177411d83d11789d17531e42856f40b729cab`; do not merge it yet.
+- `main` HEAD remains `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
+- Latest required CI run [`41425478647`](https://github.com/Yoganataa/alphaway/actions/runs/41425478647) (#419) passed on Bun 1.4.4. Unit/protocol tests, dashboard E2E, UI/standalone build, installer smoke, and TLS fingerprint all passed; optional live upstream gate drill was skipped by design.
+- Latest PR CodeQL workflow run [`41425470119`](https://github.com/Yoganataa/alphaway/actions/runs/41425470119) (#207) and result check [`125211158149`](https://github.com/Yoganataa/alphaway/runs/125211158149) passed. Full SARIF verification at [run #41426255599](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) on code head `ee317f3` returned 0 results for JavaScript/TypeScript and 0 for GitHub Actions.
+- The original 14-alert `main` baseline included clear-text JWT logging, three OAuth shell command-injection paths, insecure API-key randomness, weak SHA-1 UUID derivation, a fast unkeyed hash of proxy URLs containing credentials, the Quick Tunnel substring parser, and URL substring checks in test mocks. PR #4 removes the JWT claim log and shell-based OAuth launching, uses the existing CSPRNG API-key issuer, parses the Quick Tunnel URL, derives proxy health IDs with purpose-separated HMAC-SHA-256 from the local master key (health cache version 2), uses SHA-256-based UUIDv8 for stable CodeBuddy conversation IDs, and parses the hostname in test URL helpers.
+- The full SARIF scan against PR code head `ee317f3` returns zero results in both analyzers, including the former Quick Tunnel/test URL substring findings. The temporary `.github/workflows/codeql-main-baseline.yml` diagnostics workflow was removed from the audit branch after exporting the default-branch inventory and direct PR-head SARIF artifacts; the audit branch remains as a temporary evidence branch.
+- The four earlier Codex review threads (OAuth subprocess execution, DB-path locking, stale-lock assertion text, daemon PID ordering) remain resolved. Automated Codex re-review at `18a885604dc329e9ca4dc28997cb20da8863fefe` found no findings; the latest CodeQL and CI runs are newer than that review.
+- No independent human security review has been submitted. Automated Codex review and CodeQL do not substitute for independent human security review. The repository ruleset requires zero PR approvals for the solo-developer workflow, but keep PR #4 draft until the independent review decision and any findings are resolved.
+- Repository Ruleset [`Protect main`](https://github.com/Yoganataa/alphaway/rules/26337025) is active for `refs/heads/main`, has no bypass actors, requires a PR and conversation resolution, requires the four CI jobs to pass with strict up-to-date checks, blocks branch deletion and force pushes, and requires zero approvals.
+- Windows ACL behavior for bootstrap/encryption-key files and SQLite backups is not verified. Keep it in Phase 7 hardening; POSIX `0600`/`0700` permissions are covered.
+ 
+### Remaining Phase 2 gaps / boundaries
+
+- Standalone JSON file import/recovery is intentionally unsupported. AlphaWay uses SQLite as its only persistent application-state backend; old flat JSON files are ignored and left untouched. The v5 migration removes the obsolete import ledger without changing canonical SQLite data.
+- Independent security review of PR #4 is still outstanding. The repository ruleset intentionally requires zero PR approvals for the solo-developer workflow; that does not replace an independent review. Keep PR #4 draft until the review decision and findings are resolved.
+- Windows ACL enforcement for generated master-key/bootstrap files and SQLite backups is deferred to Phase 7.
+- Per-key Plan assignment is deferred to Phase 3 with the Plan model and enforcement semantics. Phase 2 API keys already have inference scope and lifecycle metadata.
+
+**Verification boundary:** CI evidence is GitHub Actions on Linux x86_64 with Bun 1.4.4. No local Bun test/build was run in this session; GitHub Actions is the verified test environment. macOS launchd and Windows runtime/ACL behavior are not verified.
 ## 2. Agreed Product Direction
 
 The goal is to evolve AlphaWay without replacing its core gateway:
@@ -197,55 +243,37 @@ test/verify-quick.test.ts
 - Merge commit: `9805d2335293539424fd66af3c047b493edad630`.
 - `main` includes the Phase 0 CI, Bun 1.4.4 runtime, installer, and standalone distribution baseline.
 
-### Next phase
+### Current Phase 2 work
 
-Phase 0 and Phase 1 acceptance criteria are met for the tested Linux x86_64 path. PR #1 and PR #3 are merged. Obsolete stacked PR #2 was closed without merging because it targeted the old Phase 0 branch and was superseded by PR #3. There are currently no open PRs. Phase 1 merge commit: `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`. Stop here: Phase 2 — Authentication, API Keys, and Administrative Access has not started. Do not create a Phase 2 branch or PR until the user explicitly instructs to continue.
+Phase 2 CodeQL remediation is complete on code head `ee317f3ea051e1754d3070c09e9704a7375fe464`: CI #419 passed, PR CodeQL #207 passed, and direct full SARIF analysis returned zero JavaScript/TypeScript and Actions results. The baseline `main` snapshot `e2492fb3a995677d24f3078b7925a2c48c877ca7` had 14 open alerts; fixes are in PR #4, so those alerts remain on `main` until merge and default-branch reanalysis. Do not repeat the remediation work.
 
+Next actions:
+1. Complete an independent security review of PR #4 and resolve any findings. The repository ruleset still uses zero approvals for the solo-developer workflow; this does not replace the independent review.
+2. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
+3. Keep PR #4 draft and do not merge or begin Phase 3 until Phase 2 acceptance criteria and independent review are complete.
+
+Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
 ## 6. Working Rules for the Next Session
 
-- Read `CHECKPOINT.md` first, then `ROADMAP.md`, then inspect the current GitHub state.
-- The live repository/PR state takes precedence over this checkpoint if newer commits exist. Reconcile differences instead of blindly following stale notes.
-- Do not ask the user to repeat product decisions already recorded here.
-- Work only on the active phase unless a blocking dependency requires a documented change in sequence.
-- Do not claim that tests/builds/CI pass unless the command was actually run and its output was checked.
-- Do not mark roadmap tasks complete merely because code was written; verify behavior and acceptance criteria.
-- After each coherent change, update this file with: date, branch, HEAD/PR, completed work, changed paths, verification commands/results, outstanding issues, and the exact next action.
-- If work is interrupted, leave the repository in a clean, committed state where practical and update this checkpoint before stopping.
+- Read `CHECKPOINT.md` first, then `ROADMAP.md`, then inspect live GitHub state.
+- The live repository/PR state takes precedence over this checkpoint if newer commits exist.
+- Keep backend runtime Bun + TypeScript + Hono. Preserve OpenCode TLS/BoringSSL behavior and all documented gateway protocols.
+- Do not weaken or remove tests to make CI green. Do not claim tests/builds/CI passed unless the actual result was inspected.
+- Work only on the active phase. Do not start Phase 3 until Phase 2 acceptance criteria and CI/security review are complete.
+- Update this checkpoint and the roadmap after meaningful work, including branch/PR state, changed paths, verification evidence, open risks, and exact next action.
+- If work is interrupted, leave a committed state and an accurate checkpoint; do not claim background work.
 
 ## 7. Prompt to Resume in a New Chat
 
-Current Phase 1 implementation files:
-- `src/core/migrations/{types.ts,index.ts,001_initial_schema.ts}`: versioned migration runner and initial schema.
-- `src/core/legacy-imports.ts`: idempotent JSON import ledger with checksums.
-- `src/core/database.ts`: migration startup, backup hook, canonical SQLite queries and atomic usage writes.
-- `src/core/custom-providers.ts`, `src/features/tokensaver.ts`, `src/core/usage-tracker.ts`, `src/core/proxy.ts`: SQLite canonical persistence.
-- Tests: `test/migrations.test.ts`, `test/legacy-imports.test.ts`, plus database/proxy/usage regression coverage.
-
-Next actions:
-1. Phase 1 is complete and PR #3 is merged into `main` at `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`.
-2. The duplicate/obsolete PR #2 is closed (not merged); no PRs remain open.
-3. Keep the repository paused on `main`; do not create a Phase 2 branch or PR until the user explicitly requests it.
-4. When authorized to continue, re-check the live repository state and start Phase 2 from the then-current `main`.
-5. Future phase scope remains recorded in `ROADMAP.md`; do not begin Plans, Persona/Jailbreak, or the remaining DLP runtime work prematurely.
-
-Copy this prompt into the next session:
-
 ```text
-Lanjutkan pekerjaan AlphaWay dari repository https://github.com/Yoganataa/alphaway.
+Lanjutkan AlphaWay dari repository https://github.com/Yoganataa/alphaway.
+Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Setelah itu periksa live main, branch feat/phase-2-auth-admin-security, PR #4, Ruleset Protect main, dan hasil GitHub Actions terbaru sebelum mengubah apa pun.
 
-Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Keduanya adalah catatan kanonis lintas sesi. Setelah itu periksa live branch/commit dan PR di GitHub; jangan mengasumsikan checkpoint masih identik dengan HEAD saat ini. Jika ada commit baru, baca diff dan perbarui pemahaman/checkpoint sebelum mengubah kode.
+Phase 0 PR #1 dan Phase 1 PR #3 sudah merged. PR #4 adalah satu-satunya PR aktif, target main, open dan draft. Latest verified implementation head: ee317f3ea051e1754d3070c09e9704a7375fe464. CI #419 passed on Bun 1.4.4. PR CodeQL #207 and result check 125211158149 passed; direct SARIF on this commit returned 0 JavaScript/TypeScript findings and 0 Actions findings. `main` at e2492fb had 14 open baseline alerts; all have corresponding fixes in PR #4 and remain open on main until merge/reanalysis.
 
-Target produk yang sudah diputuskan:
-- Backend tetap Bun + TypeScript + Hono; jangan port backend Go dari 9router-go.
-- Dashboard harus memiliki UI/UX yang sama dengan frontend 9router-go, tetapi semua fitur AlphaWay tetap tersedia dan menggunakan API backend AlphaWay.
-- Frontend target berada di web/.
-- Pertahankan OpenAI Chat, Anthropic Messages, Codex Responses, OpenCode TLS/BoringSSL behavior, CodeBuddy, custom providers, TokenSaver, SOUL.md, Cloudflare Tunnel, proxy engine, dan fitur AlphaWay lainnya.
-- Tambahkan Plans serta Persona/Jailbreak.
-- Ikuti struktur TypeScript idiomatis; jangan membuat struktur ala Go secara menyeluruh.
+CodeQL remediation includes removal of CodeBuddy JWT subject logging and OAuth child-process shell launching, CSPRNG API-key issuance, parsed Quick Tunnel URL validation, HMAC-SHA-256 proxy health identifiers keyed by the local master key, SHA-256-based UUIDv8 conversation IDs, and parsed-host test URL helpers. Full PR-head SARIF is clean (0 JS/TS and 0 Actions results). The temporary SARIF workflow file was deleted; the standalone audit branch remains.
 
-Phase 0 PR #1 sudah merged ke `main` pada `9805d2335293539424fd66af3c047b493edad630`. Phase 1 PR #3 juga sudah merged ke `main` pada `1d34c45dbf2d7a2e947a62fd298642691c38f8e2` setelah CI run `41328813739` sukses pada head `67f8ea1ccb0bfca719a80df312e6aaca214e92b5` dengan Bun 1.4.4. Phase 2 belum dimulai. Jangan membuat branch atau PR Phase 2 sampai pengguna secara eksplisit meminta melanjutkan. Pertahankan Bun 1.4.4, jangan melemahkan tes, dan update CHECKPOINT.md setiap blok kerja bermakna.
+Phase 2 implementation is substantially complete. Remaining pre-merge gate: an independent human security review of PR #4 and resolution of any findings. Codex and CodeQL are automated tools and do not satisfy this review. Keep PR #4 draft; do not merge or begin Phase 3 until the independent review and acceptance gates are complete.
+
+Backend remains Bun 1.4.4 + TypeScript + Hono. SQLite is the only persistent application-state backend; no standalone JSON database import/recovery. Plan assignment and quota enforcement belong to Phase 3. Windows ACL verification stays in Phase 7. Do not weaken tests or claim unverified behavior.
 ```
-
----
-
-**Verification boundary:** CI evidence is from GitHub Actions on Linux x86_64 with Bun 1.4.4. The local execution environment did not run Bun tests directly; macOS launchd and Windows runtime remain unverified.

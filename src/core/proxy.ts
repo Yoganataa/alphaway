@@ -30,14 +30,17 @@
 
 const crypto = require("crypto");
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("./database");
+const { encryptSecret, decryptSecret, deriveSecretIdentifier } = require("./secrets");
+const { resolveDataDir, ensurePrivateDirectory } = require("./storage-paths");
 
 const CONFIG_SETTING_KEY = "proxy_config";
 const CONFIG_SETTING_LABEL = `SQLite app_settings.${CONFIG_SETTING_KEY}`;
 const HEALTH_FILE_NAME = "pool-health.json";
-const HEALTH_VERSION = 1;
+const HEALTH_VERSION = 2;
+const MAX_HEALTH_FILE_BYTES = 1024 * 1024;
+const MAX_HEALTH_RECORDS = 512;
 const ENV_OVERRIDE = "UPSTREAM_PROXY_URL";
 const POOL_ENV = "UPSTREAM_PROXY_POOL";
 const STRATEGY_ENV = "UPSTREAM_PROXY_STRATEGY";
@@ -48,9 +51,9 @@ const DEFAULT_COOLDOWN_MS = 120000;
 const DEFAULT_MAX_COOLDOWN_MS = 1800000;
 
 function stateDir() {
-  const raw = process.env.ALPHAWAY_STATE_DIR || process.env.OPENCODE_BRIDGE_STATE_DIR;
-  if (raw !== undefined && String(raw).trim()) return String(raw).trim();
-  return path.join(os.homedir(), ".alphaway");
+  const directory = resolveDataDir();
+  ensurePrivateDirectory(directory);
+  return directory;
 }
 
 /**
@@ -100,6 +103,24 @@ function parseProxyUrl(raw) {
   return { ok: true, url: `${u.protocol}//${auth}${u.hostname}${port}` };
 }
 
+function redactProxyTransportError(error, proxyUrl) {
+  let message = String(error && error.message ? error.message : "Proxy request failed").slice(0, 500);
+  const secrets = new Set([String(proxyUrl || "")]);
+  try {
+    const parsed = new URL(String(proxyUrl || ""));
+    for (const value of [parsed.username, parsed.password]) {
+      if (value) {
+        secrets.add(value);
+        try { secrets.add(decodeURIComponent(value)); } catch {}
+      }
+    }
+    if (parsed.username || parsed.password) secrets.add(parsed.username + (parsed.password ? ":" + parsed.password : ""));
+  } catch {}
+  for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
+    if (secret) message = message.split(secret).join("[REDACTED]");
+  }
+  return message.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1[REDACTED]@").slice(0, 300);
+}
 /** `host:port` for display. Credentials are never part of this string. */
 
 function parseRelayUrl(raw) {
@@ -273,6 +294,12 @@ function healthFor(url) {
   const key = keyOf(url);
   let h = health.get(key);
   if (!h) {
+    // Runtime health is a best-effort cache. Keep it bounded when an operator
+    // repeatedly changes egress identities or a provider emits many endpoints.
+    if (health.size >= MAX_HEALTH_RECORDS) {
+      const oldest = health.keys().next().value;
+      if (oldest !== undefined) health.delete(oldest);
+    }
     h = { failures: 0, cooldownUntil: 0, lastError: null, lastOkAt: 0, lastUsedAt: 0, lastStatus: null };
     health.set(key, h);
   }
@@ -298,12 +325,12 @@ function pruneHealth(entries) {
 }
 
 /**
- * Stable, non-secret id for one egress. The health file sits beside a config
- * that already holds proxy credentials; a second copy of every token would be
- * a second thing to leak, and the record only has to be matchable, not readable.
+ * Stable opaque id for one egress. Proxy URLs may contain passwords, so an
+ * unkeyed fast hash would permit offline guessing from the health cache. Use a
+ * purpose-separated HMAC bound to the local master key instead.
  */
 function healthId(key) {
-  return crypto.createHash("sha256").update(key).digest("hex").slice(0, 16);
+  return deriveSecretIdentifier("proxy-health-id:v2", key).slice(0, 32);
 }
 
 function healthLabel(key) {
@@ -357,17 +384,28 @@ function writeHealthNow(now = Date.now()) {
     removeHealthFile();
     return;
   }
+  const serialized = `${JSON.stringify(healthSnapshot(now), null, 2)}\n`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_HEALTH_FILE_BYTES) return;
+  const filePath = healthFile();
+  const tmp = `${filePath}.${crypto.randomUUID()}.tmp`;
+  let fd;
   try {
-    fs.mkdirSync(path.dirname(healthFile()), { recursive: true });
-    const tmp = `${healthFile()}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify(healthSnapshot(now), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    fs.renameSync(tmp, healthFile());
-    fs.chmodSync(healthFile(), 0o600);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+    if (process.platform !== "win32") fs.chmodSync(path.dirname(filePath), 0o700);
+    fd = fs.openSync(tmp, "wx", 0o600);
+    fs.writeFileSync(fd, serialized, "utf8");
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tmp, filePath);
+    if (process.platform !== "win32") fs.chmodSync(filePath, 0o600);
   } catch {
     // Best effort: the bridge keeps running with in-memory health.
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
+    try { fs.unlinkSync(tmp); } catch {}
   }
 }
-
 /**
  * Coalesce rapid writes. A success arrives with every request, and rewriting a
  * file per request would turn a cheap memory update into disk churn.
@@ -390,13 +428,54 @@ function scheduleHealthWrite(delayMs = 1000) {
  * that leaves the map empty, so a live record is by definition at least as
  * fresh as the file.
  */
-function restoreHealth(entries, now = Date.now()) {
-  let raw;
+function sameHealthFileSnapshot(left, right) {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
+/** Read only a small, regular health cache; it contains no configuration secrets. */
+function readHealthFileWithinLimit() {
+  let fd;
   try {
-    raw = fs.readFileSync(healthFile(), "utf8");
+    const filePath = healthFile();
+    const pathStat = fs.lstatSync(filePath);
+    if (pathStat.isSymbolicLink() || !pathStat.isFile()) return null;
+    const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    const opened = fs.fstatSync(fd);
+    if (!opened.isFile() || opened.dev !== pathStat.dev || opened.ino !== pathStat.ino) return null;
+    if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
+    const baseline = fs.fstatSync(fd);
+    if (baseline.size > MAX_HEALTH_FILE_BYTES) return null;
+
+    const chunks = [];
+    const chunk = Buffer.allocUnsafe(64 * 1024);
+    let total = 0;
+    while (true) {
+      const remaining = MAX_HEALTH_FILE_BYTES + 1 - total;
+      if (remaining <= 0) return null;
+      const bytesRead = fs.readSync(fd, chunk, 0, Math.min(chunk.length, remaining), null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > MAX_HEALTH_FILE_BYTES) return null;
+      chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
+    }
+
+    if (!sameHealthFileSnapshot(baseline, fs.fstatSync(fd))) return null;
+    return Buffer.concat(chunks, total).toString("utf8");
   } catch {
-    return 0;
+    return null;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
   }
+}
+
+function restoreHealth(entries, now = Date.now()) {
+  const raw = readHealthFileWithinLimit();
+  if (raw === null) return 0;
 
   let json = null;
   try {
@@ -482,7 +561,16 @@ function loadFromDisk() {
     return pool;
   }
 
-  const json = dbGetSetting(CONFIG_SETTING_KEY, null);
+  const storedConfig = dbGetSetting(CONFIG_SETTING_KEY, null);
+  const safeStoredConfig = storedConfig && typeof storedConfig === "object" && !Array.isArray(storedConfig)
+    ? mapConfigSecrets(storedConfig, (value) => value)
+    : storedConfig;
+  if (safeStoredConfig && JSON.stringify(safeStoredConfig) !== JSON.stringify(storedConfig)) {
+    try { dbSetSetting(CONFIG_SETTING_KEY, safeStoredConfig); } catch {}
+  }
+  const json = safeStoredConfig && typeof safeStoredConfig === "object" && !Array.isArray(safeStoredConfig)
+    ? decryptProxyConfig(safeStoredConfig)
+    : safeStoredConfig;
   if (!json || typeof json !== "object" || Array.isArray(json)) {
     const error = json === null
       ? null
@@ -718,22 +806,57 @@ function describe(now = Date.now()) {
 }
 
 /** Persist the complete proxy configuration as one SQLite setting. */
+function mapConfigSecrets(input, transform) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const config = {};
+  if (typeof input.url === "string") config.url = transform(input.url);
+  if (["round-robin", "random", "failover"].includes(input.strategy)) config.strategy = input.strategy;
+  for (const field of ["cooldownMs", "maxCooldownMs"]) {
+    if (Number.isFinite(Number(input[field]))) config[field] = Number(input[field]);
+  }
+  if (Array.isArray(input.pool)) {
+    config.pool = input.pool.map((entry) => {
+      if (typeof entry === "string") return transform(entry);
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+      const safe = {};
+      for (const field of ["id", "label"]) {
+        if (typeof entry[field] === "string") safe[field] = entry[field].slice(0, 64);
+      }
+      for (const field of ["direct", "relay", "enabled"]) {
+        if (typeof entry[field] === "boolean") safe[field] = entry[field];
+      }
+      if (Number.isFinite(Number(entry.weight))) safe.weight = Math.min(100, Math.max(1, Number(entry.weight)));
+      if (typeof entry.url === "string") safe.url = transform(entry.url);
+      const token = typeof entry.token === "string" ? entry.token : entry.auth;
+      if (typeof token === "string") safe.token = transform(token);
+      return safe;
+    });
+  }
+  return config;
+}
+
+function encryptProxyConfig(config) {
+  return mapConfigSecrets(config, encryptSecret);
+}
+
+function decryptProxyConfig(config) {
+  return mapConfigSecrets(config, decryptSecret);
+}
+
 function writeConfig(next) {
   try {
-    dbSetSetting(CONFIG_SETTING_KEY, next);
+    dbSetSetting(CONFIG_SETTING_KEY, encryptProxyConfig(next));
     return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: `Failed to write ${CONFIG_SETTING_LABEL}: ${error instanceof Error ? error.message : String(error)}`,
-    };
+  } catch {
+    // Never include serialized config or credential-bearing SQLite errors.
+    return { ok: false, error: "Failed to write proxy configuration." };
   }
 }
 
 /** Current SQLite value, so one setter never drops the other's fields. */
 function readConfigObject() {
   const json = dbGetSetting(CONFIG_SETTING_KEY, null);
-  return json && typeof json === "object" && !Array.isArray(json) ? json : {};
+  return json && typeof json === "object" && !Array.isArray(json) ? decryptProxyConfig(json) : {};
 }
 
 function refuseWhenLocked() {
@@ -941,7 +1064,7 @@ async function testProxy(url, { timeoutMs = 15000, probeUrl = null } = {}) {
       ok: false,
       exitIp: exit.ip,
       latencyMs: Date.now() - started,
-      error: `Cannot reach upstream through proxy: ${err.message}`,
+      error: `Cannot reach upstream through proxy: ${redactProxyTransportError(err, parsed.url)}`,
     };
   }
   const latencyMs = Date.now() - started;
@@ -1002,7 +1125,7 @@ async function probeExitIp(proxyUrl, timeoutMs) {
     const ip = (text.match(/^ip=(.+)$/m) || [])[1] || null;
     return { ip, error: ip ? null : "trace tanpa field ip" };
   } catch (err) {
-    return { ip: null, error: err.message };
+    return { ip: null, error: redactProxyTransportError(err, proxyUrl) };
   }
 }
 

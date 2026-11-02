@@ -8,10 +8,15 @@
 import { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { runMigrations } from "./migrations";
-import { createMigrationBackup } from "./migrations/backup";
-import { importLegacyJson } from "./legacy-imports";
+import { createMigrationBackup, encryptExistingMigrationBackups } from "./migrations/backup";
+import { decryptSecret, encryptSecret, isEncryptedSecret } from "./secrets";
+import { hasEmbeddedProviderUrlSecrets } from "./provider-url-secrets";
+import {
+  ensurePrivateDirectory,
+  resolveDataDir,
+  resolveDatabasePath,
+} from "./storage-paths";
 
 export interface CustomProviderRow {
   id: string;
@@ -39,34 +44,96 @@ export interface RequestLogRow {
   stream: boolean;
 }
 
+/** @deprecated Use resolveDataDir; retained for existing internal callers. */
 export function resolveDbDir(): string {
-  // ALPHAWAY_HOME was a legacy JSON-config directory, not the SQLite database
-  // root in prior releases. Keep the database location stable; import legacy
-  // JSON from ALPHAWAY_HOME below instead of silently switching to a new DB.
-  const customState =
-    process.env.ALPHAWAY_STATE_DIR ||
-    process.env.OPENCODE_BRIDGE_STATE_DIR;
-  if (customState && customState.trim()) {
-    return customState.trim();
-  }
-  const dir = path.join(os.homedir(), ".alphaway");
-  try {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    }
-    if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
-  } catch {}
-  return dir;
+  return resolveDataDir();
 }
 
 export function getDbFilePath(): string {
-  if (process.env.ALPHAWAY_DB_PATH) {
-    return process.env.ALPHAWAY_DB_PATH;
-  }
-  return path.join(resolveDbDir(), "alphaway.sqlite");
+  return resolveDatabasePath();
 }
 
 let dbInstance: any = null;
+
+/**
+ * Remove pre-encryption credential remnants from SQLite free pages and WAL.
+ * This runs once after migration v2; a pending marker makes an interrupted
+ * cleanup retry safely on the next startup. This is logical database cleanup,
+ * not a guarantee against filesystem snapshots or physical-media remanence.
+ */
+function scrubLegacySecretResidue(db: any): void {
+  const marker = db.prepare(
+    "SELECT value FROM app_settings WHERE key = ?"
+  ).get("alpha_security_secret_scrub") as { value: string } | undefined;
+  if (marker?.value !== JSON.stringify("pending")) return;
+
+  const checkpoint = () => {
+    const result = db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as any;
+    const busy = Number(result?.busy ?? result?.[0] ?? 0);
+    if (busy !== 0) {
+      throw new Error("SQLite WAL checkpoint was busy; secret cleanup cannot proceed safely");
+    }
+  };
+
+  checkpoint();
+  db.exec("VACUUM;");
+  checkpoint();
+  db.prepare(
+    "UPDATE app_settings SET value = ?, updated_at = ? WHERE key = ?"
+  ).run(JSON.stringify("complete"), Date.now(), "alpha_security_secret_scrub");
+  checkpoint();
+}
+
+
+export interface DatabaseStorageStats {
+  path: string;
+  databaseSizeBytes: number;
+  reclaimableBytes: number;
+  walSizeBytes: number;
+  pageCount: number;
+  pageSize: number;
+  freelistCount: number;
+  requestLogsCount: number;
+  customProvidersCount: number;
+}
+
+export function getDatabaseStorageStats(): DatabaseStorageStats {
+  const db = getDatabase();
+  const pageCount = Number(db.query("PRAGMA page_count;").get()?.page_count || 0);
+  const pageSize = Number(db.query("PRAGMA page_size;").get()?.page_size || 0);
+  const freelistCount = Number(db.query("PRAGMA freelist_count;").get()?.freelist_count || 0);
+  const requestLogsCount = Number(db.query("SELECT COUNT(*) AS count FROM request_logs;").get()?.count || 0);
+  const customProvidersCount = Number(db.query("SELECT COUNT(*) AS count FROM custom_providers;").get()?.count || 0);
+  const dbPath = getDbFilePath();
+  let walSizeBytes = 0;
+  try { walSizeBytes = fs.statSync(dbPath + "-wal").size; } catch {}
+  return {
+    path: dbPath,
+    databaseSizeBytes: pageCount * pageSize,
+    reclaimableBytes: freelistCount * pageSize,
+    walSizeBytes,
+    pageCount,
+    pageSize,
+    freelistCount,
+    requestLogsCount,
+    customProvidersCount,
+  };
+}
+
+/** Compact the live WAL-backed database and release free pages to the OS. */
+export function vacuumDatabase(): DatabaseStorageStats {
+  const db = getDatabase();
+  const before = db.query("PRAGMA wal_checkpoint(TRUNCATE);").get() as { busy?: number };
+  if (Number(before?.busy || 0) !== 0) {
+    throw new Error("SQLite WAL checkpoint is busy; stop other database readers/writers and retry");
+  }
+  db.exec("VACUUM;");
+  const after = db.query("PRAGMA wal_checkpoint(TRUNCATE);").get() as { busy?: number };
+  if (Number(after?.busy || 0) !== 0) {
+    throw new Error("SQLite WAL checkpoint remained busy after VACUUM");
+  }
+  return getDatabaseStorageStats();
+}
 
 export function getDatabase(): any {
   if (dbInstance) return dbInstance;
@@ -77,9 +144,14 @@ export function getDatabase(): any {
   if (!isMemory) {
     const dir = path.dirname(dbPath);
     try {
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-      if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
-    } catch {}
+      ensurePrivateDirectory(dir);
+      // Convert historical plaintext SQLite migration/pre-restore snapshots
+      // before the application serves requests or exposes backup diagnostics.
+      encryptExistingMigrationBackups(path.join(dir, "backups"));
+      encryptExistingMigrationBackups(dir, path.basename(dbPath));
+    } catch (error) {
+      throw new Error("Could not secure the SQLite data directory or its backups: " + (error instanceof Error ? error.message : String(error)));
+    }
   }
 
   // 1. Initialize SQLite Database strictly with native Bun SQLite (bun:sqlite)
@@ -88,16 +160,30 @@ export function getDatabase(): any {
   }
 
   dbInstance = new Database(dbPath);
-  if (!isMemory && process.platform !== "win32") {
-    try { fs.chmodSync(dbPath, 0o600); } catch {}
-  }
+  try {
+    if (!isMemory && process.platform !== "win32") {
+      fs.chmodSync(dbPath, 0o600);
+    }
 
-  // 2. Enable WAL mode for concurrency and optimal I/O throughput
-  if (!isMemory) {
-    try {
+    // Match 9router-go's SQLite connection contract. Bun owns one synchronous
+    // connection per Database instance; these PRAGMAs apply to its operations.
+    dbInstance.exec("PRAGMA busy_timeout = 5000;");
+    dbInstance.exec("PRAGMA foreign_keys = ON;");
+    dbInstance.exec("PRAGMA synchronous = NORMAL;");
+    dbInstance.exec("PRAGMA temp_store = MEMORY;");
+    dbInstance.exec("PRAGMA cache_size = -8000;");
+    if (!isMemory) {
+      dbInstance.exec("PRAGMA mmap_size = 30000000;");
       dbInstance.exec("PRAGMA journal_mode = WAL;");
-      dbInstance.exec("PRAGMA synchronous = NORMAL;");
-    } catch {}
+      const journalMode = dbInstance.query("PRAGMA journal_mode;").get() as { journal_mode?: string };
+      if (String(journalMode?.journal_mode || "").toLowerCase() !== "wal") {
+        throw new Error("SQLite could not enable WAL journal mode");
+      }
+    }
+  } catch (error) {
+    try { dbInstance.close(); } catch {}
+    dbInstance = null;
+    throw new Error("Could not initialize the SQLite database safely: " + (error instanceof Error ? error.message : String(error)));
   }
 
   // 3. Apply versioned, transactional schema migrations. Existing tables are
@@ -105,12 +191,18 @@ export function getDatabase(): any {
   // intact. A failed migration aborts startup instead of silently booting with
   // a partially upgraded schema.
   try {
+    // secure_delete is connection-local; keep it enabled for future credential
+    // updates/deletes as well as the initial v2 migration.
+    dbInstance.exec("PRAGMA secure_delete = ON;");
+
     const migrationResult = runMigrations(dbInstance, undefined, {
       beforeDestructiveMigration: (migration) => {
         const backupPath = createMigrationBackup(dbInstance, dbPath, migration.name);
         console.warn(`[AlphaWay] Created pre-migration backup: ${backupPath}`);
       },
     });
+    if (!isMemory) scrubLegacySecretResidue(dbInstance);
+
     if (migrationResult.applied.length > 0) {
       console.info(
         `[AlphaWay] SQLite schema migrated to v${migrationResult.currentVersion} (${migrationResult.applied.length} migration(s))`
@@ -120,26 +212,6 @@ export function getDatabase(): any {
     try { dbInstance.close(); } catch {}
     dbInstance = null;
     throw error;
-  }
-
-  // Import pre-SQLite JSON data exactly once. Each source file and all of
-  // its row/settings writes are committed in one transaction with its ledger
-  // record. Source files remain untouched as operator-readable backups.
-  const legacyDirs = [
-    process.env.ALPHAWAY_HOME,
-    path.join(os.homedir(), ".opencode-free-bridge"),
-  ].filter((dir): dir is string => typeof dir === "string" && dir.trim().length > 0);
-  const importReports = importLegacyJson(dbInstance, resolveDbDir(), legacyDirs);
-  for (const report of importReports) {
-    if (report.status === "skipped" || report.details) {
-      console.warn(
-        `[AlphaWay] Legacy import ${report.sourceKey}: ${report.details || report.status}`
-      );
-    } else if (report.status === "imported" && report.rowCount > 0) {
-      console.info(
-        `[AlphaWay] Legacy import ${report.sourceKey}: ${report.rowCount} row(s) imported`
-      );
-    }
   }
 
   return dbInstance;
@@ -166,16 +238,45 @@ export function closeDatabase(): void {
 export function dbLoadCustomProviders(): CustomProviderRow[] {
   const db = getDatabase();
   const rows = db.prepare("SELECT * FROM custom_providers ORDER BY created_at ASC").all();
-  return rows.map((r: any) => ({
-    id: r.id,
-    name: r.name,
-    baseUrl: r.base_url,
-    apiKey: r.api_key,
-    protocol: r.protocol === "anthropic" ? "anthropic" : "openai",
-    models: safeParseJson(r.models, ["default-model"]),
-    enabled: Boolean(r.enabled),
-    createdAt: r.created_at,
-  }));
+  const migrateKey = db.prepare("UPDATE custom_providers SET api_key = ? WHERE id = ?");
+  const migrateBaseUrl = db.prepare("UPDATE custom_providers SET base_url = ? WHERE id = ?");
+
+  return rows.map((r: any) => {
+    let baseUrl = String(r.base_url || "");
+    if (isEncryptedSecret(baseUrl)) {
+      baseUrl = decryptSecret(baseUrl);
+    } else if (hasEmbeddedProviderUrlSecrets(baseUrl)) {
+      // Legacy records may have credentials embedded in base URLs. Encrypt the
+      // original URL before exposing it to internal provider dispatch.
+      const encryptedBaseUrl = encryptSecret(baseUrl);
+      migrateBaseUrl.run(encryptedBaseUrl, r.id);
+      baseUrl = decryptSecret(encryptedBaseUrl);
+    }
+
+    let apiKey = String(r.api_key || "");
+    if (apiKey.includes("xxxxxxxx")) {
+      if (apiKey) migrateKey.run("", r.id);
+      apiKey = "";
+    } else if (apiKey && !isEncryptedSecret(apiKey)) {
+      // Defensive lazy upgrade for rows written by older importers or tools.
+      apiKey = encryptSecret(apiKey);
+      migrateKey.run(apiKey, r.id);
+      apiKey = decryptSecret(apiKey);
+    } else if (isEncryptedSecret(apiKey)) {
+      apiKey = decryptSecret(apiKey);
+    }
+
+    return {
+      id: r.id,
+      name: r.name,
+      baseUrl,
+      apiKey,
+      protocol: r.protocol === "anthropic" ? "anthropic" : "openai",
+      models: safeParseJson(r.models, ["default-model"]),
+      enabled: Boolean(r.enabled),
+      createdAt: r.created_at,
+    };
+  });
 }
 
 export function dbSaveCustomProvider(provider: CustomProviderRow): void {
@@ -195,8 +296,8 @@ export function dbSaveCustomProvider(provider: CustomProviderRow): void {
   stmt.run(
     provider.id,
     provider.name,
-    provider.baseUrl,
-    provider.apiKey,
+    hasEmbeddedProviderUrlSecrets(provider.baseUrl) ? encryptSecret(provider.baseUrl) : provider.baseUrl,
+    encryptSecret(String(provider.apiKey || "").includes("xxxxxxxx") ? "" : provider.apiKey),
     provider.protocol,
     JSON.stringify(provider.models || []),
     provider.enabled ? 1 : 0,

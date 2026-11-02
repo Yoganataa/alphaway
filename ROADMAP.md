@@ -1,343 +1,89 @@
-# AlphaWay Roadmap
-
-> Canonical engineering roadmap for AlphaWay. Update this file when scope, sequencing, or acceptance criteria change.
->
-> **Last updated:** 2026-11-02  
-> **Planning baseline:** `main` at `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`  
-> **Current state:** Phase 0 and Phase 1 are merged into `main`. Phase 1 PR #3 merged as `1d34c45dbf2d7a2e947a62fd298642691c38f8e2`; final PR-head CI run `41328813739` passed on Bun 1.4.4 (build, unit/protocol, installer smoke, and dashboard E2E). The optional live upstream gate drill was skipped by design. Phase 2 has not started and must remain paused until explicitly requested.
-
-## 1. Product Direction
-
-AlphaWay is a Bun + TypeScript + Hono AI gateway. The target is to retain AlphaWay's existing gateway and provider capabilities while bringing its dashboard to **the same UI/UX standard and visual behavior as [9router-go](https://github.com/successtar/9router-go)**.
-
-The 9router-go repository is the frontend design and interaction reference. It is **not** a backend migration target: do not port its Go backend or reorganize AlphaWay into a Go-style project structure. Build and maintain the application backend in idiomatic TypeScript for Bun/Hono.
-
-### Product outcomes
-
-1. Preserve and stabilize AlphaWay's existing gateway capabilities.
-2. Deliver a dashboard with 9router-go visual and interaction parity, adapted to AlphaWay's own feature set.
-3. Complete backend contracts for every dashboard control. No mock-only controls, random metrics, or decorative actions presented as functional features.
-4. Add first-class **Plans** and **Persona / Jailbreak** management.
-5. Make authentication, persistence, quotas, usage accounting, installation, CI, and release behavior reliable.
-6. Keep existing client protocol compatibility and provider-specific transport behavior.
-
-## 2. Non-negotiable Engineering Decisions
-
-- **Runtime:** Bun is the supported production runtime. Do not switch live provider traffic to Node.js; preserve the OpenCode TLS/BoringSSL fingerprint behavior.
-- **Backend:** TypeScript + Hono. Keep the current idiomatic `src/` organization. Do not introduce a generic Go-style `controllers/`, `services/`, `repositories/`, `interfaces/` hierarchy everywhere.
-- **Frontend:** Svelte 5 + Tailwind CSS 4. The replacement dashboard belongs in `web/` and should follow the 9router-go frontend design system and interaction patterns.
-- **Scope of upstream reuse:** Reuse/copy the frontend only after inspecting and pinning the upstream revision. Do not copy the Go server. Preserve upstream license and attribution notices.
-- **Existing gateway contracts:** Preserve OpenAI Chat Completions, Anthropic Messages, and Codex Responses behavior. Changes to protocol translation, provider handshake, request streaming, or TLS fingerprinting require regression tests.
-- **Persistence:** SQLite is the canonical application store. JSON files may be supported as legacy import sources, not competing live sources of truth.
-- **Security:** Dashboard administration authentication must be separate from caller API-key authentication. Host/Origin/CSRF checks are defense-in-depth, not user authentication.
-- **Data integrity:** Never fabricate provider quota, RPM/TPM, usage, latency, or token/cost data. Clearly distinguish upstream-reported, locally measured, estimated, and unavailable values.
-- **Testing:** Do not weaken or delete tests to make CI green. Record the exact command and result for every verification claim.
-- **Dependencies:** Prefer secure, supported versions, but do not blindly upgrade every dependency without checking compatibility, runtime support, and lockfile reproducibility.
-
-## 3. Target Dashboard Information Architecture
-
-The target sidebar contains these 12 destinations:
-
-| Group | Page | Responsibility |
-|---|---|---|
-| Main | Endpoint & Key | Local/public endpoint, API key lifecycle, client integration snippets, Cloudflare Tunnel status |
-| Main | Providers | OpenCode, CodeBuddy, and custom provider configuration and status |
-| Main | Playground | Multi-model request testing, streaming output, protocol selection |
-| Main | Usage | Request history, usage analytics, model/provider/protocol breakdown |
-| Main | Quota Tracker | Actual upstream limits and reset data when available; otherwise explicit unavailable status |
-| Main | Token Saver | RTK, deduplication, Caveman/ADHD modes, compression test bench |
-| System | Security | DLP, secret masking, anti-infostealer protections, persistent guard rules and rule testing |
-| System | Proxy Pools | Real proxy pool CRUD, health checks, and routing strategy controls |
-| System | Persona | Model Personas, Jailbreak/Persona presets, and SOUL Studio |
-| System | Plans | Plan definitions, budgets, limits, assignments, and enforcement |
-| System | Console Log | Live gateway logs, filtering, copy, and export |
-| System | Settings | Runtime, daemon, database, diagnostics, and application settings |
-
-### Placement rules
-
-- Cloudflare Named/Quick Tunnel controls belong under **Endpoint & Key**.
-- SOUL Studio remains available inside **Persona**; it does not need a separate top-level sidebar item.
-- Daemon lifecycle, SQLite maintenance, runtime diagnostics, and application-wide preferences belong under **Settings**.
-- Preserve every meaningful AlphaWay capability even when 9router-go has no exact page for it. Extend the appropriate AlphaWay page rather than removing the capability.
-- Remove Go-only navigation/features that do not map to AlphaWay. Do not expose dead menu items.
-
-## 4. Architecture Direction
-
-Keep the current architecture and extract only where a real boundary is needed:
-
-```text
-src/
-  app.ts
-  index.ts
-  cli/
-  core/
-    database.ts
-    migrations/
-    protocol-translator.ts
-    identity.ts
-    transport-fingerprint.ts
-    ...
-  providers/
-    opencode.ts
-    codebuddy.ts
-  features/
-    tokensaver.ts
-    soul-engine.ts
-    plans/
-    personas/
-    security/
-  routes/
-    ...
-  types/
-web/
-  ... Svelte 5 dashboard copied/adapted from the pinned 9router-go frontend
-test/
-  ...
-```
-
-This is a direction, not a requirement to move every existing file. Keep small, cohesive features as single TypeScript modules. Use feature folders for domains with meaningful state, policies, or multiple files, such as Plans and Personas.
-
-Routes should remain thin HTTP adapters. For complex gateway behavior, extract focused use-case functions from the large chat dispatcher without changing protocol semantics. Do not perform a broad rewrite of working provider implementations.
-
-## 5. Phased Delivery Plan
-
-The phases are sequential. A phase is not complete until its acceptance criteria are met and the checkpoint records evidence. Work should be delivered in focused commits/PRs.
-
-### Phase 0 — Repository Baseline, CI, and Distribution Integrity
-
-**Status:** Complete (Linux x86_64 CI verified)  
-**Priority:** P0 — unblock all further work
-
-- [x] Inspect the latest baseline CI run on `main`; the Bun test step and Node compatibility job failed because their commands were stale. A local clean install/test/build was not available in this environment.
-- [x] Repair `.github/workflows/ci.yml`: use the actual TypeScript test paths and package scripts.
-- [x] Remove the Node compatibility job; Node is not a supported live runtime and the referenced `test:node` script does not exist.
-- [x] Define separate CI jobs for unit/integration tests, dashboard/binary build, installer/embedded-dashboard smoke tests, browser E2E tests, and the transport fingerprint check. Keep the live upstream drill manual.
-- [x] Set the supported Bun floor to `>=1.4.4` and pin CI to Bun 1.4.4; its ClientHello matches the recorded 17-cipher / 12-extension baseline.
-- [x] Align `build`, `build:ui`, `build:bin`, and `build:bin:win`; the host build emits `alphaway` and the explicit Windows x64 target emits `alphaway.exe`.
-- [x] Verify the compiled binary serves embedded dashboard assets without an external `dist/` directory. CI removes the physical `app/dist/` directory after build, then verifies `/health`, dashboard HTML, and the generated JavaScript asset from the standalone executable.
-- [x] Rewrite `install.sh` for the current TypeScript source archive, frozen dependency install, fingerprint validation, embedded-asset build, staged replacement, persistent state/config, and service registration. CI verifies fresh install, upgrade preservation of `.env` and SQLite data, detached background startup, and HTTP health.
-- [x] Reconcile `README.md`, `AGENTS.md`, and `.env.example` with the current Bun build, installer, supported runtime, and test commands.
-- [x] Record the observed failing `main` CI run and disclose that local Bun/test/build/installer commands could not be executed in this environment.
-
-**Acceptance criteria**
-
-- [x] CI runs valid commands against the current repository and fails on real regressions.
-- [x] A clean Linux x86_64 checkout can install dependencies, run checks, build the UI, and produce the documented standalone executable.
-- [x] The installer installs/upgrades the current application layout safely while preserving `.env` and SQLite state.
-- [x] The executable serves its dashboard and built JS asset without an external `dist/` directory.
-- [x] No documentation claims that tests or packaging pass without recorded evidence.
-
-**Verification evidence (2026-11-01)**
-
-GitHub Actions [run `41325262197`](https://github.com/Yoganataa/alphaway/actions/runs/41325262197) completed successfully on Bun 1.4.4 after the legacy-service retirement fix:
-- Unit and protocol tests: **271 passed, 0 failed** across 25 files.
-- Transport fingerprint: Bun 1.4.4 matched the 17-cipher / 12-extension baseline.
-- Dashboard and standalone binary build: passed.
-- Installer smoke: passed fresh install, upgrade preservation of `.env` and SQLite row, detached background startup, and embedded dashboard/JS asset serving after physical `dist/` removal.
-- Legacy service retirement: `opencode-bridge.service` and `opencode-free-bridge.service` are disabled and local unit definitions are moved out of systemd's active search path before replacing the app; regression assertion passed. The prior P1 Codex review thread is resolved.
-- Browser E2E: **8 passed, 0 failed**.
-- Live upstream gate drill: intentionally skipped; it is an explicit manual workflow action, not a deterministic CI check.
-
-**Platform boundary:** CI verified the Linux x86_64 path. The launchd/macOS service branch and Windows x64 cross-compiled binary are not exercised by this workflow yet; add platform-specific release checks before claiming those targets are verified.
-
-### Phase 1 — Database Migrations and Canonical Persistence
-
-**Status:** Merged into `main` via PR #3 (`1d34c45dbf2d7a2e947a62fd298642691c38f8e2`); final PR-head CI passed on Bun 1.4.4.  
-**Priority:** P1
-
-- [x] Introduce a versioned SQLite migration mechanism with ordered migrations, a `schema_migrations` ledger, registry validation, and transactional DDL/history writes.
-- [x] Add tests for fresh databases, adoption of pre-migration databases without data loss, repeated startup, rollback after a failed migration, retry, invalid registry versions, and destructive-migration backup guards.
-- [x] Make SQLite canonical for custom providers, TokenSaver configuration, usage snapshots/events, and proxy pool configuration. Proxy health remains a credential-free runtime cache.
-- [x] Convert legacy custom-provider, usage, TokenSaver, and proxy JSON files into one-time imports tracked by checksums and `legacy_imports`; retain source files as backups.
-- [x] Preserve `ALPHAWAY_HOME` as a legacy JSON import location without changing the existing SQLite database root; add regression coverage to prevent apparent database loss on upgrade.
-- [x] Persist each usage request event and its aggregate snapshot atomically in one SQLite transaction.
-- [x] Add a pre-destructive-migration backup hook using SQLite `VACUUM INTO` and owner-only backup permissions.
-- [x] Retain API key configuration in SQLite `app_settings` (credential-verification and secret-at-rest hardening remain Phase 2 work).
-- [x] Persist custom DLP/security rule configuration in SQLite `app_settings` and connect Security page CRUD to the backend. Runtime enforcement of custom rules remains a separate Security phase.
-- [x] Add an end-to-end file-backed backup and restore test: create a `VACUUM INTO` backup, simulate destructive data change, restore the saved snapshot, and preserve the pre-restore database copy.
-- [x] Keep all existing application settings and API key records in SQLite `app_settings` as the canonical store.
-- [ ] Credential storage hardening is intentionally Phase 2: caller API keys must be verifiable without storing raw secrets; upstream credentials that must be replayed need authenticated encryption and a documented key-management strategy.
-
-**Scope boundary:** AlphaWay does not yet implement Plans or Persona/Jailbreak domain models. Their schemas and persistence are intentionally added alongside their feature implementations in Phases 3 and 4 rather than creating unused tables in Phase 1. Existing SOUL configuration is persisted with the TokenSaver settings.
-- [x] Keep native Bun SQLite and WAL behavior; do not introduce a second database engine without a concrete requirement.
-
-**Acceptance criteria**
-
-- [x] A fresh database and an existing pre-migration database converge to the initial schema without losing existing rows.
-- [x] Migrations are safe to rerun; failed DDL/history transactions roll back together.
-- [x] All existing persistence-backed features use SQLite as the canonical source, including API key records and Security rule configuration. Plans and Persona/Jailbreak are not yet implemented and will add persistence with their own domain models.
-- [x] File-backed backup/restore and recovery behavior is verified end to end, including integrity validation and preservation of the pre-restore database.
-
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Not started  
+**Status:** Phase 2 implementation and CodeQL remediation are complete on code head `ee317f3ea051e1754d3070c09e9704a7375fe464` in draft PR #4. CI #419 (`41425478647`) passed on Bun 1.4.4. PR CodeQL #207 (`41425470119`) and result check `125211158149` passed; a direct full SARIF scan at [`41426255599`](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) on the same source head produced **0 JavaScript/TypeScript results and 0 GitHub Actions results**. A default-branch alert inventory at `main` HEAD `e2492fb3a995677d24f3078b7925a2c48c877ca7` found 14 open CodeQL alerts. All 14 are addressed in the PR branch; they remain open on `main` until PR #4 is merged and CodeQL re-analyzes the default branch. Temporary diagnostic workflow removed; its audit branch remains. Independent human security review is still outstanding; automated CodeQL/Codex review does not substitute for that gate.
 **Priority:** P1 — security-critical
 
-- [ ] Separate gateway caller authentication from dashboard/admin authentication.
-- [ ] Implement a real authenticated administrative session/bootstrap mechanism. Origin, Host, and CSRF checks remain additional protections, not the identity mechanism.
-- [ ] Protect all administrative read/write routes consistently, including settings, keys, providers, proxy pools, security, plans, personas, usage exports, logs, and maintenance operations.
-- [ ] Store caller API keys as strong hashes with a non-secret lookup prefix; show the raw key only at issuance time.
-- [ ] Add key lifecycle operations: create, list metadata, revoke, rotate, label, status, and last-used metadata.
-- [ ] Replace predictable `Math.random()` key generation and timestamp-only IDs with cryptographically secure generation and collision-resistant identifiers.
-- [ ] Add per-key metadata and policy/plan assignment without coupling dashboard sessions to inference credentials.
-- [ ] Add negative tests for missing, malformed, revoked, wrong-scope, and unauthorized credentials.
-- [ ] Ensure administrative secrets and API key material never appear in logs, error messages, or analytics payloads.
+- [x] Separate gateway caller authentication from dashboard/admin authentication.
+- [x] Implement one-time first-admin bootstrap, password hashing, login throttling, hashed database sessions, expiry, logout, and HttpOnly/SameSite cookies.
+- [x] Protect administrative `/api/*` routes by default; keep only the narrow bootstrap/login/status/session endpoints public. Validate Host and the complete Origin tuple (scheme, host, port), including same-host cross-port rejection.
+- [x] Store managed caller API keys as salted SHA-256 hashes with a non-secret lookup prefix; show raw keys only once on issuance/rotation.
+- [x] Implement key lifecycle operations: create, list metadata, revoke, rotate, rename, inference scope, last-used time, and request counts.
+- [x] Replace predictable `Math.random()` API key generation with CSPRNG keys and UUID identifiers.
+- [x] Add per-key metadata, lifecycle state, inference scope, and usage counters without coupling gateway keys to administrator sessions. Plan assignment is intentionally Phase 3 scope.
+- [x] Add negative tests for missing, invalid, revoked, wrong-scope, and unauthenticated admin credentials.
+- [x] Encrypt custom-provider, proxy/pool/relay, and CodeBuddy OAuth credentials at rest using AES-256-GCM; use salted one-way hashes for managed gateway keys.
+- [x] Separate AlphaWay gateway bearer credentials from CodeBuddy upstream credentials; preserve server-side CodeBuddy configuration and the explicit `x-codebuddy-api-key` override.
+- [x] Keep CodeBuddy OAuth access/refresh tokens out of HTTP polling responses and persist OAuth-created credentials encrypted in SQLite.
+- [x] Align the dashboard CodeBuddy OAuth client with the provider `state`/`authUrl` polling contract.
+- [x] Remove CLI shell-based OAuth browser auto-launch; print the validated authorization URL for manual opening and never pass remote URL data to a child process.
+- [x] Isolate Bun unit-test SQLite state using a preload before application modules are imported.
+- [x] Bound administrator login inputs and failed-login tracking memory; reject control characters in API-key labels.
+- [x] Bound administrator password KDF concurrency globally (4 active, 16 queued), reject queue overflow, and serialize KDF checks per username to prevent parallel throttle bypass.
+- [x] Preserve active per-username login-throttle records when the bounded map reaches capacity; reject new untracked usernames rather than evicting existing lockouts under username-spraying pressure.
+- [x] Hold both the compatibility data-directory lock and a lock beside the canonical SQLite database path across foreground/daemon/systemd/launchd lifetimes; reject concurrent writers even when `DATA_DIR` differs but `DB_PATH` is shared, and key restore locking to the actual destination path.
+- [x] Keep `alphaway.pid` daemon-only for existing `--status`/`--stop` behavior; retain `DATA_DIR/alphaway.lock` for compatibility and use `<canonical-DB_PATH>.alphaway.lock` for database-level exclusion.
+- [x] Preserve daemon `--daemon`/`-d` already-running behavior by checking a live `alphaway.pid` before rejecting generic data-directory/database lock conflicts; add a regression for this ordering.
+- [x] Mark credential-transform migrations v2 and v4 destructive so the migration runner requires an encrypted pre-migration SQLite snapshot before rewriting stored credentials or API keys.
+- [x] Canonicalize quoted and relative installer `DATA_DIR` values to an absolute directory rooted at `BINDIR` so systemd/launchd and manual starts resolve the same state root.
+- [x] Decode supported double-quoted `.env` escapes once and preserve unknown escape sequences; add regression tests for Windows-style paths, literal backslashes, newlines, unknown escapes, and escaped quotes.
+- [x] Cap all admin settings/configuration and OpenAI/Anthropic/Codex gateway JSON request bodies at 10 MiB using Content-Length validation and a streaming byte limit; oversized requests return 413 before JSON parsing or provider dispatch.
+- [x] Keep public administrator bootstrap/login request bodies on a stricter 16 KiB limit and reject oversized requests before parsing or password KDF work.
+- [x] Bound master encryption-key reads to exactly 32 bytes plus a sentinel and bootstrap-token file reads to 64 bytes; validate file identity/metadata and strict token format.
+- [x] Bound proxy health cache reads to 1 MiB using no-follow descriptors and metadata checks, and cap the in-memory health map at 512 egress records; this cache remains best-effort and independent of canonical proxy configuration.
+- [x] Make `/health` recognize an encrypted CodeBuddy credential without exposing its value.
+- [x] Prevent the interactive CodeBuddy CLI from logging JWT `sub` claims derived from `CODEBUDDY_API_KEY`; expose only generic credential-configured status and cover it with a regression test.
+- [x] Parse Cloudflare Quick Tunnel output as a URL and validate HTTPS, credentials, port, and the actual `trycloudflare.com` hostname suffix before logging only the origin; cover suffix/userinfo/path/query spoofing with tests.
+- [x] Add AES-GCM tests for nonce uniqueness, authenticated decryption/tamper rejection, symlink refusal, and POSIX owner-only key-file permissions.
+- [x] Retire the pre-SQLite standalone JSON importer and `--restore-legacy-backup` CLI. Runtime persistence now uses SQLite only; existing standalone JSON files are left untouched and are not imported.
+- [x] Align persistent storage configuration with 9router-go's `DATA_DIR`/`DB_PATH` conventions, including the default `db/data.sqlite` location and directory-layout fallback, while preserving AlphaWay compatibility aliases and its existing database filename fallback.
+- [x] Decode double-quoted `.env` escapes in a single pass; preserve unknown escape sequences and cover Windows-style paths, literal backslash sequences, newlines, and escaped quotes with regression tests.
+- [x] Add schema migration v5 to remove the obsolete `legacy_imports` ledger from existing databases while preserving canonical SQLite application data and immutable v1–v4 migration history.
+- [x] Normalize and rewrite older SQLite analytics, TokenSaver, and proxy settings through allowlisted schemas before exposing them to application/dashboard code.
+- [x] Encrypt destructive-migration SQLite snapshots as AES-256-GCM `.sqlite.awenc` envelopes and migrate historical plaintext migration/pre-restore snapshots before they are used.
+- [x] Stream SQLite backup encryption and restore with bounded 96 KiB file I/O, without an arbitrary database-size cap; emit v2 envelopes and preserve compatibility with v1 encrypted backups. Staged restore still runs SQLite `quick_check` before replacement.
+- [x] After the v2 credential migration, enable SQLite `secure_delete`, checkpoint/truncate WAL, `VACUUM`, and checkpoint again under a retryable v3 marker before startup serves requests. This is logical SQLite cleanup, not physical-media sanitization.
+- [x] Migration v4 encrypts the legacy JSON-encoded `codebuddy_api_key` setting for databases that already reached v3, then re-arms the cleanup marker so startup repeats WAL checkpoint/VACUUM after replacing the old plaintext value.
+- [x] Redact raw, decoded, percent-encoded, and Bearer-prefixed provider credentials from custom-provider and CodeBuddy error responses/diagnostics; sanitize proxy connection-test errors.
+- [x] Preserve installer upgrade behavior and verify `.env`, SQLite state, and `secret-encryption.key` remain intact through the Linux installer smoke test.
+- [x] Remove CodeBuddy JWT `sub` claim logging and OAuth shell-based browser launch; do not expose bearer-derived identity claims or pass a remote authorization URL to a child process.
+- [x] Replace proxy health IDs derived from credential-bearing URLs with purpose-separated HMAC-SHA-256 keyed by AlphaWay's local master encryption key; bump health cache schema to v2.
+- [x] Replace deterministic SHA-1 UUIDv5-style CodeBuddy conversation IDs with stable SHA-256-based RFC 9562 UUIDv8 IDs.
+- [x] Replace URL substring checks in test mocks with parsed HTTPS hostname validation for `raw.githubusercontent.com`.
+- [x] Audit the 14 open CodeQL alerts on baseline `main` (`e2492fb`); implement remediations in PR #4 and verify a full PR-head SARIF scan has zero JavaScript/TypeScript and Actions results.
+- [ ] Complete independent human security review of PR #4 and resolve any findings before merge.
+- [x] Configure and verify repository Ruleset `Protect main`: active for `refs/heads/main`, no bypass actors, PR required, 0 approvals for the solo-developer workflow, conversation resolution required, four successful CI jobs required with strict up-to-date checks, deletion blocked, and non-fast-forward updates (force-push) blocked.
+
+**Implementation notes**
+
+- Migration v2 adds `api_keys`, `admin_users`, and `admin_sessions`; converts the old JSON-serialized API-key setting inside SQLite into hashed rows; and encrypts existing custom-provider/proxy credentials.
+- Migration v3 writes a retryable secret-residue cleanup marker. Startup enables SQLite `secure_delete`, checkpoints/truncates WAL, runs `VACUUM`, and marks cleanup complete after a successful final checkpoint.
+- Migration v4 converts a previously plaintext, JSON-serialized `codebuddy_api_key` value inside SQLite `app_settings` into an AES-256-GCM envelope, then re-arms the v3 cleanup marker so SQLite free pages/WAL are scrubbed again. This is a SQLite value migration, not a standalone JSON-file importer.
+- Migration v5 removes the obsolete `legacy_imports` bookkeeping table. Historical migrations v1–v4 remain unchanged; migration v5 removes only importer metadata and preserves canonical provider, API-key, usage, and settings rows.
+- The master encryption key is supplied by `ALPHAWAY_ENCRYPTION_KEY` or generated in the AlphaWay state directory. Back it up with the database and encrypted migration snapshots; losing it makes encrypted credentials and backups unrecoverable.
+- Server startup and restore acquire both the data-directory compatibility lock and the canonical database-path lock. Restore supplies its actual destination path, covering different `DATA_DIR` roots and explicit CLI destinations; symlink DB_PATH targets are refused.
+- Server startup and restore acquire both the data-directory compatibility lock and the canonical database-path lock. Restore supplies its actual destination path, so an explicit CLI destination cannot bypass a lock held by another `DATA_DIR` that points to the same SQLite file.
+- Legacy `API_KEY` and `BRIDGE_API_KEY` remain supported as environment-managed inference credentials. `CODEBUDDY_API_KEY` remains an optional environment override.
+- Windows ACL behavior for bootstrap/encryption-key files and SQLite migration backups remains unverified and is explicitly deferred to Phase 7 hardening. POSIX `0600`/`0700` behavior is covered.
+- Per-key Plan assignment and quota enforcement belong to Phase 3; do not add a placeholder Plan field during Phase 2.
+
+**Verification state**
+
+- Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
+- Latest verified PR code head [`ee317f3ea051e1754d3070c09e9704a7375fe464`](https://github.com/Yoganataa/alphaway/commit/ee317f3ea051e1754d3070c09e9704a7375fe464); `main` HEAD remains `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
+- Latest required CI run [`41425478647`](https://github.com/Yoganataa/alphaway/actions/runs/41425478647) (#419) passed on Bun 1.4.4: unit/protocol tests, dashboard E2E, UI/standalone build, installer/embedded-dashboard smoke, and TLS fingerprint passed. Optional live upstream drill was skipped by design.
+- Latest PR CodeQL run [`41425470119`](https://github.com/Yoganataa/alphaway/actions/runs/41425470119) (#207) and result check [`125211158149`](https://github.com/Yoganataa/alphaway/runs/125211158149) succeeded. Direct full SARIF scan [`41426255599`](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) against `ee317f3` returned **0 JavaScript/TypeScript results and 0 Actions results**.
+- Default-branch CodeQL inventory at `main` HEAD `e2492fb3a995677d24f3078b7925a2c48c877ca7` identified 14 open alerts, including three critical shell command-injection findings, clear-text logging, weak password hashing of proxy credentials, SHA-1 UUID derivation, insecure randomness, and seven URL substring findings. The PR branch now contains corresponding code/test remediations; these alerts remain open on `main` until PR #4 merges and default-branch CodeQL reruns.
+- Additional fixes replace the credential-bearing proxy URL's unkeyed SHA-256 health ID with a purpose-separated HMAC-SHA-256 derived from the local master key (and bump cache version to v2), replace SHA-1 deterministic conversation UUIDs with SHA-256-based UUIDv8, and replace six `raw.githubusercontent.com` substring checks in URL mocks with parsed URL hostname validation. Direct SARIF on the final code head found no remaining findings in either CodeQL language.
+- Source-review findings previously raised on OAuth subprocess execution, restore locking by destination, stale-lock assertion text, and daemon PID ordering were fixed and their four Codex review threads resolved. Codex re-review of code head `18a885604dc329e9ca4dc28997cb20da8863fefe` completed with no new findings; that review predates the latest CodeQL-specific edits.
+- Independent human security review has not been submitted. CodeQL and Codex are automated; they do not satisfy the independent review requirement. Keep PR #4 draft until an independent review is completed and any findings are resolved.
+- Repository Ruleset `Protect main` is active and targets `refs/heads/main`; it requires the four CI jobs with strict up-to-date checks, conversation resolution, and a PR, blocks deletion and force pushes, and requires zero approvals for the solo-developer workflow. No bypass actors are configured.
+- Windows ACL behavior for bootstrap/encryption-key files and SQLite migration backups remains unverified and is deferred to Phase 7. POSIX `0600`/`0700` behavior is covered.
+- Do not merge PR #4 or start Phase 3 until the independent human review, Phase 2 acceptance criteria, and final CI/CodeQL checks are complete on the final PR head.
 
 **Acceptance criteria**
 
-- Newly issued keys authenticate gateway requests; revoked keys immediately stop working.
-- The dashboard cannot perform admin operations without an authenticated admin session.
-- Existing documented gateway protocols continue to accept their expected authorization headers.
-- Secrets are not retrievable from persisted records or logs.
-
-### Phase 3 — Plans, Limits, and Request Enforcement
-
-**Status:** Not started  
-**Priority:** P1
-
-- [ ] Define a typed plan model with lifecycle state, name, description, and configurable limits.
-- [ ] Support limits for request count, tokens, RPM, TPM, concurrency, allowed models/providers, and time windows where meaningful.
-- [ ] Support hard limits and configurable warning thresholds.
-- [ ] Assign plans to API keys; define deterministic precedence between plan defaults and per-key overrides.
-- [ ] Enforce policy consistently across OpenAI Chat, Anthropic Messages, and Codex Responses before forwarding upstream.
-- [ ] Implement atomic quota reservation and settlement so concurrent requests cannot overspend limits.
-- [ ] Account correctly for streaming success, upstream errors, cancellations, client disconnects, and unknown usage.
-- [ ] Provide plan CRUD, assignment, usage visibility, and reset information through typed admin APIs.
-- [ ] Introduce a model/provider pricing registry only if monetary limits are required. Mark costs as estimated when provider pricing or actual usage is unavailable; never treat TokenSaver savings estimates as authoritative billing data.
-
-**Acceptance criteria**
-
-- A request is allowed or rejected according to the same policy regardless of incoming protocol.
-- Concurrent requests cannot bypass a hard quota due to race conditions.
-- Token usage is settled from actual upstream usage when present; estimates are explicitly identified.
-- All plan limit decisions have deterministic, tested outcomes.
-
-### Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules
-
-**Status:** Not started  
-**Priority:** P1
-
-- [ ] Implement persistent Persona preset CRUD and a built-in preset catalog.
-- [ ] Support explicit activation, model/provider or key scope, exclusions, and deterministic precedence.
-- [ ] Add the Jailbreak/Persona authoring experience as controlled prompt/persona configuration. It must not disable AlphaWay's DLP, secret masking, or other gateway security controls.
-- [ ] Preserve the existing SOUL.md engine, built-in presets, local/global discovery, and SOUL Studio editor/preview.
-- [ ] Provide one canonical prompt-transformation pipeline so SOUL, Persona, TokenSaver, and security processing do not inject or rewrite the same request unpredictably.
-- [ ] Add a preview/explain mode that shows which transformations and presets will apply without forwarding a request upstream.
-- [ ] Use one backend DLP/keyword rule engine for dashboard sandbox testing and live gateway traffic; custom-rule persistence is completed in Phase 1.
-- [ ] If remote persona/Markdown import is added, enforce SSRF protections, redirect revalidation, private/link-local IP blocking, response-size limits, and timeouts. Prefer local Markdown import for the first implementation.
-
-**Acceptance criteria**
-
-- Persona and security rules survive restarts and are applied consistently to all supported protocols.
-- Preview and live execution use the same transformation logic.
-- Explicit opt-out/exclusion rules work and precedence is deterministic.
-- SOUL functionality is preserved rather than replaced.
-
-### Phase 5 — Accurate Backend Feature Contracts
-
-**Status:** Not started  
-**Priority:** P1
-
-- [ ] Connect Proxy Pools UI operations to the real pool persistence and routing APIs; remove hardcoded sample pools and local-only CRUD.
-- [ ] Remove fabricated/random latency values. Return actual probe results or an explicit unavailable/error state.
-- [ ] Replace hardcoded/random Quota Tracker values with provider-specific quota adapters. Display unavailable when the upstream exposes no supported quota data.
-- [ ] Consolidate usage event persistence in SQLite and remove inconsistent JSON summary/history mirrors after migration.
-- [ ] Correct streaming token accounting. Do not substitute fixed completion-token counts for unknown usage.
-- [ ] Label estimated metrics and savings separately from actual request usage and provider-reported cost.
-- [ ] Route Security sandbox testing and live gateway requests through the same backend DLP implementation; do not maintain divergent frontend-only rule logic.
-- [ ] Add typed frontend API contracts and consistent error responses for every dashboard action.
-- [ ] Verify Console Log streaming, filtering, and export against actual server events.
-- [ ] Verify Cloudflare Tunnel, daemon lifecycle, provider OAuth, and custom provider management end-to-end.
-
-**Acceptance criteria**
-
-- Every visible dashboard control has a real backend operation or is clearly disabled as unsupported.
-- No production metric is generated with `Math.random()` or fabricated constants.
-- Usage and quota screens distinguish actual, estimated, and unavailable values.
-- Proxy, security, provider, tunnel, and daemon operations persist and survive restart.
-
-### Phase 6 — 9router-go Dashboard Migration and UI/UX Parity
-
-**Status:** Not started  
-**Priority:** P1 — deliver after backend contracts are defined
-
-- [ ] Inspect the current 9router-go frontend and record the exact upstream commit/revision used as the visual reference.
-- [ ] Copy/adapt the frontend into AlphaWay's `web/` directory. Copy the frontend only; do not port the Go backend.
-- [ ] Preserve the upstream visual language, layout, navigation behavior, typography, spacing, component patterns, responsive behavior, loading states, empty states, and interaction details.
-- [ ] Replace Go-specific API calls with typed AlphaWay Hono API adapters. Do not blindly reuse backend routes or payload assumptions.
-- [ ] Implement the 12-page AlphaWay navigation defined in Section 3.
-- [ ] Integrate AlphaWay-only features into the appropriate pages: CodeBuddy/OpenCode/custom providers, tri-protocol Playground, Cloudflare Tunnel, TokenSaver, SOUL Studio, Plans, and Persona/Jailbreak.
-- [ ] Remove Go-only pages and controls that have no AlphaWay equivalent.
-- [ ] Keep the existing `src/client/` dashboard until the replacement is complete and verified; remove it only after the new dashboard is served by default and E2E checks pass.
-- [ ] Update Vite build output and `src/routes/dashboard.ts` together so production serves one deterministic dashboard artifact and cannot silently fall back to stale assets.
-- [ ] Preserve and update `THIRD_PARTY_NOTICES.md` with the exact upstream license/attribution required by copied frontend code.
-- [ ] Add Playwright visual/interaction coverage for navigation, key workflows, responsive layouts, loading/error states, and critical forms.
-
-**Acceptance criteria**
-
-- Dashboard visual and interaction behavior matches the pinned 9router-go frontend reference, except for deliberate AlphaWay-specific information architecture and capabilities.
-- Every AlphaWay feature remains accessible in the new UI.
-- No Go backend dependency is introduced.
-- Production serves the new dashboard deterministically; no legacy UI appears due to stale build output.
-- E2E tests exercise real AlphaWay APIs rather than mock-only success paths for critical features.
-
-### Phase 7 — Hardening, Documentation, and Release
-
-**Status:** Not started  
-**Priority:** P2
-
-- [ ] Run the complete test suite, type checks, UI build, binary build, fingerprint check, and deterministic offline drills.
-- [ ] Run cross-platform install/upgrade smoke tests for the supported targets.
-- [ ] Run security review for admin auth, key storage, SSRF, proxy egress, DLP, file import, and log redaction.
-- [ ] Validate backward compatibility for the three client protocols and all preserved provider handshakes.
-- [ ] Update README, AGENTS, CHANGELOG, environment examples, installer docs, and THIRD_PARTY_NOTICES to match the shipped implementation.
-- [ ] Document backup/restore, admin bootstrap, API key lifecycle, Plans, Persona, quota semantics, and known provider limitations.
-- [ ] Prepare a release checklist and a rollback path.
-
-**Acceptance criteria**
-
-- All required checks pass on a clean checkout and on the release artifact.
-- Release documentation matches actual behavior.
-- Known limitations are explicit; no feature is described as complete when it is only a UI placeholder.
-- The release can be installed, upgraded, configured, used, and recovered using documented steps.
-
-## 6. Cross-Cutting Definition of Done
-
-A feature is not complete merely because its UI exists. Every feature must satisfy the relevant items below:
-
-- Typed request/response contracts and validation are present.
-- Authentication and authorization are correct for the route.
-- State persists in SQLite and survives restart.
-- Failure states are explicit and do not leak secrets.
-- Unit/integration tests cover normal, invalid, concurrent, and failure paths where applicable.
-- E2E tests cover the critical user workflow.
-- Metrics are sourced and labeled correctly.
-- Documentation and `CHECKPOINT.md` reflect the implementation and verification evidence.
-
-## 7. Known Audit Findings at Planning Baseline
-
-These are audit findings from the baseline repository review; re-check the relevant code before implementing because the repository may change.
-
-| Area | Finding to address |
-|---|---|
-| Authentication | Gateway middleware uses an environment key, while dashboard-issued keys are stored separately; issued keys are not wired into gateway authentication. |
-| Admin access | Existing host/origin/CSRF guards do not provide authenticated administrator identity. |
-| API key storage | Key records are JSON in `app_settings`, contain plaintext secrets, and use predictable ID/key generation. |
-| Database | SQLite tables are initialized with `CREATE TABLE IF NOT EXISTS`; no versioned migration mechanism was found. |
-| Chat handler | `src/routes/chat.ts` is a large multi-protocol dispatcher combining several responsibilities. Refactor narrowly and preserve semantics. |
-| Usage | JSON mirrors coexist with SQLite; some streaming paths use fixed completion-token values. |
-| Quota Tracker | Current UI contains hardcoded provider limits and randomized RPM/TPM values. |
-| Proxy Pools | Backend pool engine exists, but the UI uses sample/local state and does not fully persist pool configuration. |
-| Security UI | Custom rules are local UI state; live backend and sandbox behavior need one persisted rule source. |
-| Dashboard | Current dashboard is in `src/client/`; it is not yet the intended 9router-go frontend replacement. |
-| CI | Current workflow references stale test/script paths and an absent Node test script. |
-| Installer/build | `install.sh` references legacy file paths; UI asset serving and binary packaging need a verified single contract. |
-| Documentation | README/AGENTS contain claims (including test count/pass status) that were not independently verified during the planning audit. |
-
-## 8. Change Control
-
-- Keep this roadmap as the single source of truth for planned scope and sequencing.
-- When scope or implementation order changes, update this file and explain the reason in the active PR.
-- Mark a task complete only after its acceptance criteria have evidence.
-- Update `CHECKPOINT.md` after every coherent implementation block, at every phase boundary, and before ending a work session.
-- Do not reset the checkpoint just because a new chat session starts; reconcile it with the current GitHub branch/commit first.
+- Newly issued keys authenticate gateway requests; revoked keys stop working immediately (covered by committed tests).
+- Administrative operations require an authenticated administrator session; same-host cross-port Origin requests are rejected.
+- Existing OpenAI, Anthropic, and Codex gateway protocols retain documented authorization-header compatibility.
+- Managed caller keys and persisted upstream credentials are not stored as plaintext in their canonical database representations.
+- SQLite is the only persistent application-state backend. Standalone JSON files are neither imported nor modified. Encrypted SQLite migration snapshots retain v1/v2 restore compatibility; POSIX permissions are restricted and Windows ACLs remain Phase 7.

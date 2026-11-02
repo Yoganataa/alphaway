@@ -5,6 +5,7 @@ import { dbGetRequestLogById, dbGetSetting } from "../src/core/database";
 
 import { describe, it, expect, beforeEach } from "bun:test";
 import { app } from "../src/app";
+import { adminRequest } from "./helpers/admin";
 import {
   recordRequestUsage,
   getUsageStats,
@@ -124,7 +125,7 @@ describe("Usage and Token Analytics Engine", () => {
       completionTokens: 40,
     });
 
-    const res = await app.request("/api/usage");
+    const res = await adminRequest("/api/usage");
     expect(res.status).toBe(200);
     const json: any = await res.json();
     expect(json.totalRequests).toBe(1);
@@ -150,7 +151,7 @@ describe("Usage and Token Analytics Engine", () => {
     const chart24h = getUsageChart("24h");
     expect(chart24h.length).toBe(24);
 
-    const res = await app.request("/api/usage/chart?period=7d");
+    const res = await adminRequest("/api/usage/chart?period=7d");
     expect(res.status).toBe(200);
     const json: any = await res.json();
     expect(Array.isArray(json)).toBe(true);
@@ -172,7 +173,7 @@ describe("Usage and Token Analytics Engine", () => {
     expect(heatmap.daily.length).toBe(14);
     expect(heatmap.streak).toBeGreaterThanOrEqual(1);
 
-    const res = await app.request("/api/usage/heatmap?days=14");
+    const res = await adminRequest("/api/usage/heatmap?days=14");
     expect(res.status).toBe(200);
     const json: any = await res.json();
     expect(json.daily.length).toBe(14);
@@ -194,13 +195,13 @@ describe("Usage and Token Analytics Engine", () => {
     expect(detail).toBeDefined();
     expect(detail?.model).toBe("claude-test");
 
-    const res = await app.request(`/api/usage/details/${entry.id}`);
+    const res = await adminRequest(`/api/usage/details/${entry.id}`);
     expect(res.status).toBe(200);
     const json: any = await res.json();
     expect(json.id).toBe(entry.id);
     expect(json.totalTokens).toBe(100);
 
-    const notFound = await app.request("/api/usage/details/req_nonexistent");
+    const notFound = await adminRequest("/api/usage/details/req_nonexistent");
     expect(notFound.status).toBe(404);
   });
 
@@ -215,12 +216,12 @@ describe("Usage and Token Analytics Engine", () => {
       completionTokens: 10,
     });
 
-    const clearRes = await app.request("/api/usage/clear-logs", { method: "POST" });
+    const clearRes = await adminRequest("/api/usage/clear-logs", { method: "POST" });
     expect(clearRes.status).toBe(200);
     expect(getUsageStats().recentLogs.length).toBe(0);
     expect(getUsageStats().totalRequests).toBe(1);
 
-    const resetRes = await app.request("/api/usage/reset", { method: "POST" });
+    const resetRes = await adminRequest("/api/usage/reset", { method: "POST" });
     expect(resetRes.status).toBe(200);
     expect(getUsageStats().totalRequests).toBe(0);
     expect(getUsageStats().totalTokens).toBe(0);

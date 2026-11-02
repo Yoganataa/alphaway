@@ -1,5 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect } from "bun:test";
 import { app } from "../src/app";
+import { readJsonRequestBody, MAX_BODY_BYTES } from "../src/core/admin-guard";
 
 describe("auth & tunnel configuration", () => {
   let server: any;
@@ -64,6 +65,76 @@ describe("auth & tunnel configuration", () => {
     expect(res.status).toBe(401);
   });
 
+  it("enforces the admin auth body limit while streaming without Content-Length", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(17)));
+        controller.close();
+      },
+    });
+    const request = { raw: { headers: new Headers(), body: stream } };
+    let caught: any;
+    try {
+      await readJsonRequestBody(request, 16);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught?.statusCode).toBe(413);
+  });
+
+  it("returns 413 for oversized gateway chat JSON before provider dispatch", async () => {
+    const body = JSON.stringify({
+      model: "mimo-v2.6-flash-free",
+      messages: [{ role: "user", content: "x".repeat(MAX_BODY_BYTES + 1) }],
+    });
+    const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer sk-test-secret-123",
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    expect(response.status).toBe(413);
+    const payload: any = await response.json();
+    expect(payload.error.code).toBe("request_too_large");
+  });
+
+  it("enforces the default 10 MiB JSON limit for streamed bodies without Content-Length", async () => {
+    const oversizedChunk = new Uint8Array(MAX_BODY_BYTES + 1);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(oversizedChunk);
+        controller.close();
+      },
+    });
+    const request = { raw: { headers: new Headers(), body: stream } };
+    let caught: any;
+    try {
+      await readJsonRequestBody(request);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught?.statusCode).toBe(413);
+    expect(caught?.code).toBe("payload_too_large");
+  });
+
+  it("rejects oversized bootstrap and login payloads before JSON parsing", async () => {
+    const body = JSON.stringify({
+      bootstrapToken: "invalid-token",
+      username: "admin",
+      password: "x".repeat(20 * 1024),
+    });
+    for (const endpoint of ["/api/admin/auth/bootstrap", "/api/admin/auth/login"]) {
+      const res = await fetch(`http://127.0.0.1:${port}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      expect(res.status).toBe(413);
+    }
+  });
+
   it("exposes tunnel endpoint and auth requirement in /health", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);
@@ -80,6 +151,6 @@ describe("auth & tunnel configuration", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("https://alphaway.mycustomdomain.com/v1");
-    expect(html).toContain("Wajib (dikonfigurasi via API_KEY)");
+    expect(html).toContain("Wajib — buat API key melalui dashboard");
   });
 });

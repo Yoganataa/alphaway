@@ -15,13 +15,13 @@ describe("codebuddy module unit tests", () => {
     expect(hex).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it("generates stable conversation UUID for a given session key", () => {
+  it("generates a stable SHA-256-based UUIDv8 for a given session key", () => {
     const s1 = codebuddy.stableConversationUuid("codebuddy-intl:session-123");
     const s2 = codebuddy.stableConversationUuid("codebuddy-intl:session-123");
     const s3 = codebuddy.stableConversationUuid("codebuddy-intl:session-456");
     expect(s1).toBe(s2);
     expect(s1).not.toBe(s3);
-    expect(s1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(s1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
   it("extracts sub claim from JWT token", () => {

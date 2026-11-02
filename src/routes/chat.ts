@@ -14,6 +14,7 @@
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { readJsonRequestBody } from "../core/admin-guard";
 
 import type { ChatCompletionRequest } from "../types";
 import { codebuddy, opencode } from "../providers";
@@ -28,9 +29,11 @@ import {
   type ResponsesRequest,
 } from "../core/protocol-translator";
 import { findCustomProviderForModel, forwardToCustomProvider } from "../core/custom-providers";
+import { embeddedProviderUrlSecrets, redactCredentialEchoes } from "../core/provider-url-secrets";
 const identity = require("../core/identity");
 import * as tokensaver from "../features/tokensaver";
 import { recordRequestUsage, estimateTokensFromText } from "../core/usage-tracker";
+import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
 
 function computePromptChars(messages: any[]): number {
   if (!Array.isArray(messages)) return 0;
@@ -72,7 +75,10 @@ async function dispatchToUpstream(
 
     if (!upstreamRes.ok) {
       const errText = await upstreamRes.text();
-      return new Response(errText, {
+      const providerSecret = String(customMatch.provider.apiKey || "");
+      const providerSecrets = [providerSecret, ...embeddedProviderUrlSecrets(customMatch.provider.baseUrl)];
+      const safeError = redactCredentialEchoes(errText, providerSecrets, 3000);
+      return new Response(safeError, {
         status: upstreamRes.status,
         headers: { "Content-Type": "application/json" },
       });
@@ -222,13 +228,9 @@ async function dispatchToUpstream(
   // 2. Dispatch to CodeBuddy
   const isCodebuddy = codebuddy.isCodebuddyModel(targetModel);
   if (isCodebuddy) {
-    const apiKey =
-      rawReq.headers.get("x-codebuddy-api-key") ||
-      (rawReq.headers.get("authorization")?.startsWith("Bearer ")
-        ? rawReq.headers.get("authorization")!.slice(7).trim()
-        : "") ||
-      process.env.CODEBUDDY_API_KEY ||
-      "";
+    // AlphaWay gateway credentials are authenticated by app middleware and must
+    // never be reused as upstream CodeBuddy credentials.
+    const apiKey = getCodeBuddyApiKey() || rawReq.headers.get("x-codebuddy-api-key") || "";
 
     if (!apiKey) {
       return Response.json(
@@ -269,11 +271,15 @@ async function dispatchToUpstream(
         const errText = await upstreamRes.text();
         let errJson: any = null;
         try { errJson = JSON.parse(errText); } catch {}
+        const targetUrl = process.env.CODEBUDDY_INTL_URL || codebuddy.CODEBUDDY_INTL_URL;
+        const upstreamSecrets = [apiKey, ...embeddedProviderUrlSecrets(targetUrl)];
+        const safeErrorText = redactCredentialEchoes(errText, upstreamSecrets, 3000);
         if (errJson && errJson.code) {
           const classified = codebuddy.classifyCodebuddyError(upstreamRes.status, errJson);
-          return Response.json({ error: classified }, { status: classified.status as any });
+          const safeClassified = JSON.parse(redactCredentialEchoes(JSON.stringify(classified), upstreamSecrets, 3000));
+          return Response.json({ error: safeClassified }, { status: safeClassified.status as any });
         }
-        return new Response(errText, { status: upstreamRes.status, headers: { "Content-Type": "application/json" } });
+        return new Response(safeErrorText, { status: upstreamRes.status, headers: { "Content-Type": "application/json" } });
       }
 
       if (isStream) {
@@ -348,12 +354,19 @@ async function dispatchToUpstream(
 const handleOpenAIChat = async (c: any) => {
   let body: ChatCompletionRequest;
   try {
-    body = await c.req.json();
+    body = await readJsonRequestBody(c.req);
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new Error("Request body must be a JSON object");
     }
   } catch (err: any) {
-    return c.json({ error: { message: `Invalid JSON body: ${err.message}`, type: "invalid_request_error", code: "invalid_json" } }, 400);
+    const oversized = err?.statusCode === 413;
+    return c.json({
+      error: {
+        message: oversized ? "Request body exceeds the 10 MiB limit" : `Invalid JSON body: ${err.message}`,
+        type: "invalid_request_error",
+        code: oversized ? "request_too_large" : "invalid_json",
+      },
+    }, oversized ? 413 : 400);
   }
 
   if (!body.model || typeof body.model !== "string") {
@@ -471,12 +484,20 @@ const handleOpenAIChat = async (c: any) => {
 const handleAnthropicMessages = async (c: any) => {
   let body: AnthropicRequest;
   try {
-    body = await c.req.json();
+    body = await readJsonRequestBody(c.req);
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new Error("Request body must be a JSON object");
     }
   } catch (err: any) {
-    return c.json({ type: "error", error: { type: "invalid_request_error", message: `Invalid JSON body: ${err.message}` } }, 400);
+    const oversized = err?.statusCode === 413;
+    return c.json({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: oversized ? "Request body exceeds the 10 MiB limit" : `Invalid JSON body: ${err.message}`,
+        code: oversized ? "request_too_large" : "invalid_json",
+      },
+    }, oversized ? 413 : 400);
   }
 
   if (!body.model || typeof body.model !== "string") {
@@ -618,12 +639,19 @@ const handleAnthropicMessages = async (c: any) => {
 const handleResponses = async (c: any) => {
   let body: ResponsesRequest;
   try {
-    body = await c.req.json();
+    body = await readJsonRequestBody(c.req);
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new Error("Request body must be a JSON object");
     }
   } catch (err: any) {
-    return c.json({ error: { message: `Invalid JSON body: ${err.message}`, type: "invalid_request_error", code: "invalid_json" } }, 400);
+    const oversized = err?.statusCode === 413;
+    return c.json({
+      error: {
+        message: oversized ? "Request body exceeds the 10 MiB limit" : `Invalid JSON body: ${err.message}`,
+        type: "invalid_request_error",
+        code: oversized ? "request_too_large" : "invalid_json",
+      },
+    }, oversized ? 413 : 400);
   }
 
   if (!body.model || typeof body.model !== "string") {

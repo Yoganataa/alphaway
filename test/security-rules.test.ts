@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { app } from "../src/app";
+import { adminRequest } from "./helpers/admin";
 import { dbDeleteSetting, dbGetSetting } from "../src/core/database";
 
 describe("persistent Security keyword rules", () => {
@@ -8,7 +9,7 @@ describe("persistent Security keyword rules", () => {
   });
 
   it("serves the default rule library without writing a redundant SQLite row", async () => {
-    const response = await app.request("/api/security/rules");
+    const response = await adminRequest("/api/security/rules");
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -36,7 +37,7 @@ describe("persistent Security keyword rules", () => {
       },
     ];
 
-    const update = await app.request("/api/security/rules", {
+    const update = await adminRequest("/api/security/rules", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rules }),
@@ -47,7 +48,7 @@ describe("persistent Security keyword rules", () => {
     const persisted = dbGetSetting<any[]>("security_rules", []);
     expect(persisted).toEqual(rules);
 
-    const reload = await app.request("/api/security/rules");
+    const reload = await adminRequest("/api/security/rules");
     expect(reload.status).toBe(200);
     expect((await reload.json()).rules).toEqual(rules);
   });
@@ -71,7 +72,7 @@ describe("persistent Security keyword rules", () => {
     ];
 
     for (const rules of invalidCases) {
-      const response = await app.request("/api/security/rules", {
+      const response = await adminRequest("/api/security/rules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rules }),

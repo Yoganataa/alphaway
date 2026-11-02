@@ -10,6 +10,7 @@
     setActiveApiKey,
     fetchDatabaseStats,
     vacuumDatabase,
+    downloadDatabaseBackup,
     resetUsageStats,
     clearRecentLogs,
     type DatabaseStats,
@@ -19,6 +20,7 @@
   let dbStats = $state<DatabaseStats | null>(null);
   let loadingDb = $state(true);
   let isVacuuming = $state(false);
+  let isDownloadingBackup = $state(false);
 
   let apiKeyInput = $state("");
   let isSavingKey = $state(false);
@@ -32,14 +34,7 @@
     try {
       dbStats = await fetchDatabaseStats();
     } catch {
-      dbStats = {
-        engine: "Bun SQLite (native)",
-        mode: "WAL (Write-Ahead Logging)",
-        path: "~/.alphaway/alphaway.sqlite",
-        sizeKb: 128,
-        requestLogsCount: 42,
-        customProvidersCount: 3,
-      };
+      dbStats = null;
     } finally {
       loadingDb = false;
     }
@@ -54,6 +49,18 @@
     if (!apiKeyInput.trim()) return;
     setActiveApiKey(apiKeyInput.trim());
     notifications.success("Master API key saved to browser session");
+  }
+
+  async function handleDownloadBackup() {
+    isDownloadingBackup = true;
+    try {
+      const filename = await downloadDatabaseBackup();
+      notifications.success(`Encrypted SQLite backup downloaded: ${filename}`);
+    } catch (err: any) {
+      notifications.error(err.message || "Database backup failed");
+    } finally {
+      isDownloadingBackup = false;
+    }
   }
 
   async function handleVacuum() {
@@ -149,19 +156,30 @@
           <Badge tone="success" size="sm" dot>WAL Active</Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
-          Native Bun SQLite engine with Write-Ahead Logging (WAL) and automatic JSON-to-SQLite mirror synchronization.
+          Native Bun SQLite engine with Write-Ahead Logging (WAL), encrypted physical backups, and page-reclamation diagnostics.
         </p>
       </div>
 
-      <Button
-        variant="secondary"
-        size="sm"
-        onclick={handleVacuum}
-        disabled={isVacuuming}
-      >
-        <span class="material-symbols-outlined text-[16px] {isVacuuming ? 'animate-spin' : ''}">cleaning_services</span>
-        <span>{isVacuuming ? "Optimizing..." : "Vacuum & Re-Index"}</span>
-      </Button>
+      <div class="flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={handleDownloadBackup}
+          disabled={isDownloadingBackup || isVacuuming}
+        >
+          <span class="material-symbols-outlined text-[16px]">download</span>
+          <span>{isDownloadingBackup ? "Creating Backup..." : "Download SQLite Backup"}</span>
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={handleVacuum}
+          disabled={isVacuuming || isDownloadingBackup}
+        >
+          <span class="material-symbols-outlined text-[16px] {isVacuuming ? 'animate-spin' : ''}">cleaning_services</span>
+          <span>{isVacuuming ? "Optimizing..." : "Vacuum & Re-Index"}</span>
+        </Button>
+      </div>
     </div>
 
     <!-- SQLite Stats Grid -->
@@ -181,7 +199,9 @@
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border">
         <div class="text-[11px] text-text-muted font-medium mb-1">Storage Size</div>
         <div class="text-sm font-bold text-text-main font-mono">{dbStats?.sizeKb || 0} KB</div>
-        <div class="text-[11px] text-text-muted font-mono mt-0.5">Compact indexed tables</div>
+        <div class="text-[11px] text-text-muted font-mono mt-0.5">
+          {(Math.round((dbStats?.reclaimableBytes || 0) / 1024))} KB reclaimable
+        </div>
       </div>
 
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border">
@@ -195,9 +215,14 @@
       </div>
     </div>
 
+      <p class="text-[11px] text-text-muted">
+        The downloaded `.sqlite.awenc` file is a full encrypted SQLite snapshot. To restore it, stop AlphaWay and run
+        <code class="font-mono text-brand-400">bun run db:restore -- /path/to/backup.sqlite.awenc</code>.
+      </p>
+
     <!-- DB File Path -->
     <div class="p-3 rounded-[8px] bg-surface-1 border border-border flex items-center justify-between text-xs font-mono">
-      <span class="text-text-muted truncate select-all">{dbStats?.path || "~/.alphaway/alphaway.sqlite"}</span>
+      <span class="text-text-muted truncate select-all">{dbStats?.path || "~/.alphaway/db/data.sqlite"}</span>
       <Badge tone="neutral" size="xs">Local File</Badge>
     </div>
   </Card>

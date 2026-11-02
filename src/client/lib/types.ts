@@ -86,11 +86,8 @@ export interface ProxyTestResult {
 }
 
 export interface CodeBuddyOAuthStart {
-  deviceCode: string;
-  userCode: string;
-  verificationUri: string;
-  expiresIn: number;
-  interval: number;
+  state: string;
+  authUrl: string;
 }
 
 export interface ChatMessage {
@@ -104,6 +101,7 @@ export interface CustomProviderConfig {
   name: string;
   baseUrl: string;
   apiKey: string;
+  hasApiKey?: boolean;
   protocol: "openai" | "anthropic";
   models: string[];
   enabled: boolean;

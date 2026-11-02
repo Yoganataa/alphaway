@@ -1,4 +1,6 @@
 import { describe, it, expect } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
 import * as daemon from "../src/features/daemon";
 
 describe("daemon module", () => {
@@ -11,6 +13,19 @@ describe("daemon module", () => {
     expect(typeof daemon.stopDaemon).toBe("function");
     expect(typeof daemon.spawnDaemon).toBe("function");
     expect(typeof daemon.handleDaemonCli).toBe("function");
+  });
+
+  it("checks a live daemon PID before generic process/database lock conflicts", () => {
+    const source = fs.readFileSync(path.resolve(import.meta.dir, "../src/features/daemon.ts"), "utf8");
+    const spawnBlock = source.slice(
+      source.indexOf("function spawnDaemon"),
+      source.indexOf("function handleDaemonCli")
+    );
+    const pidCheck = spawnBlock.indexOf("if (fs.existsSync(pidFile))");
+    const lockCheck = spawnBlock.indexOf("const instanceLock");
+
+    expect(pidCheck).toBeGreaterThanOrEqual(0);
+    expect(lockCheck).toBeGreaterThan(pidCheck);
   });
 
   it("returns correct paths for PID and log files", () => {

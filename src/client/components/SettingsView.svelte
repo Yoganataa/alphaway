@@ -76,7 +76,7 @@
           </div>
           <div class="flex justify-between items-center">
             <span class="text-text-muted">Database File:</span>
-            <span class="text-text-subtle truncate max-w-[180px]">~/.alphaway/alphaway.sqlite</span>
+            <span class="text-text-subtle truncate max-w-[180px]">DATA_DIR/db/data.sqlite</span>
           </div>
         </div>
 

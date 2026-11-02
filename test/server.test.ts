@@ -25,6 +25,7 @@ const {
 } = opencode;
 const srv_markProtocolSupport = opencode.markProtocolSupport;
 
+process.env.API_KEY = "sk-test-server-compat-key";
 const { app } = require("../src/app");
 let currentBunServer = null;
 const server = {
@@ -1284,8 +1285,8 @@ describe("server unit & integration tests", () => {
       const proxy = require("../src/core/proxy");
 
       const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "ofb-429-pool-"));
-      const previousStateDir = process.env.OPENCODE_BRIDGE_STATE_DIR;
-      process.env.OPENCODE_BRIDGE_STATE_DIR = stateDir;
+      const previousDataDir = process.env.DATA_DIR;
+      process.env.DATA_DIR = stateDir;
       delete process.env.UPSTREAM_PROXY_POOL;
       proxy.__reload();
       proxy.resetHealth();
@@ -1357,8 +1358,8 @@ describe("server unit & integration tests", () => {
       } finally {
         proxy.setPool({ entries: [] });
         proxy.resetHealth();
-        if (previousStateDir === undefined) delete process.env.OPENCODE_BRIDGE_STATE_DIR;
-        else process.env.OPENCODE_BRIDGE_STATE_DIR = previousStateDir;
+        if (previousDataDir === undefined) delete process.env.DATA_DIR;
+        else process.env.DATA_DIR = previousDataDir;
         proxy.__reload();
         fs.rmSync(stateDir, { recursive: true, force: true });
       }

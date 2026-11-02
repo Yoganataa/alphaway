@@ -65,24 +65,119 @@ export function adminRequestError(c: any): string | null {
 
   const origin = String(c.req.header("origin") || "").trim();
   if (origin) {
-    let originHost = "";
+    let incomingOrigin: string;
     try {
-      originHost = new URL(origin).hostname.toLowerCase();
+      const parsedOrigin = new URL(origin);
+      if (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") {
+        return "Origin must use HTTP or HTTPS.";
+      }
+      incomingOrigin = parsedOrigin.origin.toLowerCase();
     } catch {
-      return `Origin ${origin} is invalid.`;
+      return "Origin is invalid.";
     }
-    const configured = String(process.env.CORS_ORIGIN || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (originHost !== host && !configured.includes(origin)) {
-      return `Origin ${origin} is not allowed.`;
+
+    // Origin is a tuple (scheme, host, port), not a hostname. Comparing only
+    // hostname permits same-site pages on another port to submit cookie-authenticated
+    // requests because SameSite cookies are not port-scoped.
+    const requestUrl = new URL(c.req.url);
+    const forwardedProto = process.env.TRUST_PROXY === "1"
+      ? String(c.req.header("x-forwarded-proto") || "").split(",")[0].trim().toLowerCase()
+      : "";
+    const protocol = forwardedProto || requestUrl.protocol.slice(0, -1).toLowerCase();
+    if (protocol !== "http" && protocol !== "https") {
+      return "Request protocol is invalid for administrator access.";
+    }
+    let requestOrigin: string;
+    try {
+      requestOrigin = new URL(`${protocol}://${rawHost}`).origin.toLowerCase();
+    } catch {
+      return "Request origin is invalid.";
+    }
+
+    const configuredOrigins = new Set(
+      String(process.env.CORS_ORIGIN || "")
+        .split(",")
+        .map((value) => {
+          try {
+            const parsed = new URL(value.trim());
+            return parsed.protocol === "http:" || parsed.protocol === "https:"
+              ? parsed.origin.toLowerCase()
+              : "";
+          } catch {
+            return "";
+          }
+        })
+        .filter(Boolean)
+    );
+    if (incomingOrigin !== requestOrigin && !configuredOrigins.has(incomingOrigin)) {
+      return "Origin does not match the administrator request origin.";
     }
   }
   return null;
 }
 
+export const MAX_ADMIN_AUTH_BODY_BYTES = 16 * 1024;
 export const MAX_BODY_BYTES = 10 * 1024 * 1024;
+
+/** Parse a JSON request body without allowing an unbounded stream allocation. */
+export async function readJsonRequestBody(req: any, maxBytes: number = MAX_BODY_BYTES): Promise<any | null> {
+  const raw = req?.raw || req;
+  const contentLength = typeof req?.header === "function"
+    ? req.header("content-length")
+    : raw?.headers?.get?.("content-length");
+  if (contentLength != null && contentLength !== "") {
+    if (!/^\d+$/.test(String(contentLength))) {
+      const error: any = new Error("Request Content-Length is invalid");
+      error.statusCode = 400;
+      throw error;
+    }
+    const declared = Number(contentLength);
+    if (!Number.isSafeInteger(declared)) {
+      const error: any = new Error("Request Content-Length is invalid");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (declared > maxBytes) {
+      const error: any = new Error(`Request body exceeds limit of ${maxBytes} bytes`);
+      error.statusCode = 413;
+      error.code = "payload_too_large";
+      throw error;
+    }
+  }
+
+  const stream = raw?.body;
+  if (!stream || typeof stream.getReader !== "function") return null;
+
+  const reader = stream.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const chunk = Buffer.from(value);
+      totalBytes += chunk.length;
+      if (totalBytes > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        const error: any = new Error(`Request body exceeds limit of ${maxBytes} bytes`);
+        error.statusCode = 413;
+        error.code = "payload_too_large";
+        throw error;
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+
+  const text = Buffer.concat(chunks, totalBytes).toString("utf8");
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 
 export function readRequestBody(req: any, maxBytes: number = MAX_BODY_BYTES): Promise<string> {
   const declared = parseInt(req?.headers?.["content-length"] || "", 10);

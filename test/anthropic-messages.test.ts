@@ -6,6 +6,9 @@ import { describe, it, expect } from "bun:test";
 import { app } from "../src/app";
 import { anthropicToOpenAI, openAIToAnthropicResponse } from "../src/core/protocol-translator";
 
+// Exercise protocol compatibility using the retained environment-key adapter.
+process.env.API_KEY = "sk-test-anthropic-compat-key";
+
 describe("Anthropic Claude Protocol Translator", () => {
   it("translates Anthropic request with system string and messages to OpenAI format", () => {
     const anthropicReq = {

@@ -4,6 +4,10 @@
 
 import { describe, it, expect } from "bun:test";
 import { app } from "../src/app";
+import { embeddedProviderUrlSecrets, redactCredentialEchoes } from "../src/core/provider-url-secrets";
+import { adminRequest } from "./helpers/admin";
+import { issueAPIKey, revokeAPIKey } from "../src/core/api-keys";
+import { getDatabase } from "../src/core/database";
 import {
   addOrUpdateCustomProvider,
   loadCustomProviders,
@@ -49,11 +53,155 @@ describe("3rd-Party Custom Providers Engine", () => {
   });
 
   it("lists custom providers via REST API", async () => {
-    const res = await app.request("/api/custom-providers");
+    const res = await adminRequest("/api/custom-providers");
     expect(res.status).toBe(200);
     const json: any = await res.json();
     expect(Array.isArray(json.providers)).toBe(true);
     expect(json.providers.some((p: any) => p.id === "test-deepseek")).toBe(true);
+  });
+
+  it("encrypts embedded provider URL credentials and redacts them from dashboard responses", async () => {
+    const id = "test-embedded-url-secrets";
+    const originalUrl = "https://url-user:url-password@provider.example.test/v1?api_key=url-query-secret&tenant=team-a";
+    const safeUrl = "https://provider.example.test/v1?tenant=team-a";
+
+    addOrUpdateCustomProvider({
+      id,
+      name: "Embedded URL Credential Test",
+      baseUrl: originalUrl,
+      apiKey: "",
+      protocol: "openai",
+      models: ["embedded-url-model"],
+      enabled: true,
+    });
+
+    const stored = getDatabase().prepare("SELECT base_url FROM custom_providers WHERE id = ?").get(id).base_url;
+    expect(stored).toMatch(/^awenc:v1:/);
+    expect(stored).not.toContain("url-user");
+    expect(stored).not.toContain("url-password");
+    expect(stored).not.toContain("url-query-secret");
+    expect(loadCustomProviders().find((provider) => provider.id === id)?.baseUrl).toBe(originalUrl);
+
+    const response = await adminRequest("/api/custom-providers");
+    expect(response.status).toBe(200);
+    const body: any = await response.json();
+    const publicRecord = body.providers.find((provider: any) => provider.id === id);
+    expect(publicRecord.baseUrl).toBe(safeUrl);
+    expect(publicRecord.hasApiKey).toBe(true);
+    expect(JSON.stringify(publicRecord)).not.toContain("url-user");
+    expect(JSON.stringify(publicRecord)).not.toContain("url-password");
+    expect(JSON.stringify(publicRecord)).not.toContain("url-query-secret");
+
+    // A metadata-only edit made with the redacted URL must not drop the
+    // encrypted original URL credential behind the dashboard form.
+    addOrUpdateCustomProvider({
+      id,
+      name: "Embedded URL Credential Test Updated",
+      baseUrl: safeUrl,
+      apiKey: "",
+      protocol: "openai",
+      models: ["embedded-url-model"],
+      enabled: true,
+    });
+    expect(loadCustomProviders().find((provider) => provider.id === id)?.baseUrl).toBe(originalUrl);
+    deleteCustomProvider(id);
+  });
+
+  it("redacts raw, encoded, bearer-prefixed, and URL-encoded credential echoes", () => {
+    const secret = "user:token +/= with spaces";
+    const url = "https://provider.example.test/v1?api_key=" + encodeURIComponent(secret);
+    const secrets = embeddedProviderUrlSecrets(url);
+    const response = JSON.stringify({
+      raw: secret,
+      encoded: encodeURIComponent(secret),
+      bearer: "Bearer " + secret,
+      bearerEncoded: "Bearer " + encodeURIComponent(secret),
+      url: "https://user:password@provider.example.test/v1",
+    });
+    const redacted = redactCredentialEchoes(response, secrets, 3000);
+    expect(redacted).not.toContain(secret);
+    expect(redacted).not.toContain(encodeURIComponent(secret));
+    expect(redacted).not.toContain("Bearer " + secret);
+    expect(redacted).not.toContain("Bearer " + encodeURIComponent(secret));
+    expect(redacted).not.toContain("user:password@");
+    expect(redacted).toContain("[REDACTED]");
+  });
+  it("redacts embedded URL credentials from provider connection-test errors", async () => {
+    const urlSecret = "provider-url-query-secret+/= with spaces";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: `Rejected URL credential ${encodeURIComponent(urlSecret)} and ${urlSecret}` }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    try {
+      const response = await adminRequest("/api/custom-providers/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: `https://provider.example.test/v1?api_key=${encodeURIComponent(urlSecret)}`,
+          apiKey: "",
+          protocol: "openai",
+          model: "redaction-test-model",
+        }),
+      });
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).not.toContain(urlSecret);
+      expect(body).not.toContain(encodeURIComponent(urlSecret));
+      expect(body).toContain("[REDACTED]");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("redacts custom-provider API credentials from chat upstream error bodies", async () => {
+    const providerId = "test-secret-redaction";
+    const providerSecret = "sk-custom-provider-secret-123456789";
+    const upstreamKey = issueAPIKey("Custom provider redaction test");
+    addOrUpdateCustomProvider({
+      id: providerId,
+      name: "Secret Redaction Test",
+      baseUrl: "https://provider.example.test/v1/chat/completions?api_key=url-embedded-secret-987654321",
+      apiKey: providerSecret,
+      protocol: "openai",
+      models: ["secret-redaction-model"],
+      enabled: true,
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      expect(String(input)).toBe("https://provider.example.test/v1/chat/completions?api_key=url-embedded-secret-987654321");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe(`Bearer ${providerSecret}`);
+      return new Response(JSON.stringify({ error: { message: `Rejected key ${providerSecret} and URL key url-embedded-secret-987654321` } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    try {
+      const response = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${upstreamKey.secret}`,
+        },
+        body: JSON.stringify({
+          model: "secret-redaction-model",
+          messages: [{ role: "user", content: "Test error redaction" }],
+        }),
+      });
+      expect(response.status).toBe(401);
+      const body = await response.text();
+      expect(body).not.toContain(providerSecret);
+      expect(body).not.toContain("url-embedded-secret-987654321");
+      expect(body).toContain("[REDACTED]");
+    } finally {
+      globalThis.fetch = originalFetch;
+      deleteCustomProvider(providerId);
+      revokeAPIKey(upstreamKey.record.id);
+    }
   });
 
   it("cleans up test custom provider", () => {

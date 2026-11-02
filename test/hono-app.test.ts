@@ -4,6 +4,8 @@
 
 import { describe, it, expect } from "bun:test";
 import { app } from "../src/app";
+import { adminRequest, adminHeaders } from "./helpers/admin";
+import { issueAPIKey } from "../src/core/api-keys";
 
 describe("Hono application engine", () => {
   it("answers /health with diagnostics and provider status", async () => {
@@ -17,11 +19,12 @@ describe("Hono application engine", () => {
     expect(json.providers.opencode).toBeDefined();
   });
 
-  it("lists both OpenCode and CodeBuddy models on /v1/models", async () => {
-    const apiKey = process.env.API_KEY || "";
-    const headers: Record<string, string> = {};
-    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
-    const res = await app.request("/v1/models", { headers });
+  it("lists both OpenCode and CodeBuddy models on /v1/models with a managed key", async () => {
+    await adminHeaders();
+    const apiKey = issueAPIKey("Hono integration test");
+    const res = await app.request("/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey.secret}` },
+    });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.object).toBe("list");
@@ -38,7 +41,7 @@ describe("Hono application engine", () => {
   });
 
   it("returns tokensaver config on /api/tokensaver", async () => {
-    const res = await app.request("/api/tokensaver");
+    const res = await adminRequest("/api/tokensaver");
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(typeof json.rtkEnabled).toBe("boolean");

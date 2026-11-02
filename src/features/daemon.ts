@@ -2,17 +2,13 @@
 
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 const { spawn } = require("child_process");
+const { resolveDataDir, ensurePrivateDirectory } = require("../core/storage-paths");
+const { acquireAlphaWayProcessLock, getAlphaWayDatabaseLockPath } = require("../core/process-lock");
 
 function getStateDir() {
-  const dir =
-    process.env.ALPHAWAY_STATE_DIR ||
-    process.env.OPENCODE_BRIDGE_STATE_DIR ||
-    path.join(os.homedir(), ".alphaway");
-  if (!fs.existsSync(dir)) {
-    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-  }
+  const dir = resolveDataDir();
+  ensurePrivateDirectory(dir);
   return dir;
 }
 
@@ -102,16 +98,29 @@ function stopDaemon() {
 
 function spawnDaemon(port = 20129, host = "127.0.0.1", publicUrl = "") {
   const pidFile = getPidFilePath();
+
+  // A daemon has its own PID file; check it before the shared process/database
+  // locks so a repeated -d invocation reports "already running" rather than
+  // a generic lock conflict.
   if (fs.existsSync(pidFile)) {
     const existingPid = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
     if (existingPid && isPidAlive(existingPid)) {
-      console.log(`[AlphaWay] Daemon is already running (PID: ${existingPid}).`);
+      console.log(`[AlphaWay] AlphaWay is already running (PID: ${existingPid}).`);
       console.log(`[AlphaWay] Local:  http://${host}:${port}/v1`);
       if (publicUrl) console.log(`[AlphaWay] Public: ${publicUrl}/v1`);
       console.log(`[AlphaWay] Logs:   ${getLogFilePath()}`);
       console.log(`[AlphaWay] To stop: bun src/index.ts --stop`);
       process.exit(0);
     }
+    console.error("[AlphaWay] A stale or invalid PID lock exists. Run --status to clear it after confirming no service is running.");
+    process.exit(1);
+  }
+
+  const instanceLock = path.join(getStateDir(), "alphaway.lock");
+  const databaseLock = getAlphaWayDatabaseLockPath();
+  if (fs.existsSync(instanceLock) || (databaseLock && fs.existsSync(databaseLock))) {
+    console.error("[AlphaWay] An AlphaWay instance or stale process/database lock already exists. Stop the active service or inspect the matching alphaway.lock file before starting another instance.");
+    process.exit(1);
   }
 
   const logFile = getLogFilePath();
@@ -134,7 +143,9 @@ function spawnDaemon(port = 20129, host = "127.0.0.1", publicUrl = "") {
 
   child.unref();
 
-  fs.writeFileSync(pidFile, String(child.pid), "utf8");
+  // The child acquires the shared exclusive PID lock after startup; do not
+  // pre-create it here or the child would mistake its parent-created file for
+  // another running AlphaWay process.
   console.log(`[AlphaWay] Daemon started successfully in background! (PID: ${child.pid})`);
   console.log(`[AlphaWay] Local API: http://${host}:${port}/v1`);
   if (publicUrl) {
@@ -168,15 +179,27 @@ function handleDaemonCli(port, host, publicUrl) {
     process.exit(0);
   }
 
-  // If this process IS the running daemon child, record PID and clean up on exit
+  // Every foreground, systemd/launchd, and daemon process holds both the
+  // data-directory compatibility lock and canonical SQLite database lock.
+  // Database restore acquires the destination database lock as well.
+  acquireAlphaWayProcessLock();
+
+  // Preserve the legacy daemon PID file for --status/--stop. Foreground and
+  // service-manager processes use only alphaway.lock and remain under their
+  // respective process supervisor.
   if (process.env.__OC_DAEMON === "1") {
     const pidFile = getPidFilePath();
-    try { fs.writeFileSync(pidFile, String(process.pid), "utf8"); } catch {}
-    process.on("exit", () => {
+    const fd = fs.openSync(pidFile, "wx", 0o600);
+    try {
+      fs.writeFileSync(fd, String(process.pid), "utf8");
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    process.once("exit", () => {
       try {
-        if (fs.existsSync(pidFile)) {
-          const recorded = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
-          if (recorded === process.pid) fs.unlinkSync(pidFile);
+        if (fs.existsSync(pidFile) && Number(fs.readFileSync(pidFile, "utf8").trim()) === process.pid) {
+          fs.unlinkSync(pidFile);
         }
       } catch {}
     });

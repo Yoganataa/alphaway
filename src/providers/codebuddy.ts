@@ -1,6 +1,9 @@
 "use strict";
 
 const crypto = require("crypto");
+const { getCodeBuddyApiKey, setCodeBuddyApiKey } = require("../core/codebuddy-credentials");
+const { embeddedProviderUrlSecrets, redactCredentialEchoes } = require("../core/provider-url-secrets");
+const { resolveEnvFilePath } = require("../core/storage-paths");
 
 /**
  * CodeBuddy International (WorkBuddy AI) upstream integration for AlphaWay.
@@ -145,12 +148,13 @@ function generateHex32() {
 }
 
 /**
- * Stable UUID derived from session key to maintain prompt-cache affinity.
+ * Stable RFC 9562 UUIDv8 derived from a session key to maintain prompt-cache
+ * affinity. Version 8 permits a deterministic SHA-256-based custom layout.
  */
 function stableConversationUuid(seed) {
-  const hash = crypto.createHash("sha1").update(String(seed)).digest();
-  hash[6] = (hash[6] & 0x0f) | 0x50; // v5
-  hash[8] = (hash[8] & 0x3f) | 0x80; // variant
+  const hash = crypto.createHash("sha256").update(String(seed)).digest();
+  hash[6] = (hash[6] & 0x0f) | 0x80; // v8 custom UUID
+  hash[8] = (hash[8] & 0x3f) | 0x80; // RFC 4122/9562 variant
   const hex = hash.toString("hex").slice(0, 32);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
@@ -521,6 +525,35 @@ function sseToOpenAIJson(sseText, model) {
  * Start CodeBuddy International Device OAuth flow.
  * Returns { state, authUrl } for the user to authenticate in browser.
  */
+const CODEBUDDY_OAUTH_DOMAINS = ["codebuddy.ai", "workbuddy.ai"] as const;
+
+/** Accept only HTTPS authorization links hosted by CodeBuddy/WorkBuddy domains. */
+function validateCodebuddyAuthUrl(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
+    throw new Error("CodeBuddy returned an invalid authorization URL");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("CodeBuddy returned an invalid authorization URL");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  const trustedHost = CODEBUDDY_OAUTH_DOMAINS.some((domain) =>
+    hostname === domain || hostname.endsWith(`.${domain}`)
+  );
+  if (
+    parsed.protocol !== "https:" ||
+    !trustedHost ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    (parsed.port !== "" && parsed.port !== "443")
+  ) {
+    throw new Error("CodeBuddy returned an untrusted authorization URL");
+  }
+  return parsed.toString();
+}
+
 async function startCodebuddyOAuth() {
   const url = "https://www.codebuddy.ai/v2/plugin/auth/state?platform=ide";
   const headers = {
@@ -541,12 +574,18 @@ async function startCodebuddyOAuth() {
     throw new Error(`Failed to request CodeBuddy OAuth state: HTTP ${res.status}`);
   }
   const data = await res.json();
-  if (data.code !== 0 || !data.data?.state || !data.data?.authUrl) {
+  if (
+    data.code !== 0 ||
+    typeof data.data?.state !== "string" ||
+    data.data.state.length === 0 ||
+    data.data.state.length > 512 ||
+    !data.data?.authUrl
+  ) {
     throw new Error(`CodeBuddy OAuth state error: ${data.msg || "unknown error"}`);
   }
   return {
     state: data.data.state,
-    authUrl: data.data.authUrl,
+    authUrl: validateCodebuddyAuthUrl(data.data.authUrl),
   };
 }
 
@@ -633,7 +672,10 @@ async function testCodebuddyPing(apiKey, model = "deepseek-v4.1-flash") {
       json = { message: text };
     }
     const classified = classifyCodebuddyError(res.status, json);
-    return { ok: false, status: res.status, classified, raw: text };
+    const serialized = JSON.stringify(classified);
+    const secrets = [apiKey, ...embeddedProviderUrlSecrets(url)];
+    const safeClassified = JSON.parse(redactCredentialEchoes(serialized, secrets, 3000));
+    return { ok: false, status: res.status, classified: safeClassified };
   }
 
   const sseText = await res.text();
@@ -653,10 +695,9 @@ async function loginCodebuddyCli() {
   console.log("            CodeBuddy.ai / WorkBuddy OAuth Login Helper          ");
   console.log("=".repeat(65) + "\n");
 
-  const currentKey = process.env.CODEBUDDY_API_KEY || "";
-  if (currentKey) {
-    const sub = extractJwtSub(currentKey);
-    console.log(`ℹ️  Token saat ini terdeteksi untuk user: ${sub || "Authenticated"}`);
+  // Check configuration without exposing claims derived from the credential.
+  if (getCodeBuddyApiKey()) {
+    console.log("ℹ️  Credential CodeBuddy saat ini sudah dikonfigurasi.");
     console.log(`   Memulai sesi OAuth baru...\n`);
   }
 
@@ -677,18 +718,9 @@ async function loginCodebuddyCli() {
   console.log("-".repeat(65));
   console.log("Menunggu otorisasi akun CodeBuddy...");
 
-  // Coba buka browser otomatis
-  try {
-    const { exec } = require("child_process");
-    if (process.platform === "win32") {
-      exec(`start "" "${authUrl}"`);
-    } else if (process.platform === "darwin") {
-      exec(`open "${authUrl}"`);
-    } else {
-      exec(`xdg-open "${authUrl}"`);
-    }
-    console.log("🌐 Mencoba membuka browser otomatis...");
-  } catch {}
+  // Never pass an OAuth URL to a shell or child process. The URL is printed
+  // above so the operator can open it explicitly in their chosen browser.
+  console.log("Buka URL otorisasi di atas secara manual untuk melanjutkan.");
 
   const pollIntervalMs = 2500;
   const maxAttempts = 120; // 5 menit
@@ -707,30 +739,11 @@ async function loginCodebuddyCli() {
 
       if (pollRes.status === "authorized" && pollRes.accessToken) {
         console.log("\n\n✅ Authorization SUCCESSFUL!");
-        const sub = extractJwtSub(pollRes.accessToken);
-        if (sub) {
-          console.log(`👤 User ID (sub): ${sub}`);
-        }
 
-        // Simpan ke .env
-        const fs = require("fs");
-        const path = require("path");
-        const envPath = path.join(process.cwd(), ".env");
-        try {
-          let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
-          if (/^CODEBUDDY_API_KEY=/m.test(envContent)) {
-            envContent = envContent.replace(/^CODEBUDDY_API_KEY=.*$/m, `CODEBUDDY_API_KEY=${pollRes.accessToken}`);
-          } else {
-            envContent = (envContent.trimEnd() ? envContent.trimEnd() + "\n" : "") + `CODEBUDDY_API_KEY=${pollRes.accessToken}\n`;
-          }
-          fs.writeFileSync(envPath, envContent, "utf8");
-          console.log(`💾 Token successfully saved to .env as CODEBUDDY_API_KEY`);
-        } catch (err) {
-          console.warn(`⚠️ Failed to automatically save to .env: ${err.message}`);
-          console.log(`👉 Silakan set manual di .env:\nCODEBUDDY_API_KEY=${pollRes.accessToken}`);
-        }
-
+        // Keep the OAuth-issued provider credential encrypted in canonical SQLite state.
+        setCodeBuddyApiKey(pollRes.accessToken);
         process.env.CODEBUDDY_API_KEY = pollRes.accessToken;
+        console.log("💾 CodeBuddy credential saved encrypted in AlphaWay SQLite state.");
 
         // Uji coba model langsung
         console.log("\n🧪 Melakukan uji coba model deepseek-v4.1-flash ke upstream...");
@@ -766,6 +779,7 @@ if (require.main === module || process.argv.includes("--login-codebuddy") || pro
 }
 
 module.exports = {
+  validateCodebuddyAuthUrl,
   CODEBUDDY_INTL_URL,
   CODEBUDDY_MODELS,
   CODEBUDDY_UA,

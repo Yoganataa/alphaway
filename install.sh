@@ -4,7 +4,9 @@
 # Installs a complete, verified application snapshot under:
 #   ~/.alphaway/app       application source + embedded-asset binary
 #   ~/.alphaway/.env      persistent configuration
-#   ~/.alphaway/*.sqlite  persistent application data
+#   ~/.alphaway/db/data.sqlite  persistent SQLite database
+#   ~/.alphaway/db/backups/      encrypted SQLite snapshots
+#   ~/.alphaway/secret-encryption.key  SQLite credential/backup key
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/Yoganataa/alphaway/main/install.sh | bash
@@ -182,9 +184,77 @@ if [ ! -f "$BINDIR/.env" ]; then
   say "Created configuration at $BINDIR/.env"
 fi
 
+# Resolve persistent data exactly once so the service, daemon CLI, database,
+# encryption key, and manual binary launch all use the same directory.
+configured_data_dir="${DATA_DIR:-}"
+if [ -z "$configured_data_dir" ]; then
+  configured_data_dir="${ALPHAWAY_STATE_DIR:-${OPENCODE_BRIDGE_STATE_DIR:-}}"
+fi
+if [ -z "$configured_data_dir" ]; then
+  env_file_data_dir=""
+  env_file_legacy_data_dir=""
+  while IFS= read -r env_line || [ -n "$env_line" ]; do
+    case "$env_line" in
+      DATA_DIR=*)
+        env_file_data_dir="${env_line#DATA_DIR=}"
+        env_file_data_dir="${env_file_data_dir#"${env_file_data_dir%%[![:space:]]*}"}"
+        env_file_data_dir="${env_file_data_dir%"${env_file_data_dir##*[![:space:]]}"}"
+        if [[ "$env_file_data_dir" == \"*\" && "$env_file_data_dir" == *\" ]]; then
+          env_file_data_dir="${env_file_data_dir:1:${#env_file_data_dir}-2}"
+        elif [[ "$env_file_data_dir" == \'*\' && "$env_file_data_dir" == *\' ]]; then
+          env_file_data_dir="${env_file_data_dir:1:${#env_file_data_dir}-2}"
+        else
+          env_file_data_dir="$(printf '%s' "$env_file_data_dir" | sed -E 's/[[:space:]]+#.*$//')"
+        fi
+        ;;
+      ALPHAWAY_STATE_DIR=*) env_file_legacy_data_dir="${env_line#ALPHAWAY_STATE_DIR=}" ;;
+      OPENCODE_BRIDGE_STATE_DIR=*) env_file_legacy_data_dir="${env_line#OPENCODE_BRIDGE_STATE_DIR=}" ;;
+    esac
+  done < "$BINDIR/.env"
+  configured_data_dir="${env_file_data_dir:-$env_file_legacy_data_dir}"
+fi
+if [ -z "$configured_data_dir" ]; then
+  configured_data_dir="$BINDIR"
+fi
+case "$configured_data_dir" in *$'\n'*|*$'\r'*) die "DATA_DIR cannot contain a newline" ;; esac
+
+# Persist an absolute path. Relative .env values are rooted at BINDIR so the
+# system service WorkingDirectory and an arbitrary manual launch resolve the
+# exact same persistent directory.
+case "$configured_data_dir" in
+  /*) ;;
+  *) configured_data_dir="$BINDIR/$configured_data_dir" ;;
+esac
+mkdir -p "$configured_data_dir"
+configured_data_dir="$(cd "$configured_data_dir" && pwd -P)"
+
+# Persist the resolved location so a later manual launch without the installer
+# environment still uses the same data root. This also canonicalizes old aliases.
+if grep -q '^DATA_DIR=' "$BINDIR/.env"; then
+  ENV_TMP="$BINDIR/.env.storage.tmp"
+  while IFS= read -r env_line || [ -n "$env_line" ]; do
+    case "$env_line" in
+      DATA_DIR=*) printf 'DATA_DIR=%s\n' "$configured_data_dir" ;;
+      *) printf '%s\n' "$env_line" ;;
+    esac
+  done < "$BINDIR/.env" > "$ENV_TMP"
+  chmod 600 "$ENV_TMP"
+  mv "$ENV_TMP" "$BINDIR/.env"
+else
+  printf '\nDATA_DIR=%s\n' "$configured_data_dir" >> "$BINDIR/.env"
+  chmod 600 "$BINDIR/.env"
+fi
+
+DATA_DIR="$configured_data_dir"
+export DATA_DIR
+mkdir -p "$DATA_DIR/db"
+if [ "$(uname -s)" != "Darwin" ] && [ "$(uname -s)" != "MINGW"* ]; then
+  chmod 700 "$DATA_DIR" "$DATA_DIR/db"
+fi
+
 # --------------------------------------------------------- service stop ---
 stop_managed_background() {
-  local pid_file="$BINDIR/alphaway.pid"
+  local pid_file="$DATA_DIR/alphaway.pid"
   [ -f "$pid_file" ] || return 0
   local pid command_line
   pid="$(cat "$pid_file" 2>/dev/null || true)"
@@ -321,7 +391,7 @@ User=$(id -un)
 WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
-Environment="ALPHAWAY_STATE_DIR=$BINDIR"
+Environment="DATA_DIR=$DATA_DIR"
 ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
@@ -355,7 +425,7 @@ Type=simple
 WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
-Environment="ALPHAWAY_STATE_DIR=$BINDIR"
+Environment="DATA_DIR=$DATA_DIR"
 ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
@@ -391,7 +461,7 @@ install_launchd_service() {
   <dict>
     <key>PORT</key><string>$PORT</string>
     <key>HOST</key><string>$HOST</string>
-    <key>ALPHAWAY_STATE_DIR</key><string>$BINDIR</string>
+    <key>DATA_DIR</key><string>$DATA_DIR</string>
   </dict>
   <key>StandardOutPath</key><string>$HOME/Library/Logs/alphaway.log</string>
   <key>StandardErrorPath</key><string>$HOME/Library/Logs/alphaway.log</string>
@@ -407,20 +477,20 @@ PLIST
 }
 
 start_background() {
-  local log_file="$BINDIR/alphaway.log"
+  local log_file="$DATA_DIR/alphaway.log"
 
   # Change directory in the installer shell and detach the executable
   # directly; never put a background child inside a command-substitution or
   # subshell, which can keep a piped installer alive until the child exits.
   pushd "$BINDIR" >/dev/null
   if command -v setsid >/dev/null 2>&1; then
-    setsid env PORT="$PORT" HOST="$HOST" ALPHAWAY_STATE_DIR="$BINDIR" \
+    setsid env PORT="$PORT" HOST="$HOST" DATA_DIR="$DATA_DIR" \
       "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
   else
-    nohup env PORT="$PORT" HOST="$HOST" ALPHAWAY_STATE_DIR="$BINDIR" \
+    nohup env PORT="$PORT" HOST="$HOST" DATA_DIR="$DATA_DIR" \
       "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
   fi
-  echo $! > "$BINDIR/alphaway.pid"
+  echo $! > "$DATA_DIR/alphaway.pid"
   popd >/dev/null
 }
 
@@ -475,7 +545,7 @@ if [ "$BRIDGE_UP" != "1" ]; then
     system) warn "Inspect with: systemctl status alphaway && journalctl -u alphaway -n 80" ;;
     user) warn "Inspect with: systemctl --user status alphaway && journalctl --user -u alphaway -n 80" ;;
     launchd) warn "Inspect with: tail -n 80 $HOME/Library/Logs/alphaway.log" ;;
-    *) warn "Inspect with: tail -n 80 $BINDIR/alphaway.log" ;;
+    *) warn "Inspect with: tail -n 80 $DATA_DIR/alphaway.log" ;;
   esac
 
   # Restore the previous app when an upgrade fails its health check.
@@ -493,10 +563,10 @@ say "AlphaWay is healthy"
 say "Dashboard : http://$PROBE_HOST:$PORT/"
 say "API       : http://$PROBE_HOST:$PORT/v1"
 say "Config    : $BINDIR/.env"
-say "State     : $BINDIR"
+say "State     : $DATA_DIR"
 case "$SERVICE_SCOPE" in
   system) say "Logs      : journalctl -u alphaway -f" ;;
   user) say "Logs      : journalctl --user -u alphaway -f" ;;
   launchd) say "Logs      : tail -f $HOME/Library/Logs/alphaway.log" ;;
-  *) say "Logs      : tail -f $BINDIR/alphaway.log" ;;
+  *) say "Logs      : tail -f $DATA_DIR/alphaway.log" ;;
 esac

@@ -24,6 +24,30 @@
   let oauthStatusText = $state<string | null>(null);
   let pollIntervalHandle: any = null;
 
+  const trustedOAuthDomains = ["codebuddy.ai", "workbuddy.ai"];
+  function safeCodeBuddyAuthUrl(value: string | undefined): string | null {
+    if (!value || value.length > 2048) return null;
+    try {
+      const parsed = new URL(value);
+      const hostname = parsed.hostname.toLowerCase();
+      const trusted = trustedOAuthDomains.some((domain) =>
+        hostname === domain || hostname.endsWith(`.${domain}`)
+      );
+      if (
+        parsed.protocol !== "https:" ||
+        !trusted ||
+        parsed.username !== "" ||
+        parsed.password !== "" ||
+        (parsed.port !== "" && parsed.port !== "443")
+      ) return null;
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  const oauthAuthUrl = $derived(oauthData ? safeCodeBuddyAuthUrl(oauthData.authUrl) : null);
+
   // Custom provider modal / form state
   let showProviderModal = $state(false);
   let isEditing = $state(false);
@@ -58,31 +82,31 @@
 
   async function handleStartOAuth() {
     try {
-      oauthStatusText = "Requesting device code...";
+      oauthStatusText = "Requesting CodeBuddy authorization link...";
       oauthData = await startCodeBuddyOAuth();
       oauthPolling = true;
-      oauthStatusText = `Waiting for user authorization at ${oauthData.verificationUri}...`;
+      oauthStatusText = "Waiting for CodeBuddy authorization in the opened browser...";
 
       if (pollIntervalHandle) clearInterval(pollIntervalHandle);
 
       pollIntervalHandle = setInterval(async () => {
         if (!oauthData) return;
         try {
-          const res = await pollCodeBuddyOAuth(oauthData.deviceCode);
+          const res = await pollCodeBuddyOAuth(oauthData.state);
           if (res.status === "success") {
             oauthStatusText = "Login successful! Tokens saved.";
             oauthPolling = false;
             clearInterval(pollIntervalHandle);
             await refreshData();
-          } else if (res.status === "expired") {
-            oauthStatusText = "Authorization expired. Please try again.";
+          } else if (res.status === "error") {
+            oauthStatusText = res.message || "Authorization failed. Please try again.";
             oauthPolling = false;
             clearInterval(pollIntervalHandle);
           }
         } catch (err: any) {
           // keep polling until timeout
         }
-      }, (oauthData.interval || 5) * 1000);
+      }, 2500);
     } catch (err: any) {
       oauthStatusText = `Error: ${err.message}`;
       oauthPolling = false;
@@ -97,21 +121,21 @@
       formId = "deepseek";
       formName = "DeepSeek Official";
       formBaseUrl = "https://api.deepseek.com/v1";
-      formApiKey = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+      formApiKey = "";
       formProtocol = "openai";
       formModels = "deepseek-chat, deepseek-reasoner";
     } else if (preset === "anthropic") {
       formId = "anthropic";
       formName = "Anthropic Claude Upstream";
       formBaseUrl = "https://api.anthropic.com/v1";
-      formApiKey = "sk-ant-api03-xxxxxxxxxxxxxxxxxxxx";
+      formApiKey = "";
       formProtocol = "anthropic";
       formModels = "claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022";
     } else if (preset === "openrouter") {
       formId = "openrouter";
       formName = "OpenRouter";
       formBaseUrl = "https://openrouter.ai/api/v1";
-      formApiKey = "sk-or-v1-xxxxxxxxxxxxxxxxxxxx";
+      formApiKey = "";
       formProtocol = "openai";
       formModels = "anthropic/claude-3.5-sonnet, meta-llama/llama-3.3-70b-instruct";
     } else if (preset === "ollama") {
@@ -140,7 +164,7 @@
     formId = p.id;
     formName = p.name;
     formBaseUrl = p.baseUrl;
-    formApiKey = p.apiKey;
+    formApiKey = "";
     formProtocol = p.protocol;
     formModels = p.models.join(", ");
     formEnabled = p.enabled;
@@ -329,28 +353,23 @@
         <Button variant="primary" size="sm" onclick={handleStartOAuth} disabled={oauthPolling}>
           {#if oauthPolling}
             <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
-            <span>Polling Device...</span>
+            <span>Checking Authorization...</span>
           {:else}
             <span class="material-symbols-outlined text-[16px]">login</span>
-            <span>Start OAuth Device Login</span>
+            <span>Start OAuth Login</span>
           {/if}
         </Button>
       </div>
 
-      {#if oauthData && oauthPolling}
+      {#if oauthData && oauthPolling && oauthAuthUrl}
         <div class="mt-3 p-3 rounded-[10px] bg-surface border border-brand-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           <div>
             <span class="text-text-muted">Open in browser:</span>
-            <a href={oauthData.verificationUri} target="_blank" rel="noopener noreferrer" class="ml-1 text-brand-400 font-semibold underline">
-              {oauthData.verificationUri}
+            <a href={oauthAuthUrl} target="_blank" rel="noopener noreferrer" class="ml-1 text-brand-400 font-semibold underline">
+              {oauthData.authUrl}
             </a>
           </div>
-          <div class="flex items-center gap-2">
-            <span class="text-text-muted">Enter code:</span>
-            <code class="px-2.5 py-1 rounded-[6px] bg-surface-3 text-brand-400 font-mono font-bold text-sm tracking-widest">
-              {oauthData.userCode}
-            </code>
-          </div>
+
         </div>
       {/if}
 
@@ -448,7 +467,7 @@
                 <div class="flex items-center gap-2 text-xs text-text-muted">
                   <span class="font-mono truncate">{p.baseUrl}</span>
                   <span>•</span>
-                  <span>Key: {p.apiKey ? (p.apiKey.length > 8 ? `${p.apiKey.slice(0, 4)}...${p.apiKey.slice(-4)}` : "sk-***") : "None"}</span>
+                  <span>Key: {p.hasApiKey ? "Configured (secret hidden)" : "None"}</span>
                 </div>
                 <div class="flex items-center gap-1.5 flex-wrap pt-1">
                   {#each p.models as modelId}
@@ -557,7 +576,7 @@
             id="provider-apikey"
             type="password"
             bind:value={formApiKey}
-            placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            placeholder="Paste an upstream key, or leave blank to keep the current key"
             class="w-full px-3 py-2 rounded-[8px] bg-surface-2 border border-border text-text-main font-mono text-xs focus:outline-none focus:border-brand-500"
           />
         </div>

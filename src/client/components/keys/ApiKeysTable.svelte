@@ -4,34 +4,31 @@
   import Button from "../../lib/ui/Button.svelte";
   import Modal from "../../lib/ui/Modal.svelte";
   import { notifications } from "../../lib/notifications";
-  import { fetchApiKeys, createApiKey, deleteApiKey, type APIKeyRecord } from "../../lib/api";
+  import {
+    fetchApiKeys,
+    createApiKey,
+    deleteApiKey,
+    updateApiKeyLabel,
+    rotateApiKey,
+    setActiveApiKey,
+    type APIKeyRecord,
+    type IssuedAPIKey,
+  } from "../../lib/api";
 
   let keys = $state<APIKeyRecord[]>([]);
   let loading = $state(true);
-  let revealedIds = $state<Set<string>>(new Set());
-  let copiedId = $state<string | null>(null);
-
-  // Create key modal
   let isCreateModalOpen = $state(false);
   let newKeyName = $state("");
   let isCreating = $state(false);
-  let createdKeyResult = $state<APIKeyRecord | null>(null);
+  let createdKeyResult = $state<IssuedAPIKey | null>(null);
 
   async function loadKeys() {
     loading = true;
     try {
       keys = await fetchApiKeys();
-    } catch {
-      // Fallback default
-      keys = [
-        {
-          id: "key-default",
-          name: "Default Bridge Master Key",
-          secret: "sk-alphaway-free",
-          createdAt: Date.now() - 86400000 * 7,
-          status: "active",
-        },
-      ];
+    } catch (error: any) {
+      keys = [];
+      notifications.error(error.message || "Failed to load API keys");
     } finally {
       loading = false;
     }
@@ -39,26 +36,11 @@
 
   onMount(loadKeys);
 
-  function toggleReveal(id: string) {
-    const next = new Set(revealedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    revealedIds = next;
-  }
-
-  function maskSecret(secret: string): string {
-    if (!secret || secret.length <= 10) return "sk-••••••••••••";
-    return `${secret.slice(0, 7)}••••••••${secret.slice(-4)}`;
-  }
-
-  async function copySecret(id: string, text: string) {
+  async function copySecret(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      copiedId = id;
-      notifications.success("API Key copied to clipboard");
-      setTimeout(() => {
-        if (copiedId === id) copiedId = null;
-      }, 2000);
+      setActiveApiKey(text);
+      notifications.success("API key copied and selected for this browser");
     } catch {
       notifications.error("Failed to copy API key");
     }
@@ -68,30 +50,55 @@
     if (!newKeyName.trim()) return;
     isCreating = true;
     try {
-      const created = await createApiKey(newKeyName.trim());
-      createdKeyResult = created;
+      createdKeyResult = await createApiKey(newKeyName.trim());
       await loadKeys();
-      notifications.success(`Created API key '${created.name}'`);
-    } catch (err: any) {
-      notifications.error(err.message || "Failed to create API key");
+      notifications.success(`Created API key '${createdKeyResult.name}'`);
+    } catch (error: any) {
+      notifications.error(error.message || "Failed to create API key");
     } finally {
       isCreating = false;
     }
   }
 
-  async function handleDeleteKey(id: string, name: string) {
-    if (id === "key-default") {
-      notifications.warning("Default master key cannot be removed");
-      return;
-    }
-    if (!confirm(`Are you sure you want to revoke and delete key '${name}'?`)) return;
+  async function handleRename(key: APIKeyRecord) {
+    const nextName = prompt("New API key label", key.name);
+    if (nextName === null || nextName.trim() === key.name) return;
     try {
-      await deleteApiKey(id);
-      notifications.success(`Revoked key '${name}'`);
+      await updateApiKeyLabel(key.id, nextName.trim());
       await loadKeys();
-    } catch (err: any) {
-      notifications.error(err.message || "Failed to delete key");
+      notifications.success("API key label updated");
+    } catch (error: any) {
+      notifications.error(error.message || "Failed to rename API key");
     }
+  }
+
+  async function handleRotate(key: APIKeyRecord) {
+    if (!confirm(`Rotate '${key.name}'? The old secret will stop working immediately.`)) return;
+    try {
+      createdKeyResult = await rotateApiKey(key.id);
+      isCreateModalOpen = true;
+      await loadKeys();
+      notifications.success(`Rotated API key '${key.name}'`);
+    } catch (error: any) {
+      notifications.error(error.message || "Failed to rotate API key");
+    }
+  }
+
+  async function handleRevoke(key: APIKeyRecord) {
+    if (!confirm(`Revoke '${key.name}'? Clients using this key will lose access immediately.`)) return;
+    try {
+      await deleteApiKey(key.id);
+      await loadKeys();
+      notifications.success(`Revoked API key '${key.name}'`);
+    } catch (error: any) {
+      notifications.error(error.message || "Failed to revoke API key");
+    }
+  }
+
+  function closeModal() {
+    isCreateModalOpen = false;
+    createdKeyResult = null;
+    newKeyName = "";
   }
 </script>
 
@@ -103,86 +110,52 @@
         <span>Gateway API Keys</span>
       </h3>
       <p class="text-xs text-text-muted">
-        Tokens accepted in Bearer auth, <code class="text-text-main font-mono">x-api-key</code>, and client configs.
+        Secrets are shown only when created or rotated. Existing credentials cannot be retrieved.
       </p>
     </div>
-    <Button
-      variant="primary"
-      size="sm"
-      onclick={() => {
-        newKeyName = "";
-        createdKeyResult = null;
-        isCreateModalOpen = true;
-      }}
-    >
+    <Button variant="primary" size="sm" onclick={() => { closeModal(); isCreateModalOpen = true; }}>
       <span class="material-symbols-outlined text-[16px]">add</span>
       <span>Create Key</span>
     </Button>
   </div>
 
-  <!-- Keys Table -->
   <div class="overflow-x-auto rounded-[10px] border border-border-subtle bg-surface-1">
     <table class="w-full text-left text-xs">
       <thead class="bg-surface-2 text-text-muted uppercase tracking-wider font-mono border-b border-border-subtle">
         <tr>
           <th class="px-4 py-3 font-semibold">Key Name</th>
-          <th class="px-4 py-3 font-semibold">Secret Token</th>
+          <th class="px-4 py-3 font-semibold">Prefix</th>
           <th class="px-4 py-3 font-semibold">Status</th>
           <th class="px-4 py-3 font-semibold">Created</th>
+          <th class="px-4 py-3 font-semibold">Last Used</th>
+          <th class="px-4 py-3 font-semibold">Requests</th>
           <th class="px-4 py-3 font-semibold text-right">Actions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-border-subtle font-mono">
-        {#each keys as k (k.id)}
+        {#each keys as key (key.id)}
           <tr class="hover:bg-surface-2/50 transition-colors">
-            <td class="px-4 py-3 font-sans font-medium text-text-main">
-              {k.name}
-            </td>
-            <td class="px-4 py-3 text-text-muted">
-              <div class="flex items-center gap-2">
-                <span>{revealedIds.has(k.id) ? k.secret : maskSecret(k.secret)}</span>
-                <button
-                  type="button"
-                  onclick={() => toggleReveal(k.id)}
-                  class="text-text-muted hover:text-text-main p-0.5"
-                  title={revealedIds.has(k.id) ? "Hide secret" : "Reveal secret"}
-                >
-                  <span class="material-symbols-outlined text-[14px]">
-                    {revealedIds.has(k.id) ? "visibility_off" : "visibility"}
-                  </span>
-                </button>
-              </div>
-            </td>
+            <td class="px-4 py-3 font-sans font-medium text-text-main">{key.name}</td>
+            <td class="px-4 py-3 text-text-muted">{key.prefix}…</td>
             <td class="px-4 py-3">
-              <Badge tone={k.status === "active" ? "success" : "neutral"} size="sm" dot>
-                {k.status}
-              </Badge>
+              <Badge tone={key.status === "active" ? "success" : "neutral"} size="sm" dot>{key.status}</Badge>
             </td>
+            <td class="px-4 py-3 text-text-muted">{new Date(key.createdAt).toLocaleDateString()}</td>
             <td class="px-4 py-3 text-text-muted">
-              {new Date(k.createdAt).toLocaleDateString()}
+              {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : "Never"}
             </td>
+            <td class="px-4 py-3 text-text-muted">{key.requestsCount}</td>
             <td class="px-4 py-3 text-right">
               <div class="flex items-center justify-end gap-1.5 font-sans">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onclick={() => copySecret(k.id, k.secret)}
-                  title="Copy API Key"
-                >
-                  <span class="material-symbols-outlined text-[14px]">
-                    {copiedId === k.id ? "check" : "content_copy"}
-                  </span>
-                  <span>{copiedId === k.id ? "Copied" : "Copy"}</span>
-                </Button>
-                {#if k.id !== "key-default"}
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    class="text-red-400 hover:text-red-300"
-                    onclick={() => handleDeleteKey(k.id, k.name)}
-                    title="Revoke Key"
-                  >
-                    <span class="material-symbols-outlined text-[14px]">delete</span>
+                {#if key.status === "active"}
+                  <Button variant="ghost" size="xs" onclick={() => handleRename(key)} title="Rename key">
+                    <span class="material-symbols-outlined text-[14px]">edit</span>
+                  </Button>
+                  <Button variant="ghost" size="xs" onclick={() => handleRotate(key)} title="Rotate key">
+                    <span class="material-symbols-outlined text-[14px]">autorenew</span>
+                  </Button>
+                  <Button variant="ghost" size="xs" class="text-red-400 hover:text-red-300" onclick={() => handleRevoke(key)} title="Revoke key">
+                    <span class="material-symbols-outlined text-[14px]">block</span>
                   </Button>
                 {/if}
               </div>
@@ -190,79 +163,56 @@
           </tr>
         {/each}
         {#if keys.length === 0 && !loading}
-          <tr>
-            <td colspan="5" class="px-4 py-6 text-center text-text-muted font-sans">
-              No API keys configured. Using public gateway mode.
-            </td>
-          </tr>
+          <tr><td colspan="7" class="px-4 py-6 text-center text-text-muted font-sans">
+            No managed API keys have been created.
+          </td></tr>
+        {/if}
+        {#if loading}
+          <tr><td colspan="7" class="px-4 py-6 text-center text-text-muted font-sans">Loading keys…</td></tr>
         {/if}
       </tbody>
     </table>
   </div>
 </div>
 
-<!-- Create API Key Modal -->
 <Modal
   open={isCreateModalOpen}
-  title={createdKeyResult ? "API Key Created" : "Create New API Key"}
-  onclose={() => (isCreateModalOpen = false)}
+  title={createdKeyResult ? "Copy Your API Key" : "Create New API Key"}
+  onclose={closeModal}
 >
   {#if createdKeyResult}
     <div class="space-y-4">
-      <div class="p-3.5 rounded-[8px] bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 space-y-1">
-        <p class="font-bold flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-[16px]">check_circle</span>
-          <span>Copy your key now</span>
-        </p>
-        <p>This key will be masked after you close this modal.</p>
+      <div class="p-3.5 rounded-[8px] bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 space-y-1">
+        <p class="font-bold">This is the only time the full secret is available.</p>
+        <p>Copy it to your password manager or client now. AlphaWay stores only its hash.</p>
       </div>
-
       <div class="space-y-1.5">
         <span class="text-xs font-semibold text-text-muted">Secret API Key</span>
-        <div class="flex items-center gap-2 p-2.5 rounded-[8px] bg-surface-2 border border-border font-mono text-xs text-brand-400 break-all select-all">
-          <span>{createdKeyResult.secret}</span>
+        <div class="p-2.5 rounded-[8px] bg-surface-2 border border-border font-mono text-xs text-brand-400 break-all select-all">
+          {createdKeyResult.secret}
         </div>
       </div>
-
       <div class="flex justify-end gap-2 pt-2">
-        <Button
-          variant="primary"
-          onclick={() => {
-            if (createdKeyResult) copySecret(createdKeyResult.id, createdKeyResult.secret);
-            isCreateModalOpen = false;
-          }}
-        >
+        <Button variant="primary" onclick={() => copySecret(createdKeyResult!.secret)}>
           <span class="material-symbols-outlined text-[16px]">content_copy</span>
-          <span>Copy & Close</span>
+          <span>Copy & Select for Dashboard</span>
         </Button>
+        <Button variant="ghost" onclick={closeModal}>Close</Button>
       </div>
     </div>
   {:else}
-    <form
-      class="space-y-4"
-      onsubmit={(e) => {
-        e.preventDefault();
-        handleCreateKey();
-      }}
-    >
+    <form class="space-y-4" onsubmit={(event) => { event.preventDefault(); handleCreateKey(); }}>
       <div class="space-y-1.5">
-        <label for="new-key-name" class="text-xs font-semibold text-text-muted">Key Identifier / Name</label>
-        <input
-          id="new-key-name"
-          type="text"
-          bind:value={newKeyName}
-          placeholder="e.g. Cursor Pro Desktop, Cline CI, Work Laptop"
-          class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main focus:outline-hidden focus:border-brand-500"
-          required
-        />
+        <label for="new-key-name" class="text-xs font-semibold text-text-muted">Key label</label>
+        <input id="new-key-name" type="text" bind:value={newKeyName}
+          placeholder="e.g. Cursor Desktop, CI runner, Work Laptop"
+          maxlength="80" required
+          class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main focus:outline-hidden focus:border-brand-500" />
       </div>
-
       <div class="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" onclick={() => (isCreateModalOpen = false)}>
-          Cancel
-        </Button>
+        <Button variant="ghost" onclick={closeModal}>Cancel</Button>
         <Button variant="primary" type="submit" disabled={isCreating || !newKeyName.trim()}>
-          {isCreating ? "Generating..." : "Generate Key"}
+          {isCreating ? "Generating…" : "Generate Key"}
         </Button>
       </div>
     </form>

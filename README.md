@@ -22,10 +22,10 @@
   - **Caveman & ADHD Personas**: Concise, high-density responses with *Auto-Clarity Guard* that automatically disengages upon detecting sensitive or dangerous commands.
 - **SOUL.md Engine & Soul Studio (SoulSpec Standard)**:
   - **Persistent Personality Injection**: Anchor the AI model to a unified character sheet (`SOUL.md`), eradicating corporate fluff, sycophancy, and filler phrases across all tri-protocol endpoints.
-  - **Cascading Auto-Discovery**: Automatic hierarchical resolution: Local Project (`./SOUL.md`) → Global Default (`~/.alphaway/SOUL.md`) → Built-in Presets (`Atlas`, `Minimalist`, `Socratic`).
+  - **Cascading Auto-Discovery**: Automatic hierarchical resolution: Local Project (`./SOUL.md`) → Global Default (`$DATA_DIR/SOUL.md`, default `~/.alphaway/SOUL.md`) → Built-in Presets (`Atlas`, `Minimalist`, `Socratic`).
   - **Interactive Soul Studio**: Dashboard markdown editor with live token estimation and interactive prompt framing preview sandbox.
 - **Comprehensive 9Router-Go UI/UX Architecture (Svelte 5 + Tailwind CSS v4)**:
-  - **Endpoint View (`/dashboard/endpoint`)**: Origin endpoint (`http://127.0.0.1:20129/v1`), Cloudflare Named & Quick Tunnel status, API key gate switch, API key table management (issue, reveal, copy, revoke), and multi-client snippet tabs (Cursor, Continue, Claude Code, Roo-Code, Python, Node, cURL).
+  - **Endpoint View (`/dashboard/endpoint`)**: Origin endpoint (`http://127.0.0.1:20129/v1`), Cloudflare Named & Quick Tunnel status, API key gate switch, API key management (create, one-time display, copy, rotate, revoke), and multi-client snippet tabs (Cursor, Continue, Claude Code, Roo-Code, Python, Node, cURL).
   - **Providers & Custom Engines (`/dashboard/providers`)**: Dedicated control panels for OpenCode Free-Tier (8 models, dual-lane, BoringSSL 17 ciphers), CodeBuddy International (WorkBuddy 5.8.4 OAuth device login), and 3rd-Party Custom Providers (DeepSeek, Groq, Ollama, etc.).
   - **Usage & Token Analytics (`/dashboard/usage`)**: 5 KPI summary cards, pure SVG stacked area trend charts (24h, 7d, 30d), 3D breakdown table, 12-week GitHub-style heatmap, and request audit log table with clickable **Inspect Drawer Modal**.
   - **Quota & Rate Limit Tracker (`/dashboard/quota`)**: Real-time RPM/TPM capacity gauges, color-coded capacity progress bars, rolling session reset countdowns, and 30-second auto-refresh timer.
@@ -37,7 +37,7 @@
   - **Soul Studio (`/dashboard/soul`)**: In-browser personality editor with live token estimation and interactive prompt framing preview sandbox.
   - **Interactive Playground (`/dashboard/playground`)**: Multi-model prompt test suite with streaming SSE output and real-time reasoning content.
 - **Embedded SQLite Storage Engine**:
-  - Native Bun SQLite (`bun:sqlite`) ACID persistence with WAL mode concurrency (`~/.alphaway/alphaway.sqlite`).
+  - Native Bun SQLite (`bun:sqlite`) ACID persistence with WAL mode concurrency (`$DATA_DIR/db/data.sqlite`, default `~/.alphaway/db/data.sqlite`).
   - Indexed queries for request logs, custom providers, and settings with automated fallback and migration.
 - **100% Bun-Native Architecture & BoringSSL TLS Parity**:
   - Engineered from the ground up exclusively for the **Bun** runtime (zero Node.js dependencies, native `bun:sqlite` engine, and high-performance Hono on Bun HTTP).
@@ -127,14 +127,34 @@ alphaway.exe
 ## ⚙️ Environment Configuration (`.env`)
 
 ```ini
-# Standard API Key (default: sk-alphaway-free)
-API_KEY=sk-alphaway-free
+# 0. Persistent storage (9router-go-style path contract)
+# Default DATA_DIR: ~/.alphaway on Linux/macOS; %APPDATA%/AlphaWay on Windows.
+# Default DB_PATH: $DATA_DIR/db/data.sqlite.
+DATA_DIR=
+DB_PATH=
 
-# CodeBuddy International Credentials (optional, or login via OAuth)
+# Compatibility aliases for older AlphaWay service files and deployments.
+ALPHAWAY_STATE_DIR=
+ALPHAWAY_DB_PATH=
+
+# Optional legacy environment-managed inference key. Prefer dashboard-issued keys.
+API_KEY=
+BRIDGE_API_KEY=
+
+# Optional 32-byte AES-256-GCM master key (64 hex characters or base64).
+# When unset, AlphaWay creates $DATA_DIR/secret-encryption.key with mode 0600 on POSIX.
+# Back up this key separately from the SQLite database and encrypted backups.
+ALPHAWAY_ENCRYPTION_KEY=
+
+# Enable only behind a trusted reverse proxy that overwrites X-Forwarded-Proto.
+TRUST_PROXY=0
+
+# Optional legacy/environment override for the CodeBuddy upstream credential.
+# Dashboard/CLI OAuth tokens are stored encrypted in SQLite.
 CODEBUDDY_API_KEY=
 
-# Cloudflare Named Tunnel (optional for secure public access)
-PUBLIC_URL=https://gateway.example.com
+# Cloudflare Named Tunnel (optional)
+PUBLIC_URL=
 CLOUDFLARE_TUNNEL_TOKEN=
 CLOUDFLARE_TUNNEL_ID=
 CLOUDFLARE_ACCOUNT_TAG=
@@ -152,20 +172,45 @@ PORT=20129
 HOST=127.0.0.1
 ```
 
----
+## 🔐 First-Run Administrator Setup
 
+On first start, AlphaWay creates a one-time administrator bootstrap token in its state directory. In a second local terminal, print it with:
+
+```bash
+bun src/index.ts --show-admin-bootstrap-token
+```
+
+For a standalone executable, run the equivalent command with the executable path, for example `./alphaway --show-admin-bootstrap-token`. Enter the token in the dashboard, then create an administrator username and password (minimum 12 characters). The token is deleted after successful bootstrap; it is not available from an HTTP endpoint.
+
+All `/api/*` management endpoints require an administrator session. The session cookie is HttpOnly and SameSite=Strict. Gateway inference credentials are separate: create them in **Endpoint & Key**. A full API key is shown only once at creation or rotation; store it securely. Existing `API_KEY` and `BRIDGE_API_KEY` environment credentials remain supported for compatibility.
+
+CodeBuddy upstream credentials are separate from the AlphaWay gateway key. The dashboard OAuth flow and CLI OAuth login store the CodeBuddy token encrypted in SQLite; the HTTP polling response never returns the access token. `CODEBUDDY_API_KEY` remains an optional environment override for existing deployments. An explicit `x-codebuddy-api-key` may be sent per request when no server-side credential is configured. AlphaWay never forwards its gateway `Authorization` token as the CodeBuddy upstream credential.
+
+Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encrypted at rest with AES-256-GCM. When `ALPHAWAY_ENCRYPTION_KEY` is unset, AlphaWay generates `$DATA_DIR/secret-encryption.key` (default `~/.alphaway/secret-encryption.key`). Back up that file together with the database and encrypted backups; losing the encryption key makes encrypted credentials and snapshots unrecoverable. POSIX key-file permissions are restricted to the owner.
+
+AlphaWay uses SQLite as its sole persistent application-state store. Custom providers, API keys, authentication sessions, usage history, TokenSaver settings, and proxy configuration are stored in `$DATA_DIR/db/data.sqlite` (default `~/.alphaway/db/data.sqlite`); sensitive credentials are encrypted or hashed according to their role. See [DATABASE.md](DATABASE.md) for the complete path, permission, WAL, backup, restore, and maintenance contract.
+
+Destructive migration snapshots and manual physical backups are encrypted AES-256-GCM `.sqlite.awenc` files under the configured database directory’s `backups/` folder (default `$DATA_DIR/db/backups/`). Older plaintext migration snapshots and pre-restore copies are converted to encrypted envelopes during startup. Create a manual full-database snapshot with `bun run db:backup`; restore one with `bun run db:restore -- /path/to/backup.sqlite.awenc` after stopping all AlphaWay service instances. Restore validates the staged database with `PRAGMA quick_check` and preserves the existing database as an encrypted pre-restore snapshot. Windows ACL behavior for these files is not yet verified.
+
+For compatibility, an existing `$DATA_DIR/alphaway.sqlite` remains active while `$DATA_DIR/db/data.sqlite` is absent. This prevents an upgrade from silently creating an empty database. It is not moved automatically; use a verified backup and a deliberate offline migration to relocate it.
+
+Standalone JSON configuration-file import and recovery are not supported. AlphaWay does not scan for, import, modify, or delete old files such as `custom_providers.json`, `usage_stats.json`, `tokensaver.json`, or `proxy.json`. Such files from older installations remain untouched but are ignored. Export or recreate any required settings before moving to this SQLite-only version.
+
+Back up the SQLite database using `bun run db:backup` or a SQLite-aware procedure that accounts for WAL state. Keep `secret-encryption.key` together with the encrypted backup set; losing the key makes encrypted credentials and snapshots unrecoverable.
+
+---
 ## 🔌 Client Integration Guide (Tri-Protocol)
 
 ### 1. OpenAI Chat Completions Format
 Use the following settings in Cursor, Continue.dev, Cline, Roo-Code, or OpenAI SDKs:
 - **Base URL:** `http://127.0.0.1:20129/v1`
-- **API Key:** `sk-alphaway-free` (or match `API_KEY` in `.env`)
+- **API Key:** the key created in the authenticated dashboard
 - **Endpoint:** `POST http://127.0.0.1:20129/v1/chat/completions`
 
 ```bash
 curl -s http://127.0.0.1:20129/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-alphaway-free" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "model": "mimo-v2.6-flash-free",
     "messages": [{"role": "user", "content": "Hello AlphaWay!"}]
@@ -175,12 +220,12 @@ curl -s http://127.0.0.1:20129/v1/chat/completions \
 ### 2. Anthropic Claude Messages Format
 Can be invoked directly from Claude Code or Anthropic SDK:
 - **Endpoint:** `POST http://127.0.0.1:20129/v1/messages`
-- **Headers:** `x-api-key: sk-alphaway-free`, `anthropic-version: 2023-06-01`
+- **Headers:** `x-api-key: YOUR_API_KEY`, `anthropic-version: 2023-06-01`
 
 ```bash
 curl -s http://127.0.0.1:20129/v1/messages \
   -H "Content-Type: application/json" \
-  -H "x-api-key: sk-alphaway-free" \
+  -H "x-api-key: YOUR_API_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
     "model": "claude-3-7-sonnet",
@@ -191,18 +236,34 @@ curl -s http://127.0.0.1:20129/v1/messages \
 
 ### 3. OpenAI Codex Responses Format
 - **Endpoint:** `POST http://127.0.0.1:20129/response`
-- **Headers:** `Authorization: Bearer sk-alphaway-free`
+- **Headers:** `Authorization: Bearer YOUR_API_KEY`
 
 ```bash
 curl -s http://127.0.0.1:20129/response \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-alphaway-free" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "model": "mimo-v2.6-flash-free",
     "prompt": "Write a TypeScript function to reverse a string"
   }'
 ```
 
+### 4. CodeBuddy International Upstream
+
+CodeBuddy requests require two independent credentials: an AlphaWay gateway key and a CodeBuddy upstream token. The administrator can configure the upstream token through **Providers → CodeBuddy → OAuth Device Login** or keep using the `CODEBUDDY_API_KEY` environment override.
+
+```bash
+curl -s http://127.0.0.1:20129/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ALPHAWAY_API_KEY" \
+  -H "x-codebuddy-api-key: YOUR_CODEBUDDY_TOKEN" \
+  -d '{
+    "model": "cbai/deepseek-v4.1-flash",
+    "messages": [{"role": "user", "content": "Hello from AlphaWay"}]
+  }'
+```
+
+The `x-codebuddy-api-key` header is an optional per-request upstream override. It does not authenticate the caller; `Authorization` must still contain a valid AlphaWay gateway key. The upstream token is redacted from error bodies and is never returned by the OAuth polling endpoint.
 ---
 
 ## 🧪 Testing & Quality Standards

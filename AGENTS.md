@@ -50,7 +50,21 @@ bun src/index.ts --stop
 curl -fsSL https://raw.githubusercontent.com/Yoganataa/alphaway/main/install.sh | bash
 ```
 
-The installer stages the current TypeScript project, installs the frozen dependency graph, verifies the TLS fingerprint, builds the dashboard and standalone executable, and then swaps the application directory. By default, application files live in `~/.alphaway/app`; configuration and SQLite state remain under `~/.alphaway`. Use `BINDIR="$(mktemp -d)" SOURCE=local NO_START=1 bash install.sh` for an isolated install-only check from a local checkout.
+The installer stages the current TypeScript project, installs the frozen dependency graph, verifies the TLS fingerprint, builds the dashboard and standalone executable, and then swaps the application directory. By default, application files live in `~/.alphaway/app`; the database lives at `~/.alphaway/db/data.sqlite`, while `.env`, `secret-encryption.key`, daemon metadata, and proxy health state remain under `~/.alphaway`. `DATA_DIR` overrides the root and `DB_PATH` overrides the database file; both can be set in `.env`. `ALPHAWAY_STATE_DIR` and `ALPHAWAY_DB_PATH` remain compatibility aliases. Use `BINDIR="$(mktemp -d)" SOURCE=local NO_START=1 bash install.sh` for an isolated install-only check from a local checkout.
+
+### SQLite storage, backup, and restore
+
+AlphaWay uses SQLite as its only persistent application-state store. Read [DATABASE.md](DATABASE.md) before changing storage layout, migration, backup, or restore behavior. The default database is `$DATA_DIR/db/data.sqlite` (default data root `~/.alphaway`); do not assume the historical `alphaway.sqlite` filename.
+
+```bash
+# Create a full encrypted SQLite snapshot while AlphaWay is running
+bun run db:backup
+
+# Restore a verified encrypted snapshot only after stopping AlphaWay
+bun run db:restore -- /absolute/path/to/backup.sqlite.awenc
+```
+
+The encryption key at `$DATA_DIR/secret-encryption.key` must be backed up with the encrypted snapshot. Never copy a live WAL database by copying only its main `.sqlite` file. AlphaWay holds a compatibility lock at `$DATA_DIR/alphaway.lock` and a second lock beside the canonical `DB_PATH` file (`<database-path>.alphaway.lock`). Every server mode and every restore must acquire both; the restore lock is keyed to the actual destination path, including an optional CLI override. This prevents separate `DATA_DIR` roots from opening concurrent writers to the same SQLite file. Run one AlphaWay writer per database file; AlphaWay's schema is not interchangeable with 9router-go's schema even though both use SQLite.
 
 ### Compiling Standalone Executable
 ```bash

@@ -53,10 +53,6 @@ function getPublicEndpoint(): string {
   return withProto.replace(/\/+$/, "");
 }
 
-function getBridgeApiKey(): string {
-  return (process.env.BRIDGE_API_KEY || process.env.API_KEY || "").trim();
-}
-
 function resolveAssetPath(reqPath: string): string | null {
   const relativePath = reqPath === "/" ? "index.html" : reqPath.replace(/^\/+/, "");
   const resolved = path.resolve(DIST_DIR, relativePath);
@@ -108,18 +104,16 @@ dashboardRoute.get("*", (c) => {
 
   let html = fs.readFileSync(indexHtml, "utf8");
   const publicEp = getPublicEndpoint();
-  const apiKey = getBridgeApiKey();
   const host = c.req.header("host") || "127.0.0.1:20129";
   const endpointUrl = publicEp
     ? (publicEp.endsWith("/v1") ? publicEp : publicEp + "/v1")
     : `http://${host}/v1`;
-  const authText = apiKey ? "Wajib (dikonfigurasi via API_KEY)" : "Opsional (publik)";
+  const authText = "Wajib — buat API key melalui dashboard";
 
   const ssrSnippet = `
 <div id="ssr-metadata" style="display:none" aria-hidden="true">
   <span id="ssr-endpoint">${endpointUrl}</span>
   <span id="ssr-auth-text">${authText}</span>
-  <span id="ssr-api-key">${apiKey || "sk-alphaway-free"}</span>
   <input type="text" id="proxy-url" />
   <button id="save"></button>
   <div id="report" aria-live="polite"></div>
