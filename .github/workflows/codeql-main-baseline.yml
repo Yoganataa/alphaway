@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  security-events: read
 
 jobs:
   analyze:
@@ -32,6 +33,29 @@ jobs:
         with:
           output: sarif-results
           upload: never
+
+      - name: Export open CodeQL alerts for the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&per_page=100" > codeql-open-alerts.json 2> codeql-open-alerts-error.txt; then
+            jq '[.[] | select(.tool.name == "CodeQL")] | length' codeql-open-alerts.json > codeql-open-alerts-count.txt
+            jq -r '.[] | select(.tool.name == "CodeQL") | [.number, .rule.id, (.rule.security_severity_level // "none"), .most_recent_instance.location.path, .most_recent_instance.location.start_line, .html_url] | @tsv' codeql-open-alerts.json > codeql-open-alerts.tsv
+          else
+            echo "CodeQL alert API query failed; inspect the error artifact." > codeql-open-alerts-count.txt
+          fi
+
+      - name: Upload default-branch alert inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-main-open-alert-inventory-${{ matrix.language }}
+          path: |
+            codeql-open-alerts.json
+            codeql-open-alerts.tsv
+            codeql-open-alerts-count.txt
+            codeql-open-alerts-error.txt
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Upload SARIF diagnostics
         uses: actions/upload-artifact@v4
