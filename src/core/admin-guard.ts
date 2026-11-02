@@ -125,7 +125,7 @@ export async function readJsonRequestBody(req: any, maxBytes: number = MAX_ADMIN
     ? req.header("content-length")
     : raw?.headers?.get?.("content-length");
   if (contentLength != null && contentLength !== "") {
-    if (!/^\\d+$/.test(String(contentLength))) {
+    if (!/^\d+$/.test(String(contentLength))) {
       const error: any = new Error("Request Content-Length is invalid");
       error.statusCode = 400;
       throw error;
