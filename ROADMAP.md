@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Core implementation and in-repository hardening are implemented on `feat/phase-2-auth-admin-security`. The last completed CI run before the newest hardening commits was run `41375651424` (#212) on `a64bbe2311465db98f0b7da531c3d1ffa4167f80`: 332 unit/protocol tests and 8 dashboard E2E passed, along with build, installer smoke, and TLS fingerprint. Later commits add bounded re-reads for legacy backup/restore files, a 16 KiB streaming cap for public bootstrap/login JSON bodies, and bounded master-key/bootstrap-token file reads. CI on the final live head must be verified before merge. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and the independent security review decision.
+**Status:** Core implementation and in-repository hardening are implemented on `feat/phase-2-auth-admin-security`. Code head `c7f935e0fb823a28f087984dd5e801cb58ff4056` passed CI run `41376483078` (#222) on Bun 1.4.4: 335 unit/protocol tests, 8 dashboard E2E, standalone build, installer smoke, and TLS fingerprint passed. Current checkpoint/roadmap commits are documentation-only after that verified implementation head; re-check Actions on the live branch before merge. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and the independent security review decision.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -48,7 +48,7 @@
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- Last completed code+test verification before the subsequent body/key-file hardening commits: [`a64bbe2311465db98f0b7da531c3d1ffa4167f80`](https://github.com/Yoganataa/alphaway/commit/a64bbe2311465db98f0b7da531c3d1ffa4167f80), CI run [`41375651424`](https://github.com/Yoganataa/alphaway/actions/runs/41375651424) (#212): **332 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. Subsequent commits added bounded public auth request bodies and bounded sensitive-file reads; verify CI on the latest branch head before merge.
+- Verified implementation head [`c7f935e0fb823a28f087984dd5e801cb58ff4056`](https://github.com/Yoganataa/alphaway/commit/c7f935e0fb823a28f087984dd5e801cb58ff4056), CI run [`41376483078`](https://github.com/Yoganataa/alphaway/actions/runs/41376483078) (#222): **335 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. The optional live upstream gate drill was skipped by design.
 - Repository Ruleset `Protect main` is active and enforces the four required jobs with strict up-to-date checks. Its required approval count is 0 for the solo developer; no bypass actors are configured.
 - Do not merge PR #4 or begin Phase 3 until the preserve-and-skip exception is accepted by the project owner, the independent security review decision/findings are resolved, and CI is green on the final PR head.
 
