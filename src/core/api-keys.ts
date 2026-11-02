@@ -19,6 +19,11 @@ export interface APIKeyRecord {
   tokenQuota: number | null;
   allowedModels: string[] | null;
   totalTokensUsed: number;
+  effectiveRpmLimit: number;
+  effectiveTpmLimit: number;
+  effectiveConcurrencyLimit: number;
+  effectiveTokenQuota: number;
+  effectiveAllowedModels: string[];
 }
 
 export interface APIKeyCredential {
@@ -73,7 +78,35 @@ function toRecord(row: any): APIKeyRecord {
     tokenQuota: row.token_quota == null ? null : Number(row.token_quota),
     allowedModels: row.allowed_models == null ? null : (() => { try { const value = JSON.parse(row.allowed_models); return normalizeAllowedModels(value); } catch { return []; } })(),
     totalTokensUsed: Number(row.total_tokens_used || 0),
+    effectiveRpmLimit: row.rate_limit_rpm == null ? Number(row.plan_rpm_limit || 0) : Number(row.rate_limit_rpm),
+    effectiveTpmLimit: row.rate_limit_tpm == null ? Number(row.plan_tpm_limit || 0) : Number(row.rate_limit_tpm),
+    effectiveConcurrencyLimit: row.concurrency_limit == null ? Number(row.plan_concurrency_limit || 0) : Number(row.concurrency_limit),
+    effectiveTokenQuota: row.token_quota == null ? Number(row.plan_token_quota || 0) : Number(row.token_quota),
+    effectiveAllowedModels: effectiveModels(row.allowed_models, row.plan_allowed_models),
   };
+}
+
+
+const API_KEY_SELECT = `
+  SELECT k.*,
+    p.name AS plan_name,
+    p.rpm_limit AS plan_rpm_limit,
+    p.tpm_limit AS plan_tpm_limit,
+    p.concurrency_limit AS plan_concurrency_limit,
+    p.token_quota AS plan_token_quota,
+    p.allowed_models AS plan_allowed_models
+  FROM api_keys k
+  LEFT JOIN plans p ON p.id = k.plan_id
+`;
+
+function getAPIKeyRecordRow(id: string): any {
+  return getDatabase().prepare(API_KEY_SELECT + " WHERE k.id = ?").get(id);
+}
+
+function effectiveModels(keyModels: unknown, planModels: unknown): string[] {
+  const raw = keyModels !== null && keyModels !== undefined ? keyModels : planModels;
+  if (typeof raw !== "string" || !raw) return [];
+  try { return normalizeAllowedModels(JSON.parse(raw)); } catch { return []; }
 }
 
 function newSecret(): string {
@@ -82,7 +115,7 @@ function newSecret(): string {
 
 export function listAPIKeys(): APIKeyRecord[] {
   const rows = getDatabase().prepare(
-    "SELECT k.*, p.name AS plan_name FROM api_keys k LEFT JOIN plans p ON p.id = k.plan_id ORDER BY k.created_at DESC"
+    API_KEY_SELECT + " ORDER BY k.created_at DESC"
   ).all();
   return rows.map(toRecord);
 }
@@ -105,7 +138,7 @@ export function issueAPIKey(nameInput: string): IssuedAPIKey {
         ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, NULL, 0, NULL)
       `).run(id, name, prefix, salt, digest(secret, salt).toString("hex"), JSON.stringify(["inference"]), Date.now());
 
-      const row = db.prepare("SELECT * FROM api_keys WHERE id = ?").get(id);
+      const row = getAPIKeyRecordRow(id);
       return { record: toRecord(row), secret };
     } catch (error: any) {
       if (!String(error?.message || "").includes("UNIQUE")) throw error;
@@ -198,7 +231,7 @@ export function setAPIKeyPolicy(id: string, patch: APIKeyPolicyPatch): APIKeyRec
   db.prepare("UPDATE api_keys SET plan_id = ?, rate_limit_rpm = ?, rate_limit_tpm = ?, concurrency_limit = ?, token_quota = ?, allowed_models = ? WHERE id = ? AND status = 'active'")
     .run(planId, rpm, tpm, concurrency, tokenQuota, allowedModels, id);
 
-  const row = db.prepare("SELECT k.*, p.name AS plan_name FROM api_keys k LEFT JOIN plans p ON p.id = k.plan_id WHERE k.id = ?").get(id);
+  const row = getAPIKeyRecordRow(id);
   return row ? toRecord(row) : null;
 }
 
@@ -208,7 +241,7 @@ export function renameAPIKey(id: string, nameInput: string): APIKeyRecord | null
   const db = getDatabase();
   const result = db.prepare("UPDATE api_keys SET name = ? WHERE id = ? AND status = 'active'").run(name, id);
   if (!Number(result.changes || 0)) return null;
-  return toRecord(db.prepare("SELECT * FROM api_keys WHERE id = ?").get(id));
+  return toRecord(getAPIKeyRecordRow(id));
 }
 
 export function revokeAPIKey(id: string): boolean {
