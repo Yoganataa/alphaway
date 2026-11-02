@@ -4,7 +4,14 @@
 
 import { Hono } from "hono";
 import fs from "fs";
-import { getDatabase, getDbFilePath, dbGetSetting, dbSetSetting } from "../core/database";
+import {
+  getDatabase,
+  getDbFilePath,
+  getDatabaseStorageStats,
+  vacuumDatabase,
+  dbGetSetting,
+  dbSetSetting,
+} from "../core/database";
 import { getConsoleLogs, clearConsoleLogs, pushLog } from "../core/console-buffer";
 import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
 import { listAPIKeys, issueAPIKey, renameAPIKey, revokeAPIKey, rotateAPIKey } from "../core/api-keys";
@@ -220,48 +227,48 @@ settingsRoute.post("/api/console-logs/clear", (c) => {
   return c.json({ ok: true });
 });
 
-// GET /api/settings/database
-settingsRoute.get("/api/settings/database", (c) => {
+// Database diagnostics use the same stats/vacuum route contract as 9router-go.
+// Keep the original GET path for existing AlphaWay dashboard builds.
+function databaseStatsResponse(c: any) {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
 
-  const dbPath = getDbFilePath();
-  let fileSizeKb = 0;
-  if (fs.existsSync(dbPath)) {
-    try {
-      fileSizeKb = Math.round(fs.statSync(dbPath).size / 1024);
-    } catch {}
-  }
-
-  const db = getDatabase();
-  let requestLogsCount = 0;
-  let customProvidersCount = 0;
   try {
-    requestLogsCount = db.prepare("SELECT COUNT(*) as count FROM request_logs").get()?.count || 0;
-    customProvidersCount = db.prepare("SELECT COUNT(*) as count FROM custom_providers").get()?.count || 0;
-  } catch {}
+    const stats = getDatabaseStorageStats();
+    const db = getDatabase();
+    const journal = db.query("PRAGMA journal_mode;").get() as { journal_mode?: string };
+    const busyTimeout = db.query("PRAGMA busy_timeout;").get() as { timeout?: number; busy_timeout?: number };
+    return c.json({
+      engine: "Bun SQLite (native)",
+      mode: String(journal?.journal_mode || "").toUpperCase() === "WAL" ? "WAL (Write-Ahead Logging)" : String(journal?.journal_mode || "unknown"),
+      path: stats.path,
+      sizeKb: Math.round(stats.databaseSizeBytes / 1024),
+      ...stats,
+      journalMode: journal?.journal_mode || "unknown",
+      busyTimeoutMs: Number(busyTimeout?.timeout ?? busyTimeout?.busy_timeout ?? 5000),
+    });
+  } catch (error: any) {
+    return c.json({ error: error?.message || "Could not read SQLite database statistics" }, 500);
+  }
+}
 
-  return c.json({
-    engine: "Bun SQLite (native)",
-    mode: "WAL (Write-Ahead Logging)",
-    path: dbPath,
-    sizeKb: fileSizeKb,
-    requestLogsCount,
-    customProvidersCount,
-  });
-});
+settingsRoute.get("/api/settings/database", databaseStatsResponse);
+settingsRoute.get("/api/settings/database/stats", databaseStatsResponse);
 
 // POST /api/settings/database/vacuum
 settingsRoute.post("/api/settings/database/vacuum", (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
 
-  const db = getDatabase();
   try {
-    db.exec("VACUUM;");
-    pushLog("info", "[Database] SQLite VACUUM executed successfully");
-    return c.json({ ok: true, message: "Database vacuumed and indexes optimized." });
-  } catch (err: any) {
-    return c.json({ ok: false, error: err.message }, 500);
+    const stats = vacuumDatabase();
+    pushLog("info", "[Database] SQLite WAL checkpoint and VACUUM completed successfully");
+    return c.json({
+      ok: true,
+      message: "Database vacuumed and indexes optimized.",
+      ...stats,
+    });
+  } catch (error: any) {
+    return c.json({ ok: false, error: error?.message || "Database vacuum failed" }, 500);
   }
 });
