@@ -73,6 +73,9 @@ function normalizePlanInput(input: unknown, existing?: Plan): PlanInput {
     throw new Error("A Plan JSON object is required");
   }
   const source = input as Record<string, unknown>;
+  const allowedFields = new Set(["name", "description", "rpmLimit", "tpmLimit", "concurrencyLimit", "tokenQuota", "allowedModels"]);
+  const unknownFields = Object.keys(source).filter((key) => !allowedFields.has(key));
+  if (unknownFields.length) throw new Error("Unknown Plan field(s): " + unknownFields.join(", "));
   const rawName = source.name === undefined ? existing?.name : source.name;
   const name = typeof rawName === "string" ? rawName.trim() : "";
   if (!name || name.length > MAX_NAME_LENGTH || /[\u0000-\u001f\u007f]/.test(name)) {
