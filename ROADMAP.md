@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Core implementation and in-repository hardening are complete on `feat/phase-2-auth-admin-security`. Latest code head `b7b12eb6d48ca1fcc8db25b811c0c93456eef007` passed CI run `41371184264` on Bun 1.4.4; this verified head includes bounded login KDF work, SQLite residue cleanup, and migration v4 for legacy CodeBuddy credentials. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and independent security review. Documentation synchronization follows this code head.
+**Status:** Core implementation and in-repository hardening are complete on `feat/phase-2-auth-admin-security`. Latest code head `d4ef382c328ad3a26e2fa30f524bc3ade85c7828` passed CI run `41371688949` on Bun 1.4.4; this verified head includes bounded login KDF work, SQLite residue cleanup, migration v4 for legacy CodeBuddy credentials, and bounded legacy JSON reads. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and independent security review. Documentation synchronization follows this code head.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -21,6 +21,7 @@
 - [x] Make `/health` recognize an encrypted CodeBuddy credential without exposing its value.
 - [x] Add AES-GCM tests for nonce uniqueness, authenticated decryption/tamper rejection, symlink refusal, and POSIX owner-only key-file permissions.
 - [x] Refuse symlinked legacy JSON sources; open through no-follow descriptors, verify file identity, and atomically replace processed sources with encrypted rollback envelopes. Provide `--restore-legacy-backup` for operator recovery.
+- [x] Bound legacy JSON reads to 50 MiB plus one sentinel byte, even when a source grows after `fstat`; skip without parsing/replacing a changed or oversized source, and verify the file metadata remained stable during a successful read.
 - [x] Whitelist fields imported from legacy usage analytics, TokenSaver, and proxy configuration; discard unknown credential-bearing properties rather than persisting arbitrary JSON.
 - [x] Normalize and rewrite older SQLite analytics, TokenSaver, and proxy settings through allowlisted schemas before exposing them to application/dashboard code.
 - [x] Encrypt destructive-migration SQLite snapshots as AES-256-GCM `.sqlite.awenc` envelopes and migrate historical plaintext migration/pre-restore snapshots before they are used.
@@ -44,8 +45,8 @@
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- Code head `b7b12eb6d48ca1fcc8db25b811c0c93456eef007`, CI run [`41371184264`](https://github.com/Yoganataa/alphaway/actions/runs/41371184264): **330 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Installer smoke verified the encryption master-key file survived upgrade unchanged. Optional live upstream gate drill was skipped by design.
-- This verification predates the final `CHECKPOINT.md`/`ROADMAP.md` documentation synchronization commit. Confirm the latest PR-head CI run before considering merge.
+- Code head `d4ef382c328ad3a26e2fa30f524bc3ade85c7828`, CI run [`41371688949`](https://github.com/Yoganataa/alphaway/actions/runs/41371688949): **331 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Installer smoke verified the encryption master-key file survived upgrade unchanged. Optional live upstream gate drill was skipped by design.
+- This verification predates the final bounded-read documentation synchronization commit. Confirm the latest PR-head CI run before considering merge.
 - Do not merge PR #4 or begin Phase 3 until the preserve-and-skip exception is accepted by the project owner, independent security review is complete, and CI is green on the final PR head.
 
 **Acceptance criteria**
