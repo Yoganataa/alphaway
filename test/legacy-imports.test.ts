@@ -297,6 +297,44 @@ describe("legacy JSON import", () => {
   }));
 
 
+  it("uses bounded descriptor reads while securing and restoring legacy backups", () => withSandbox(false, ({ db, stateDir }) => {
+    const file = path.join(stateDir, "custom_providers.json");
+    writeJson(stateDir, "custom_providers.json", []);
+
+    const trackedDescriptors = new Set<number>();
+    const originalOpenSync = fs.openSync;
+    const originalReadFileSync = fs.readFileSync;
+    const mutableFs = fs as any;
+    mutableFs.openSync = function (filePath: any, ...args: any[]) {
+      const fd = originalOpenSync.call(fs, filePath, ...args);
+      if (typeof filePath === "string" && path.resolve(filePath) === path.resolve(file)) {
+        trackedDescriptors.add(fd);
+      }
+      return fd;
+    };
+    mutableFs.readFileSync = function (target: any, ...args: any[]) {
+      if (typeof target === "number" && trackedDescriptors.has(target)) {
+        throw new Error("Unbounded descriptor read is forbidden for legacy backup files");
+      }
+      return originalReadFileSync.call(fs, target, ...args);
+    };
+
+    const restoredPath = path.join(stateDir, "restored-bounded.json");
+    let reports: ReturnType<typeof importLegacyJson>;
+    try {
+      reports = importLegacyJson(db, stateDir, []);
+      restoreLegacyBackup(file, restoredPath);
+    } finally {
+      mutableFs.openSync = originalOpenSync;
+      mutableFs.readFileSync = originalReadFileSync;
+    }
+
+    expect(reports![0].status).toBe("imported");
+    expect(reports![0].details).toContain("Encrypted rollback copy retained");
+    expect(isEncryptedSecret(fs.readFileSync(file, "utf8").trim())).toBe(true);
+    expect(JSON.parse(fs.readFileSync(restoredPath, "utf8"))).toEqual([]);
+  }));
+
   it("refuses symlinked legacy JSON sources instead of reading through them", () => withSandbox(false, ({ db, stateDir }) => {
     const target = path.join(stateDir, "provider-data.json");
     const source = path.join(stateDir, "custom_providers.json");
