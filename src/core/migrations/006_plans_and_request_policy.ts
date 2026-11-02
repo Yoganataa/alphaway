@@ -25,6 +25,7 @@ export const plansAndRequestPolicyMigration: Migration = {
       );
 
       ALTER TABLE api_keys ADD COLUMN plan_id TEXT REFERENCES plans(id) ON DELETE RESTRICT;
+      ALTER TABLE api_keys ADD COLUMN total_tokens_used INTEGER NOT NULL DEFAULT 0 CHECK (total_tokens_used >= 0);
       ALTER TABLE api_keys ADD COLUMN rate_limit_rpm INTEGER CHECK (rate_limit_rpm IS NULL OR rate_limit_rpm >= 0);
       ALTER TABLE api_keys ADD COLUMN rate_limit_tpm INTEGER CHECK (rate_limit_tpm IS NULL OR rate_limit_tpm >= 0);
       ALTER TABLE api_keys ADD COLUMN concurrency_limit INTEGER CHECK (concurrency_limit IS NULL OR concurrency_limit >= 0);
