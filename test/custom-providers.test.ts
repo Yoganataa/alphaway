@@ -147,7 +147,8 @@ describe("3rd-Party Custom Providers Engine", () => {
       });
       expect(response.status).toBe(200);
       const body = await response.text();
-      expect(body).not.toContain(urlSecret);\n      expect(body).not.toContain(encodeURIComponent(urlSecret));
+      expect(body).not.toContain(urlSecret);
+      expect(body).not.toContain(encodeURIComponent(urlSecret));
       expect(body).toContain("[REDACTED]");
     } finally {
       globalThis.fetch = originalFetch;
