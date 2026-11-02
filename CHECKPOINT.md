@@ -6,9 +6,9 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest verified PR head:** `d5e177411d83d11789d17531e42856f40b729cab` on `feat/phase-2-auth-admin-security`; `main` remains `e2492fb3a995677d24f3078b7925a2c48c877ca7`.  
-> **Latest CI verification:** CI run [`41418380839`](https://github.com/Yoganataa/alphaway/actions/runs/41418380839) (#415) passed on Bun 1.4.4: **360 unit/protocol tests passed** across 33 files (4,982 assertions); **8 dashboard E2E tests passed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and TLS fingerprint (17 ciphers, 12 extensions) passed. Optional live upstream drill was skipped by design.  
-> **Latest CodeQL verification:** analysis run [`41418375820`](https://github.com/Yoganataa/alphaway/actions/runs/41418375820) (#200) completed JavaScript/TypeScript and Actions jobs successfully. CodeQL result check [`125187906695`](https://github.com/Yoganataa/alphaway/runs/125187906695) is **success: “No new alerts in code changed by this pull request.”** The newly introduced `js/clear-text-logging` flow from `CODEBUDDY_API_KEY` through JWT `sub` extraction to CLI logging was removed. The production Quick Tunnel URL-substring check was also replaced with parsed-host validation. The temporary SARIF diagnostic workflow has been removed.  
+> **Latest verified PR head:** `fa68cb719c06ca77ee49d23d64dacb527d721c99` on `feat/phase-2-auth-admin-security`; `main` remains `e2492fb3a995677d24f3078b7925a2c48c877ca7`.  
+> **Latest CI verification:** CI run [`41418911250`](https://github.com/Yoganataa/alphaway/actions/runs/41418911250) (#417) passed on Bun 1.4.4: **360 unit/protocol tests passed** across 33 files (4,982 assertions); **8 dashboard E2E tests passed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and TLS fingerprint (17 ciphers, 12 extensions) passed. Optional live upstream drill was skipped by design.  
+> **Latest CodeQL verification:** analysis run [`41418905660`](https://github.com/Yoganataa/alphaway/actions/runs/41418905660) (#202) completed JavaScript/TypeScript and Actions jobs successfully. CodeQL result check [`125189629753`](https://github.com/Yoganataa/alphaway/runs/125189629753) is **success: “No new alerts in code changed by this pull request.”** The newly introduced `js/clear-text-logging` flow from `CODEBUDDY_API_KEY` through JWT `sub` extraction to CLI logging was removed. The production Quick Tunnel URL-substring check was also replaced with parsed-host validation. The temporary SARIF diagnostic workflow has been removed.  
 > **Remaining review gate:** Independent human security review is still outstanding. Codex review and CodeQL are automated and do not substitute for that review. Do not merge PR #4 until review is completed and all findings are resolved.
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
@@ -245,7 +245,7 @@ test/verify-quick.test.ts
 
 ### Current Phase 2 work
 
-Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. The latest PR head `d5e177411d83d11789d17531e42856f40b729cab` has passing required CI #415 and a passing CodeQL result check with no new alerts. The blocking CodeQL clear-text logging finding was removed; production Quick Tunnel URL handling now validates the parsed hostname. Do not repeat these fixes.
+Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. The latest PR head `d5e177411d83d11789d17531e42856f40b729cab` has passing required CI #417 and a passing CodeQL result check with no new alerts. The blocking CodeQL clear-text logging finding was removed; production Quick Tunnel URL handling now validates the parsed hostname. Do not repeat these fixes.
 
 Next actions:
 1. Complete an independent security review of PR #4 and resolve any findings. The repository ruleset still uses zero approvals for the solo-developer workflow; this does not replace the independent review.
@@ -269,7 +269,7 @@ Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field 
 Lanjutkan AlphaWay dari repository https://github.com/Yoganataa/alphaway.
 Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Setelah itu periksa live main, branch feat/phase-2-auth-admin-security, PR #4, Ruleset Protect main, dan hasil GitHub Actions terbaru sebelum mengubah apa pun.
 
-Phase 0 PR #1 dan Phase 1 PR #3 sudah merged. PR #4 adalah satu-satunya PR aktif, target main, open dan draft. Latest verified head: d5e177411d83d11789d17531e42856f40b729cab. CI #415 passed on Bun 1.4.4 (360 unit/protocol tests, 4,982 assertions; 8 dashboard E2E tests, 52 assertions; build, installer smoke, and TLS fingerprint passed). CodeQL #200 completed successfully; result check 125187906695 says “No new alerts in code changed by this pull request.”
+Phase 0 PR #1 dan Phase 1 PR #3 sudah merged. PR #4 adalah satu-satunya PR aktif, target main, open dan draft. Latest verified head: d5e177411d83d11789d17531e42856f40b729cab. CI #415 passed on Bun 1.4.4 (360 unit/protocol tests, 4,982 assertions; 8 dashboard E2E tests, 52 assertions; build, installer smoke, and TLS fingerprint passed). CodeQL #202 completed successfully; result check 125187906695 says “No new alerts in code changed by this pull request.”
 
 The high-severity js/clear-text-logging finding was fixed by preventing CodeBuddy JWT subject claims derived from CODEBUDDY_API_KEY from being written to CLI logs. Cloudflare Quick Tunnel output now validates the parsed HTTPS URL hostname before logging the origin. The temporary SARIF diagnostic workflow was removed. Do not repeat these fixes.
 
