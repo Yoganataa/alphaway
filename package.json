@@ -38,7 +38,8 @@
     "README.md",
     "AGENTS.md",
     "install.sh",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "DATABASE.md"
   ],
   "keywords": [
     "alphaway",
