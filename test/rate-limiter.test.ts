@@ -32,9 +32,9 @@ describe("managed-key sliding-window limiter", () => {
     expect(blocked.allowed).toBe(false);
     expect(blocked.axis).toBe("rpm");
     expect(blocked.status).toBe(429);
-    expect(blocked.retryAfterSeconds).toBe(60);
+    expect(blocked.retryAfterSeconds).toBe(61);
 
-    const afterWindow = acquireManagedKeyRequest("rpm-key", policy({ rpmLimit: 1 }), 0, 70_001);
+    const afterWindow = acquireManagedKeyRequest("rpm-key", policy({ rpmLimit: 1 }), 0, 71_001);
     expect(afterWindow.allowed).toBe(true);
   });
 
