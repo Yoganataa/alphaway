@@ -31,7 +31,7 @@ function assertNoManagedDaemon(): void {
   }
 }
 
-const [command, ...args] = process.argv.slice(2);
+const [command, ...args] = process.argv.slice(2).filter((argument) => argument !== "--");
 
 if (command === "backup") {
   const db = getDatabase();
