@@ -524,6 +524,35 @@ function sseToOpenAIJson(sseText, model) {
  * Start CodeBuddy International Device OAuth flow.
  * Returns { state, authUrl } for the user to authenticate in browser.
  */
+const CODEBUDDY_OAUTH_DOMAINS = ["codebuddy.ai", "workbuddy.ai"] as const;
+
+/** Accept only HTTPS authorization links hosted by CodeBuddy/WorkBuddy domains. */
+export function validateCodebuddyAuthUrl(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
+    throw new Error("CodeBuddy returned an invalid authorization URL");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("CodeBuddy returned an invalid authorization URL");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  const trustedHost = CODEBUDDY_OAUTH_DOMAINS.some((domain) =>
+    hostname === domain || hostname.endsWith(`.${domain}`)
+  );
+  if (
+    parsed.protocol !== "https:" ||
+    !trustedHost ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    (parsed.port !== "" && parsed.port !== "443")
+  ) {
+    throw new Error("CodeBuddy returned an untrusted authorization URL");
+  }
+  return parsed.toString();
+}
+
 async function startCodebuddyOAuth() {
   const url = "https://www.codebuddy.ai/v2/plugin/auth/state?platform=ide";
   const headers = {
@@ -544,12 +573,18 @@ async function startCodebuddyOAuth() {
     throw new Error(`Failed to request CodeBuddy OAuth state: HTTP ${res.status}`);
   }
   const data = await res.json();
-  if (data.code !== 0 || !data.data?.state || !data.data?.authUrl) {
+  if (
+    data.code !== 0 ||
+    typeof data.data?.state !== "string" ||
+    data.data.state.length === 0 ||
+    data.data.state.length > 512 ||
+    !data.data?.authUrl
+  ) {
     throw new Error(`CodeBuddy OAuth state error: ${data.msg || "unknown error"}`);
   }
   return {
     state: data.data.state,
-    authUrl: data.data.authUrl,
+    authUrl: validateCodebuddyAuthUrl(data.data.authUrl),
   };
 }
 
