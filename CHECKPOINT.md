@@ -6,8 +6,8 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest CI-verified Phase 2 code HEAD: `3e0621d96714aa703d30c5bf43a837ea347fadd4` (run `41394994247`, #345).
-> **Latest implementation verification: code head `3e0621d96714aa703d30c5bf43a837ea347fadd4` passed run `41394994247` (#345): **346 unit/protocol tests passed, 0 failed** across 32 files (841 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed (17 cipher suites, 12 extensions). CodeQL run `41394989743` passed both JavaScript/TypeScript and Actions analysis jobs; the prior double-unescaping review thread in `src/core/storage-paths.ts` is resolved. The optional live upstream drill was skipped by design.
+> **Latest CI-verified Phase 2 code HEAD: `a69177726255ff1209251377a104f31a921a017c` (CI run `41404849359`, #375; CodeQL run `41404842132`).
+> **Latest implementation verification: code head `a69177726255ff1209251377a104f31a921a017c` passed CI run `41404849359` (#375): **351 unit/protocol tests passed, 0 failed** across 33 files (4,952 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed (17 cipher suites, 12 extensions). CodeQL run `41404842132` passed both JavaScript/TypeScript and Actions analysis jobs. The prior double-unescaping finding is resolved. The optional live upstream drill was skipped by design.
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -15,11 +15,11 @@
 
 ## 1. Current Status
 
-**Phase 0 and Phase 1 are complete and merged into `main`. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4.** The latest required CI and CodeQL analysis pass; do not begin Phase 3 or merge PR #4 until the independent security review is complete.
+**Phase 0 and Phase 1 are complete and merged into `main`. Phase 2 implementation and hardening are complete on `feat/phase-2-auth-admin-security` in draft PR #4; only independent human security review remains.** Latest required CI and CodeQL analysis pass. Do not begin Phase 3 or merge PR #4 until the independent security review is complete.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
-- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (core implementation and hardening complete; SQLite-only storage cleanup added, CI and independent security review remain).
+- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (implementation, hardening, CI, and CodeQL complete; independent human security review remains).
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
@@ -49,15 +49,20 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - Provider and CodeBuddy upstream diagnostic redaction covers raw, decoded, percent-encoded, Bearer-prefixed credentials; proxy connection-test diagnostics redact proxy authority credentials.
 - CodeBuddy OAuth returns no upstream access/refresh token to the browser; the dashboard uses the provider `state`/`authUrl` polling contract. The configured CodeBuddy token is read from encrypted SQLite or the environment override.
 - Bun test preload isolates SQLite state before importing app modules. Tests cover admin sessions, key lifecycle/scope/revocation, CSRF origin ports, analytics/settings allowlists, encrypted SQLite backups (including v1 restore compatibility and a 24 MiB streaming snapshot), v5 removal of the obsolete JSON-import ledger without losing canonical records, oversized proxy health caches, AES-GCM tamper rejection, nonce uniqueness, and POSIX key-file permissions.
+- Login-throttle capacity pressure fails closed: active per-username records are never evicted to make room for attacker-chosen usernames, preventing username spraying from resetting an account lockout.
+- Every server mode (foreground, daemon, systemd, and launchd) holds an exclusive `DATA_DIR/alphaway.lock`. Database restore acquires the same lock atomically, preventing replacement while a server is active and preventing server startup during restore. `alphaway.pid` remains daemon-only metadata.
+- Credential-transform migrations v2 and v4 are explicitly destructive and require encrypted pre-migration SQLite backups before changing existing credentials or managed keys.
+- Installer canonicalizes quoted and relative `DATA_DIR` values to an absolute path rooted at `BINDIR`, so service and manual starts use the same persistent directory.
 - Installer smoke verifies the encryption master-key file survives an upgrade unchanged.
 
 ### GitHub / CI state at checkpoint
 
-- PR #4 is the only open PR, targets `main`, and remains **draft**. It is mergeable but must not be merged or used to start Phase 3 until the independent security review is complete.
-- `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- Latest Phase 2 code head `3e0621d96714aa703d30c5bf43a837ea347fadd4` passed GitHub Actions [run `41394994247`](https://github.com/Yoganataa/alphaway/actions/runs/41394994247) (#345): **346 unit/protocol tests passed, 0 failed** across 32 files (841 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions) passed. Optional live upstream gate drill was skipped by design.
-- CodeQL run [`41394989743`](https://github.com/Yoganataa/alphaway/actions/runs/41394989743) passed JavaScript/TypeScript and Actions analysis. The prior CodeQL double-unescaping thread on `src/core/storage-paths.ts` was automatically resolved after replacing chained escape substitutions with a single-pass decoder and adding regression coverage.
-- No independent human security review has been submitted. The CodeQL review entry is automated and does not substitute for the independent security review required before merge.
+- PR #4 is the only open PR, targets `main`, and remains **draft**. It is mergeable but must not be merged or used to start Phase 3 until the independent human security review is complete.
+- Active branch head: `a69177726255ff1209251377a104f31a921a017c`; `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
+- Latest required CI run [`41404849359`](https://github.com/Yoganataa/alphaway/actions/runs/41404849359) (#375) passed on Bun 1.4.4: **351 unit/protocol tests, 0 failures** across 33 files (4,952 assertions); **8 dashboard E2E tests, 0 failures** (52 assertions); installer/embedded-dashboard smoke, UI/standalone build, and TLS fingerprint (17 ciphers/12 extensions) passed. Optional live upstream gate drill was skipped by design.
+- Latest CodeQL run [`41404842132`](https://github.com/Yoganataa/alphaway/actions/runs/41404842132) passed JavaScript/TypeScript and Actions analysis. The prior double-unescaping thread on `src/core/storage-paths.ts` is resolved.
+- The source review fixed additional issues: restore previously relied on a daemon-only PID file and could race a foreground/service-managed process; login throttle LRU eviction could discard active lockouts under username spraying; credential migrations v2/v4 did not require a pre-migration encrypted backup; and installer-relative/quoted `DATA_DIR` could resolve inconsistently. Regression tests and implementation fixes are committed.
+- No independent human security review has been submitted. The CodeQL bot review is automated and this implementation review is AI-assisted; neither is represented as an independent human review.
 - Repository Ruleset [`Protect main`](https://github.com/Yoganataa/alphaway/rules/26337025) is **active**, targets only `refs/heads/main`, and has an empty bypass list. It requires a PR, conversation resolution, up-to-date successful runs for the four required CI jobs (`Unit and protocol tests`, `Installer and embedded dashboard smoke test`, `UI and standalone binary build`, `Dashboard browser tests`), blocks branch deletion and force pushes, and requires zero approvals to support the solo-developer workflow. `current_user_can_bypass` is `never`.
 - The classic branch-protection endpoint is not readable by the GitHub integration (403); the active repository ruleset detail above is the source used to verify protection.
 - Windows ACL behavior for bootstrap/encryption-key files and SQLite backups is not verified. Keep it in Phase 7 hardening; POSIX `0600`/`0700` permissions are covered.
