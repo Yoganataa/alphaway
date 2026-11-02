@@ -87,17 +87,17 @@ describe("administrator authentication and managed gateway API keys", () => {
 
   it("bounds concurrent password KDF work and rechecks throttling after queueing", async () => {
     const username = `alphaway-parallel-${randomUUID()}`;
-    const attempts = Array.from({ length: 8 }, () => loginAdmin(username, "wrong-password"));
+    const attempts = Array.from({ length: 24 }, () => loginAdmin(username, "wrong-password"));
 
     const queued = __getLoginKdfStateForTests();
     expect(queued.active).toBe(queued.maxConcurrent);
-    expect(queued.queued).toBe(4);
+    expect(queued.queued).toBe(16);
     expect(queued.active).toBeLessThanOrEqual(queued.maxConcurrent);
     expect(queued.queued).toBeLessThanOrEqual(queued.maxQueued);
 
     const results = await Promise.all(attempts);
     expect(results.filter((result) => result.error === "invalid")).toHaveLength(1);
-    expect(results.filter((result) => result.error === "rate_limited")).toHaveLength(7);
+    expect(results.filter((result) => result.error === "rate_limited")).toHaveLength(23);
     expect(__getLoginKdfStateForTests()).toMatchObject({ active: 0, queued: 0 });
   });
 
