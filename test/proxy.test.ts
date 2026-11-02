@@ -690,14 +690,14 @@ describe("egress pool: health survives a restart", () => {
     const raw = fs.readFileSync(proxy.healthFile(), "utf8");
     if (process.platform !== "win32") assert.equal(fs.statSync(proxy.healthFile()).mode & 0o777, 0o600);
     // A second copy of every proxy token would be a second thing to leak. The
-    // record is keyed by an opaque hash of the egress identity, and the label
-    // carries only what `describe()` already exposes (host:port).
+    // ID is a keyed HMAC of the complete egress identity; the label carries only
+    // what `describe()` already exposes (host:port).
     assert.equal(raw.includes("secret"), false);
     assert.equal(raw.includes("user:"), false);
     assert.equal(raw.includes("http://"), false);
     const parsed = JSON.parse(raw);
     assert.equal(parsed.entries.length, 1);
-    assert.match(parsed.entries[0].id, /^[0-9a-f]{16}$/);
+    assert.match(parsed.entries[0].id, /^[0-9a-f]{32}$/);
   });
 
   it("ignores a corrupt health file instead of losing the pool", () => {

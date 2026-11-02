@@ -148,12 +148,13 @@ function generateHex32() {
 }
 
 /**
- * Stable UUID derived from session key to maintain prompt-cache affinity.
+ * Stable RFC 9562 UUIDv8 derived from a session key to maintain prompt-cache
+ * affinity. Version 8 permits a deterministic SHA-256-based custom layout.
  */
 function stableConversationUuid(seed) {
-  const hash = crypto.createHash("sha1").update(String(seed)).digest();
-  hash[6] = (hash[6] & 0x0f) | 0x50; // v5
-  hash[8] = (hash[8] & 0x3f) | 0x80; // variant
+  const hash = crypto.createHash("sha256").update(String(seed)).digest();
+  hash[6] = (hash[6] & 0x0f) | 0x80; // v8 custom UUID
+  hash[8] = (hash[8] & 0x3f) | 0x80; // RFC 4122/9562 variant
   const hex = hash.toString("hex").slice(0, 32);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
