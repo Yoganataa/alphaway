@@ -28,6 +28,8 @@ describe("CodeBuddy OAuth authorization URL validation", () => {
     const source = fs.readFileSync(path.resolve(import.meta.dir, "../src/providers/codebuddy.ts"), "utf8");
     expect(source).not.toContain("extractJwtSub(currentKey)");
     expect(source).not.toContain("Token saat ini terdeteksi untuk user:");
+    expect(source).not.toContain("extractJwtSub(pollRes.accessToken)");
+    expect(source).not.toContain("User ID (sub):");
     expect(source).toContain("Credential CodeBuddy saat ini sudah dikonfigurasi.");
   });
 
