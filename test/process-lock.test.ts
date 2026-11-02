@@ -36,11 +36,11 @@ describe("AlphaWay process/data-directory lock", () => {
   it("fails closed on a stale PID file instead of racing an automatic unlink", () => {
     const directory = useTemporaryDataDir();
     const lockPath = path.join(directory, "alphaway.pid");
-    fs.writeFileSync(lockPath, "2147483647\\n", { mode: 0o600 });
+    fs.writeFileSync(lockPath, "2147483647\n", { mode: 0o600 });
 
     expect(() => acquireAlphaWayProcessLock()).toThrow(/stale AlphaWay process lock/);
-    expect(fs.readFileSync(lockPath, "utf8")).toBe("2147483647\\n");
-  });;
+    expect(fs.readFileSync(lockPath, "utf8")).toBe("2147483647\n");
+  });
 
   it("refuses a symlink at the process lock path", () => {
     if (process.platform === "win32") return;
