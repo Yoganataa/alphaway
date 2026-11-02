@@ -51,6 +51,16 @@ describe("current AlphaWay installer and distribution contract", () => {
     expect(installer).toContain('MIN_BUN_VERSION="1.4.4"');
   });
 
+  it("uses the resolved DATA_DIR for daemon metadata and preserves one installer body", () => {
+    const installer = read("install.sh");
+    expect(installer).toContain('local pid_file="$DATA_DIR/alphaway.pid"');
+    expect(installer).toContain('local log_file="$DATA_DIR/alphaway.log"');
+    expect(installer).toContain('echo $! > "$DATA_DIR/alphaway.pid"');
+    expect(installer).not.toContain('local pid_file="$BINDIR/alphaway.pid"');
+    expect(installer.match(/stop_existing_services\(\) \{/g)?.length).toBe(1);
+    expect(installer.match(/say "AlphaWay is healthy"/g)?.length).toBe(1);
+  });
+
   it("retires legacy system and user services before replacing the installed app", () => {
     const installer = read("install.sh");
     const definitionAt = installer.indexOf("retire_legacy_systemd_services() {");
