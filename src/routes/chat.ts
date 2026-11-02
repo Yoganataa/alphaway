@@ -73,7 +73,7 @@ function policyRejection(c: any, protocol: GatewayProtocol, status: number, code
   c.set("policyRejected", true);
   if (retryAfter !== undefined) c.header("Retry-After", String(retryAfter));
   if (protocol === "anthropic") {
-    return c.json({ type: "error", error: { type: status === 403 ? "permission_error" : "rate_limit_error", code, message } }, status);
+    return c.json({ type: "error", error: { type: status === 403 ? "permission_error" : status === 503 ? "api_error" : "rate_limit_error", code, message } }, status);
   }
   return c.json({ error: { message, type: status === 403 ? "permission_error" : status === 503 ? "server_error" : "rate_limit_error", param: status === 403 ? "model" : null, code } }, status);
 }
