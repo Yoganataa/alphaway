@@ -74,8 +74,8 @@ function encryptDatabaseBackupFile(plainPath: string, outputPath: string): void 
 
     let position = 0;
     let plaintextCarry = Buffer.alloc(0);
-    while (true) {
-      const chunk = readAtMost(source.fd, position, FILE_CHUNK_BYTES);
+    while (position < source.stat.size) {
+      const chunk = readAtMost(source.fd, position, Math.min(FILE_CHUNK_BYTES, source.stat.size - position));
       if (chunk.length === 0) break;
       position += chunk.length;
       const combined = plaintextCarry.length ? Buffer.concat([plaintextCarry, chunk]) : chunk;
@@ -290,6 +290,9 @@ function readBackupPrefix(filePath: string): string {
 
 function encryptPlainDatabaseBackup(plainPath: string): string {
   const encryptedPath = plainPath + ".awenc";
+  if (fs.existsSync(encryptedPath)) {
+    throw new Error("Encrypted database backup destination already exists; refusing to overwrite it");
+  }
   const tempPath = encryptedPath + "." + randomUUID() + ".tmp";
   try {
     encryptDatabaseBackupFile(plainPath, tempPath);
