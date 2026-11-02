@@ -23,7 +23,7 @@ afterEach(() => {
 describe("AlphaWay process/data-directory lock", () => {
   it("allows only one server or restore process to hold the data directory", () => {
     const directory = useTemporaryDataDir();
-    const lockPath = path.join(directory, "alphaway.pid");
+    const lockPath = path.join(directory, "alphaway.lock");
     const release = acquireAlphaWayProcessLock();
 
     expect(fs.readFileSync(lockPath, "utf8").trim()).toBe(String(process.pid));
@@ -35,7 +35,7 @@ describe("AlphaWay process/data-directory lock", () => {
 
   it("fails closed on a stale PID file instead of racing an automatic unlink", () => {
     const directory = useTemporaryDataDir();
-    const lockPath = path.join(directory, "alphaway.pid");
+    const lockPath = path.join(directory, "alphaway.lock");
     fs.writeFileSync(lockPath, "2147483647\n", { mode: 0o600 });
 
     expect(() => acquireAlphaWayProcessLock()).toThrow(/stale AlphaWay process lock/);
@@ -45,7 +45,7 @@ describe("AlphaWay process/data-directory lock", () => {
   it("refuses a symlink at the process lock path", () => {
     if (process.platform === "win32") return;
     const directory = useTemporaryDataDir();
-    const lockPath = path.join(directory, "alphaway.pid");
+    const lockPath = path.join(directory, "alphaway.lock");
     const target = path.join(directory, "target");
     fs.writeFileSync(target, "2147483647\n");
     fs.symlinkSync(target, lockPath);
