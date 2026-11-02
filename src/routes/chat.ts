@@ -644,7 +644,14 @@ const handleResponses = async (c: any) => {
       throw new Error("Request body must be a JSON object");
     }
   } catch (err: any) {
-    return c.json({ error: { message: `Invalid JSON body: ${err.message}`, type: "invalid_request_error", code: "invalid_json" } }, 400);
+    const oversized = err?.statusCode === 413;
+    return c.json({
+      error: {
+        message: oversized ? "Request body exceeds the 10 MiB limit" : `Invalid JSON body: ${err.message}`,
+        type: "invalid_request_error",
+        code: oversized ? "request_too_large" : "invalid_json",
+      },
+    }, oversized ? 413 : 400);
   }
 
   if (!body.model || typeof body.model !== "string") {
