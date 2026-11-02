@@ -24,7 +24,9 @@
     "verify": "bun src/cli/verify.ts",
     "verify:quick": "bun src/cli/verify.ts --quick",
     "fingerprint": "bun src/core/transport-fingerprint.ts",
-    "fingerprint:check": "bun src/core/transport-fingerprint.ts --check"
+    "fingerprint:check": "bun src/core/transport-fingerprint.ts --check",
+    "db:backup": "bun src/cli/database.ts backup",
+    "db:restore": "bun src/cli/database.ts restore"
   },
   "engines": {
     "bun": ">=1.4.4"
