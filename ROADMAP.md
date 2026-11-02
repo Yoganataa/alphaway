@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Phase 2 implementation and hardening remain active on `feat/phase-2-auth-admin-security`. The SQLite-only backend and 9router-go-style `DATA_DIR`/`DB_PATH` storage contract at code head `3e0621d96714aa703d30c5bf43a837ea347fadd4` passed CI #345 (`41394994247`): 346 unit/protocol tests across 32 files (841 assertions), 8 dashboard E2E (52 assertions), UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint. CodeQL run `41394989743` passed both analysis jobs and the prior double-unescaping finding is resolved. Draft PR #4 remains open pending independent human security review. SQLite is the only persistent application-state backend.
+**Status:** Phase 2 implementation and hardening are complete on `feat/phase-2-auth-admin-security`; draft PR #4 remains open pending independent human security review. Code head `a69177726255ff1209251377a104f31a921a017c` passed CI #375 (`41404849359`): 351 unit/protocol tests across 33 files (4,952 assertions), 8 dashboard E2E (52 assertions), UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint. CodeQL run `41404842132` passed both analysis jobs. SQLite is the only persistent application-state backend.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -18,6 +18,12 @@
 - [x] Isolate Bun unit-test SQLite state using a preload before application modules are imported.
 - [x] Bound administrator login inputs and failed-login tracking memory; reject control characters in API-key labels.
 - [x] Bound administrator password KDF concurrency globally (4 active, 16 queued), reject queue overflow, and serialize KDF checks per username to prevent parallel throttle bypass.
+- [x] Preserve active per-username login-throttle records when the bounded map reaches capacity; reject new untracked usernames rather than evicting existing lockouts under username-spraying pressure.
+- [x] Hold a shared exclusive data-directory lock across foreground/daemon/systemd/launchd server lifetimes and database restore, preventing restore-vs-service races and startup during restore.
+- [x] Keep `alphaway.pid` daemon-only for existing `--status`/`--stop` behavior; use separate `alphaway.lock` for the shared process/restore lock.
+- [x] Mark credential-transform migrations v2 and v4 destructive so the migration runner requires an encrypted pre-migration SQLite snapshot before rewriting stored credentials or API keys.
+- [x] Canonicalize quoted and relative installer `DATA_DIR` values to an absolute directory rooted at `BINDIR` so systemd/launchd and manual starts resolve the same state root.
+- [x] Decode supported double-quoted `.env` escapes once and preserve unknown escape sequences; add regression tests for Windows-style paths, literal backslashes, newlines, unknown escapes, and escaped quotes.
 - [x] Cap all admin settings/configuration and OpenAI/Anthropic/Codex gateway JSON request bodies at 10 MiB using Content-Length validation and a streaming byte limit; oversized requests return 413 before JSON parsing or provider dispatch.
 - [x] Keep public administrator bootstrap/login request bodies on a stricter 16 KiB limit and reject oversized requests before parsing or password KDF work.
 - [x] Bound master encryption-key reads to exactly 32 bytes plus a sentinel and bootstrap-token file reads to 64 bytes; validate file identity/metadata and strict token format.
@@ -52,11 +58,12 @@
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- Verified implementation head [`3e0621d96714aa703d30c5bf43a837ea347fadd4`](https://github.com/Yoganataa/alphaway/commit/3e0621d96714aa703d30c5bf43a837ea347fadd4), CI run [`41394994247`](https://github.com/Yoganataa/alphaway/actions/runs/41394994247) (#345): **346 unit/protocol tests passed, 0 failed** across 32 files (841 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. The optional live upstream gate drill was skipped by design.
-- CodeQL run [`41394989743`](https://github.com/Yoganataa/alphaway/actions/runs/41394989743) passed JavaScript/TypeScript and Actions analysis. The previous double-unescaping thread in `src/core/storage-paths.ts` is resolved after the single-pass `.env` decoder change.
-- No independent human security review has been submitted. The automated CodeQL result does not satisfy the independent review requirement.
+- Verified implementation head [`a69177726255ff1209251377a104f31a921a017c`](https://github.com/Yoganataa/alphaway/commit/a69177726255ff1209251377a104f31a921a017c), CI run [`41404849359`](https://github.com/Yoganataa/alphaway/actions/runs/41404849359) (#375): **351 unit/protocol tests passed, 0 failed** across 33 files (4,952 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. The optional live upstream gate drill was skipped by design.
+- CodeQL run [`41404842132`](https://github.com/Yoganataa/alphaway/actions/runs/41404842132) passed JavaScript/TypeScript and Actions analysis. The previous double-unescaping finding in `src/core/storage-paths.ts` is resolved.
+- Source-review findings fixed on the active branch: restore-vs-live-service race, username-spraying lockout eviction, missing encrypted pre-migration backups for credential-transform migrations, and relative/quoted installer `DATA_DIR` inconsistency. Each fix has regression coverage or CI verification.
+- No independent human security review has been submitted. This AI-assisted source review and automated CodeQL analysis do not satisfy the independent human review requirement.
 - Repository Ruleset `Protect main` is active and enforces the four required jobs with strict up-to-date checks. Its required approval count is 0 for the solo developer; no bypass actors are configured.
-- Do not merge PR #4 or begin Phase 3 until the independent security review is complete, findings are resolved, and CI is green on the final PR head.
+- Do not merge PR #4 or begin Phase 3 until an independent human review is completed, any findings are resolved, and CI is green on the final PR head.
 
 **Acceptance criteria**
 
