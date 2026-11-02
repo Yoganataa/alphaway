@@ -611,8 +611,8 @@ export function dbInsertRequestLogWithSnapshot(entry: RequestLogRow, snapshot: u
       entry.clientApiKeyId ?? null
     );
     if (entry.clientApiKeyId) {
-      db.prepare("UPDATE api_keys SET total_tokens_used = total_tokens_used + ? WHERE id = ? AND status = ?")
-        .run(Math.max(0, Number(entry.totalTokens) || 0), entry.clientApiKeyId, "active");
+      db.prepare("UPDATE api_keys SET total_tokens_used = total_tokens_used + ? WHERE id = ?")
+        .run(Math.max(0, Number(entry.totalTokens) || 0), entry.clientApiKeyId);
     }
     upsert.run(JSON.stringify(snapshot), Date.now());
   });
