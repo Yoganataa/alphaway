@@ -322,7 +322,7 @@ export function dbInsertRequestLog(entry: RequestLogRow): void {
     INSERT INTO request_logs (
       id, timestamp, protocol, model, provider, status,
       latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream, client_api_key_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `);
   stmt.run(
     entry.id,
