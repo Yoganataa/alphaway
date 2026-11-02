@@ -16,6 +16,50 @@ describe("CodeBuddy OAuth authorization URL validation", () => {
       .toBe("https://login.workbuddy.ai/oauth/authorize");
   });
 
+  it("passes remote OAuth URLs as one argument without invoking a shell", () => {
+    const authUrl = "https://www.codebuddy.ai/oauth?next=$(touch%20/tmp/alphaway-shell-injection)";
+    const calls: Array<{ command: string; args: string[]; options: Record<string, unknown> }> = [];
+    let unrefCalled = false;
+    const fakeChild = {
+      on() { return this; },
+      unref() { unrefCalled = true; },
+    };
+
+    codebuddy.__openAuthUrlInBrowser(
+      authUrl,
+      (command: string, args: string[], options: Record<string, unknown>) => {
+        calls.push({ command, args, options });
+        return fakeChild;
+      },
+      "linux"
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].command).toBe("xdg-open");
+    expect(calls[0].args).toEqual([authUrl]);
+    expect(calls[0].options.shell).toBe(false);
+    expect(unrefCalled).toBe(true);
+  });
+
+  it("uses the Windows URL handler without passing the URL through cmd.exe", () => {
+    const authUrl = "https://www.codebuddy.ai/oauth?next=%60whoami%60";
+    let captured: { command: string; args: string[]; options: Record<string, unknown> } | null = null;
+
+    codebuddy.__openAuthUrlInBrowser(
+      authUrl,
+      (command: string, args: string[], options: Record<string, unknown>) => {
+        captured = { command, args, options };
+        return { on() { return this; }, unref() {} };
+      },
+      "win32"
+    );
+
+    expect(captured).not.toBeNull();
+    expect(captured!.command).toBe("rundll32.exe");
+    expect(captured!.args).toEqual(["url.dll,FileProtocolHandler", authUrl]);
+    expect(captured!.options.shell).toBe(false);
+  });
+
   it("rejects unsafe schemes, untrusted hosts, credentials, and nonstandard ports", () => {
     for (const value of [
       "javascript:alert(1)",
