@@ -26,7 +26,7 @@ import {
 } from "../src/core/database";
 
 describe("AlphaWay SQLite Database Engine", () => {
-  it("keeps the SQLite root stable when ALPHAWAY_HOME only identifies legacy JSON state", () => {
+  it("ignores retired ALPHAWAY_HOME and keeps the canonical SQLite state root", () => {
     const previous = {
       alphaWayHome: process.env.ALPHAWAY_HOME,
       stateDir: process.env.ALPHAWAY_STATE_DIR,
@@ -77,7 +77,7 @@ describe("AlphaWay SQLite Database Engine", () => {
     expect(tables).toContain("request_logs");
     expect(tables).toContain("app_settings");
     expect(tables).toContain("schema_migrations");
-    expect(tables).toContain("legacy_imports");
+    expect(tables).not.toContain("legacy_imports");
     expect(tables).toContain("api_keys");
     expect(tables).toContain("admin_users");
     expect(tables).toContain("admin_sessions");
@@ -85,7 +85,7 @@ describe("AlphaWay SQLite Database Engine", () => {
     const schemaVersion = db
       .prepare("SELECT MAX(version) AS version FROM schema_migrations")
       .get()?.version;
-    expect(schemaVersion).toBe(4);
+    expect(schemaVersion).toBe(5);
 
     const secureDelete = db.prepare("PRAGMA secure_delete").get();
     expect(Number(secureDelete?.secure_delete)).toBe(1);
