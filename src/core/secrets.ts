@@ -38,6 +38,14 @@ function configuredKey(): Buffer | null {
   return value;
 }
 
+function sameKeyFileSnapshot(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
 function readKeyFile(filePath: string): Buffer {
   const pathStat = fs.lstatSync(filePath);
   if (!pathStat.isFile() || pathStat.isSymbolicLink()) {
@@ -46,15 +54,34 @@ function readKeyFile(filePath: string): Buffer {
   const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
   const fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
   try {
-    const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || stat.dev !== pathStat.dev || stat.ino !== pathStat.ino) {
+    const opened = fs.fstatSync(fd);
+    if (!opened.isFile() || opened.dev !== pathStat.dev || opened.ino !== pathStat.ino) {
       throw new Error("Secret encryption key path changed while it was being opened");
     }
-    const value = fs.readFileSync(fd);
-    if (value.length !== KEY_BYTES) {
+    if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
+    // Establish a stable snapshot after permission hardening. The key must be
+    // exactly 32 bytes; read at most one sentinel byte beyond that limit.
+    const baseline = fs.fstatSync(fd);
+    if (!baseline.isFile() || baseline.size !== KEY_BYTES) {
       throw new Error("Secret encryption key file has an invalid length; restore the original key before continuing");
     }
-    if (process.platform !== "win32") fs.fchmodSync(fd, 0o600);
+    const value = Buffer.alloc(KEY_BYTES);
+    let offset = 0;
+    while (offset < KEY_BYTES) {
+      const bytesRead = fs.readSync(fd, value, offset, KEY_BYTES - offset, null);
+      if (bytesRead === 0) {
+        throw new Error("Secret encryption key file has an invalid length; restore the original key before continuing");
+      }
+      offset += bytesRead;
+    }
+    const sentinel = Buffer.alloc(1);
+    if (fs.readSync(fd, sentinel, 0, 1, null) !== 0) {
+      throw new Error("Secret encryption key file has an invalid length; restore the original key before continuing");
+    }
+    const afterRead = fs.fstatSync(fd);
+    if (!sameKeyFileSnapshot(baseline, afterRead)) {
+      throw new Error("Secret encryption key file changed while it was being read");
+    }
     return value;
   } finally {
     fs.closeSync(fd);
