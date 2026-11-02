@@ -115,7 +115,7 @@
 **3.1 — SQLite schema and policy model**
 - [ ] Add migration v6 with a reusable `plans` table and nullable `api_keys.plan_id` foreign-key assignment plus explicitly nullable per-key override columns.
 - [ ] Define and validate a typed Plan/PlanInput model: name, description, RPM, prompt TPM, concurrency, lifetime token quota, and allowed-model patterns.
-- [ ] Add a single `resolveEffectivePolicy` function with precedence: configured global defaults → assigned Plan → explicit key overrides. Unassigned/no-plan remains unrestricted.
+- [ ] Add a single `resolveEffectivePolicy` function with precedence: unrestricted system defaults (0) → assigned Plan → explicit key overrides. Unassigned/no-plan remains unrestricted.
 - [ ] Define model allowlist matching semantics (exact IDs and explicit wildcard rules); default empty list means unrestricted. Normalize aliases before evaluating the list.
 - [ ] Add transactional repository operations: create/list/get/update/delete Plans, count keys assigned to a Plan, and set/clear a managed key's Plan/overrides. Reject deleting a Plan while keys still reference it unless an explicit reassignment is part of the same transaction.
 - [ ] Cover migration from a v5 database, fresh database initialization, rollback on failure, and preservation of existing keys/usage/settings.
