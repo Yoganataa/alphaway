@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { getDatabase } from "./database";
 import { resolveEffectivePolicy } from "./policy";
+import { normalizeAllowedModels } from "./plans";
 
 export interface APIKeyRecord {
   id: string;
