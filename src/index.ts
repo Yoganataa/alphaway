@@ -67,8 +67,8 @@ Environment Variables:
 // 1. Handle Daemon CLI commands (--stop, --status, --daemon, -d)
 handleDaemonCli(PORT, HOST);
 
-// Acquire the process/data-directory lock before importing application modules,
-// which may initialize SQLite as part of route/provider setup.
+// Acquire the process and canonical database locks before importing application
+// modules, which may initialize SQLite as part of route/provider setup.
 const { app } = await import("./app");
 const { opencode } = await import("./providers");
 
