@@ -527,7 +527,7 @@ function sseToOpenAIJson(sseText, model) {
 const CODEBUDDY_OAUTH_DOMAINS = ["codebuddy.ai", "workbuddy.ai"] as const;
 
 /** Accept only HTTPS authorization links hosted by CodeBuddy/WorkBuddy domains. */
-export function validateCodebuddyAuthUrl(value: unknown): string {
+function validateCodebuddyAuthUrl(value: unknown): string {
   if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
     throw new Error("CodeBuddy returned an invalid authorization URL");
   }
@@ -792,6 +792,7 @@ if (require.main === module || process.argv.includes("--login-codebuddy") || pro
 }
 
 module.exports = {
+  validateCodebuddyAuthUrl,
   CODEBUDDY_INTL_URL,
   CODEBUDDY_MODELS,
   CODEBUDDY_UA,
