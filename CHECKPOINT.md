@@ -4,11 +4,12 @@
 >
 > **Checkpoint date:** 2026-11-02 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active workstream:** Phase 3 — Plans, Limits, and Request Enforcement (queued; implementation not started).
+> **Active branch:** `feat/phase-3-plans-limits-enforcement` (based on `main` at `a28ed9baef0c698ec879d649a24726706d1eee3d`).  
+> **Active workstream:** Phase 3 — Plans, Limits, and Request Enforcement. Scope audit is complete; implementation is beginning with the plan-policy schema and API.
 > **Phase 2 merge commit on `main`:** `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` (PR #4).  
 > **Latest merged Phase 2 code head:** `b057042362f6497852cb037ed7be2ec4c0aa63a4`; merged into `main` by `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9`.  
 > **Latest CI verification:** PR CI [#425](https://github.com/Yoganataa/alphaway/actions/runs/41442485797) passed on Phase 2 head `b057042`. Post-merge CI [#426](https://github.com/Yoganataa/alphaway/actions/runs/41448272244) passed on merge commit `dc08b6d`; all four mandatory jobs succeeded and the optional live upstream drill was skipped by design.  
-> **Latest CodeQL verification:** PR CodeQL [#210](https://github.com/Yoganataa/alphaway/actions/runs/41442479398) passed on `b057042`; default-branch CodeQL [#211](https://github.com/Yoganataa/alphaway/actions/runs/41448263339) passed on merge commit `dc08b6d` for JavaScript/TypeScript and Actions. Direct full SARIF [run #41426255599](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) on earlier remediated source head `ee317f3` returned zero results in both analyzers. The current open-alert count in GitHub Security was not independently accessible through this session and must not be assumed to be zero.  
+> **Latest CodeQL verification:** PR CodeQL [#210](https://github.com/Yoganataa/alphaway/actions/runs/41442479398) passed on `b057042`; default-branch CodeQL [#211](https://github.com/Yoganataa/alphaway/actions/runs/41448263339) passed on merge commit `dc08b6d` for JavaScript/TypeScript and Actions. Direct full SARIF [run #41426255599](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) on earlier remediated source head `ee317f3` returned zero results in both analyzers. GitHub Security screenshot supplied by the maintainer on 2026-11-02, filtered with `is:open branch:main`, shows **0 Open / 14 Closed**. Treat this as the current maintainer-confirmed alert inventory for `main`; re-check after future code changes.  
 > **Maintainer review decision:** This is a solo-developer repository with zero required approvals. The maintainer accepted residual review risk after passing CI/CodeQL evidence and resolution of all six inline review threads. No second human reviewer participated.  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (merged; merge commit `dc08b6d`).  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
@@ -17,12 +18,12 @@
 
 ## 1. Current Status
 
-**Phase 0, Phase 1, and Phase 2 are merged into `main`. Phase 2 PR #4 merged at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. PR CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. The previous 14-alert default-branch baseline was remediated in Phase 2; a separate current open-alert count still needs direct confirmation in GitHub Security. The solo maintainer accepted the review risk after all six inline review threads were resolved; no second human reviewer participated. Phase 3 is next but has not started.
+**Phase 0, Phase 1, and Phase 2 are merged into `main`. Phase 2 PR #4 merged at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. PR CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. The previous 14-alert default-branch baseline was remediated in Phase 2. The maintainer-provided GitHub Security screenshot filtered to `is:open branch:main` confirms **0 Open / 14 Closed** as of 2026-11-02. The solo maintainer accepted the review risk after all six inline review threads were resolved; no second human reviewer participated. Phase 3 is now active on `feat/phase-3-plans-limits-enforcement`.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
 - [x] Phase 2 — Authentication, API Keys, and Administrative Access (PR #4 merged; PR and post-merge CI/CodeQL checks passed).
-- [ ] Phase 3 — Plans, Limits, and Request Enforcement.
+- [ ] Phase 3 — Plans, Limits, and Request Enforcement (active; beginning with plan-policy persistence and admin API).
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
@@ -65,12 +66,38 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - Post-merge CI [#426](https://github.com/Yoganataa/alphaway/actions/runs/41448272244) passed on merge commit `dc08b6d`: unit/protocol tests, UI/standalone build, dashboard browser tests, and installer/embedded dashboard smoke all succeeded. The optional live upstream gate drill was skipped by design.
 - Default-branch CodeQL [#211](https://github.com/Yoganataa/alphaway/actions/runs/41448263339) passed both JavaScript/TypeScript and Actions jobs on merge commit `dc08b6d`.
 - The direct full SARIF scan at [run #41426255599](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) found zero results in both analyzers on the earlier remediated source head `ee317f3`. The PR and default-branch CodeQL workflows also passed on the later Phase 2 heads.
-- The original 14-alert inventory was captured on pre-merge `main` at `e2492fb`; corresponding remediations were included in PR #4. The current open-alert count was not available through this session's GitHub connector, so do not claim that the repository alert inventory is zero without checking GitHub Security.
+- The original 14-alert inventory was captured on pre-merge `main` at `e2492fb`; corresponding remediations were included in PR #4. The maintainer's GitHub Security screenshot on 2026-11-02, filtered to `is:open branch:main`, shows **0 Open / 14 Closed**.
 - All six inline review threads on PR #4 are resolved. The maintainer accepted residual review risk for the solo-developer workflow after checking CI/CodeQL evidence and the resolved threads; no second human reviewer participated.
 - Repository Ruleset [Protect main](https://github.com/Yoganataa/alphaway/rules/26337025) is active for `refs/heads/main`; it requires a PR, conversation resolution, four mandatory CI jobs with strict up-to-date checks, and blocks deletion/force pushes. It requires zero approvals.
 - Windows ACL behavior for generated bootstrap/encryption-key files and SQLite migration backups remains unverified and is deferred to Phase 7; POSIX `0600`/`0700` behavior is covered.
 
 ### Remaining Phase 2 gaps / boundaries
+
+### Active Phase 3 — initial source audit and policy contract
+
+**Starting point:** branch `feat/phase-3-plans-limits-enforcement`, based on protected `main` HEAD `a28ed9baef0c698ec879d649a24726706d1eee3d`. There were no open PRs before this branch was created.
+
+**Verified source findings:**
+- `src/core/api-keys.ts` stores hashed managed keys with `inference` scope, status, last-used timestamp, and all-time request count. It has no Plan assignment or per-key limits.
+- SQLite schema is at migration v5. `api_keys` has no plan or override columns; `request_logs` has no `api_key_id`, so historical usage cannot be attributed to a managed key.
+- `src/app.ts` authenticates managed and environment keys in one gateway middleware. Managed key usage is incremented at authentication time; the resolved key identity is not passed to request accounting.
+- `src/core/usage-tracker.ts` persists request logs, but streaming handlers in `src/routes/chat.ts` use placeholder completion-token estimates in some paths.
+- `src/client/components/QuotaTrackerView.svelte` computes synthetic RPM/TPM usage with `Math.random()`; it is not a real quota source.
+- `src/routes/settings.ts` contains the existing admin API-key CRUD routes. All `/api/*` routes are protected by the admin session middleware.
+- 9router-go's Plan reference models reusable templates with RPM, TPM, concurrency, token quota, UTC budget period, alert threshold, hard-cutoff behavior, and model allowlists. AlphaWay will adapt the behavior to its own Hono/SQLite contracts; it will not port Go code or schema.
+
+**Phase 3 policy decisions (initial contract):**
+- A Plan is a reusable policy template assigned to an individual managed API key. Budgets are per key, not a shared pool across all keys assigned to the same Plan.
+- Explicit per-key policy override > assigned Plan value > unlimited default. Nullable per-key override columns represent inheritance; numeric zero means unlimited.
+- Initial enforceable dimensions: requests per rolling minute (RPM), tokens per rolling minute (TPM), in-flight concurrency, token quota per daily/weekly/monthly/total period, and an optional model allowlist.
+- Period boundaries are UTC. Empty model allowlist means all models are permitted. Invalid/missing policy storage must fail closed rather than silently remove a restriction.
+- `hardCutoff` determines whether exhausted token budget blocks new requests; `alertPct` is an informational threshold for dashboard visibility, not a notification delivery system.
+- Existing environment-managed `API_KEY` / `BRIDGE_API_KEY` cannot be assigned a DB-backed plan and remain behavior-compatible. Existing managed keys with no Plan and no overrides remain unlimited.
+- Do not implement USD spending caps until AlphaWay has authoritative per-model pricing; the existing estimated-savings formula is not an acceptable billing source.
+- Usage attribution begins after migration and is not retroactively inferred for historical request rows.
+
+**Next implementation slice:** add SQLite migration v6 for Plans, managed-key plan assignment/nullable overrides, and request-log key attribution; implement validated plan CRUD and assignment APIs with regression tests. Then add the request-policy resolver/enforcement and replace the synthetic quota UI with real per-key data.
+
 
 - Standalone JSON file import/recovery is intentionally unsupported. AlphaWay uses SQLite as its only persistent application-state backend; old flat JSON files are ignored and left untouched. The v5 migration removes the obsolete import ledger without changing canonical SQLite data.
 - No Phase 2 implementation blocker remains. The solo maintainer accepted the residual review risk for this solo-developer workflow after all six inline review threads were resolved. Windows ACL verification remains deferred to Phase 7; per-key Plan assignment and quota enforcement belong to Phase 3.
@@ -248,18 +275,18 @@ test/verify-quick.test.ts
 Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. The direct full SARIF scan on earlier remediated source head `ee317f3` returned zero results for JavaScript/TypeScript and Actions. The current open-alert count must still be checked directly in GitHub Security. Do not repeat Phase 2 remediation work.
 
 Next actions:
-1. Phase 2 is merged. Before beginning Phase 3, verify the current open CodeQL alert inventory in GitHub Security; do not infer a zero count from workflow success alone.
+1. Phase 2 is merged. Current maintainer screenshot confirms CodeQL `main` is 0 Open / 14 Closed (2026-11-02). Re-check CodeQL after the Phase 3 branch changes land.
 2. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
-3. Merge the checkpoint/roadmap refresh PR before beginning Phase 3. Do not reopen or recreate Phase 2 work unless a verified regression is found.
+3. Phase 3 is now active on `feat/phase-3-plans-limits-enforcement`. Complete plan policy persistence/API first, then policy resolution and request enforcement, followed by dashboard integration. Do not reopen or recreate Phase 2 work unless a verified regression is found.
 
-Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
+Phase 3 policy contract: a Plan is a reusable policy template. Per-key explicit overrides take precedence over assigned Plan values; absent values inherit. Numeric zero means unlimited; a nullable key override distinguishes inheritance from an explicit unlimited override. Plan period boundaries are UTC. Existing unmanaged environment API keys and managed keys without a Plan/overrides retain legacy-unlimited behavior. Do not introduce USD billing limits without authoritative pricing data.
 ## 6. Working Rules for the Next Session
 
 - Read `CHECKPOINT.md` first, then `ROADMAP.md`, then inspect live GitHub state.
 - The live repository/PR state takes precedence over this checkpoint if newer commits exist.
 - Keep backend runtime Bun + TypeScript + Hono. Preserve OpenCode TLS/BoringSSL behavior and all documented gateway protocols.
 - Do not weaken or remove tests to make CI green. Do not claim tests/builds/CI passed unless the actual result was inspected.
-- Work only on the active phase. Phase 2 is merged; Phase 3 is next. Do not begin Phase 3 until the checkpoint/roadmap refresh PR is merged and the live repository/CodeQL state has been checked.
+- Work only on Phase 3 on `feat/phase-3-plans-limits-enforcement`. Phase 2 is merged and CodeQL on `main` is confirmed at 0 Open / 14 Closed by the maintainer screenshot. Do not repeat Phase 0–2 work.
 - Update this checkpoint and the roadmap after meaningful work, including branch/PR state, changed paths, verification evidence, open risks, and exact next action.
 - If work is interrupted, leave a committed state and an accurate checkpoint; do not claim background work.
 
@@ -275,5 +302,5 @@ Phase 2 mencakup admin bootstrap/session, managed API key lifecycle, gateway/adm
 
 Backend tetap Bun 1.4.4 + TypeScript + Hono. SQLite adalah satu-satunya persistent application-state backend; jangan menambahkan importer atau recovery berbasis JSON. Plan assignment dan quota enforcement termasuk Phase 3. Windows ACL verification tetap di Phase 7.
 
-Phase 3 — Plans, Limits, and Request Enforcement — adalah fase berikutnya, tetapi belum dimulai. Periksa status live dan verifikasi open CodeQL alerts terlebih dahulu. Pertahankan perubahan minimal, jangan ulangi pekerjaan Phase 0–2, dan update CHECKPOINT.md serta ROADMAP.md setiap ada perubahan fase yang bermakna.
+Phase 3 — Plans, Limits, and Request Enforcement — sedang dikerjakan pada branch `feat/phase-3-plans-limits-enforcement`, dari base `a28ed9b`. Source audit: managed API keys saat ini hanya memiliki scopes/lifecycle/counter; belum ada plan table, api_key_id attribution in request_logs, limit enforcement, atau Plan UI. QuotaTrackerView masih mensimulasikan RPM/TPM dengan Math.random dan harus diganti dengan pengukuran tersimpan. Ikuti acceptance criteria Phase 3 di ROADMAP.md. Gunakan SQLite migrations, pertahankan Bun 1.4.4 + TypeScript + Hono, dan jangan ulangi pekerjaan Phase 0–2.
 ```
