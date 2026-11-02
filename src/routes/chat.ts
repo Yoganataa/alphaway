@@ -37,6 +37,10 @@ import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
 import { isModelAllowedByPolicy, type EffectivePolicy } from "../core/policy";
 import { acquireManagedKeyRequest, type PolicyGateResult } from "../core/rate-limiter";
 
+function estimateTokensFromCharacterCount(characters: number): number {
+  return characters > 0 ? Math.max(1, Math.ceil(characters / 3.8)) : 0;
+}
+
 function computePromptChars(messages: any[]): number {
   if (!Array.isArray(messages)) return 0;
   return messages.reduce((acc, m) => {
@@ -455,7 +459,7 @@ function trackOpenAIStreamingUsage(
   },
 ): Response {
   const source = response.body;
-  let completionText = "";
+  let completionCharacters = 0;
   let buffer = "";
   let finalized = false;
   const decoder = new TextDecoder();
@@ -468,9 +472,9 @@ function trackOpenAIStreamingUsage(
     try {
       const event = JSON.parse(payload);
       const content = event?.choices?.[0]?.delta?.content;
-      if (typeof content === "string") completionText += content;
+      if (typeof content === "string") completionCharacters += content.length;
       else if (Array.isArray(content)) {
-        for (const part of content) if (typeof part?.text === "string") completionText += part.text;
+        for (const part of content) if (typeof part?.text === "string") completionCharacters += part.text.length;
       }
     } catch {}
   };
@@ -486,7 +490,7 @@ function trackOpenAIStreamingUsage(
       status: response.status,
       latencyMs: Date.now() - usage.startedAt,
       promptTokens: usage.promptTokens,
-      completionTokens: estimateTokensFromText(completionText),
+      completionTokens: estimateTokensFromCharacterCount(completionCharacters),
       savedTokens: usage.savedTokens,
       stream: true,
     });
@@ -779,8 +783,7 @@ const handleAnthropicMessages = async (c: any) => {
     return streamSSE(c, async (stream) => {
       let started = false;
       let buffer = "";
-      let completionText = "";
-      let tokenCount = 0;
+      let completionCharacters = 0;
 
       try {
         while (true) {
@@ -803,8 +806,7 @@ const handleAnthropicMessages = async (c: any) => {
                     await stream.write(frames.start());
                     started = true;
                   }
-                  completionText += deltaContent;
-                  tokenCount = estimateTokensFromText(completionText);
+                  completionCharacters += deltaContent.length;
                   await stream.write(frames.delta(deltaContent));
                 }
               } catch {}
@@ -815,7 +817,7 @@ const handleAnthropicMessages = async (c: any) => {
         if (!started) {
           await stream.write(frames.start());
         }
-        await stream.write(frames.end(tokenCount));
+        await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
         recordRequestUsage({
           clientApiKeyId: c.get("managedApiKeyId") ?? null,
@@ -825,7 +827,7 @@ const handleAnthropicMessages = async (c: any) => {
           status: 200,
           latencyMs: Date.now() - startTime,
           promptTokens,
-          completionTokens: estimateTokensFromText(completionText),
+          completionTokens: estimateTokensFromCharacterCount(completionCharacters),
           savedTokens,
           stream: true,
         });
@@ -947,8 +949,7 @@ const handleResponses = async (c: any) => {
 
     return streamSSE(c, async (stream) => {
       let buffer = "";
-      let completionText = "";
-      let tokenCount = 0;
+      let completionCharacters = 0;
 
       try {
         while (true) {
@@ -967,15 +968,14 @@ const handleResponses = async (c: any) => {
                 const parsed = JSON.parse(dataStr);
                 const deltaContent = parsed.choices?.[0]?.delta?.content;
                 if (deltaContent) {
-                  completionText += deltaContent;
-                  tokenCount = estimateTokensFromText(completionText);
+                  completionCharacters += deltaContent.length;
                   await stream.write(frames.delta(deltaContent));
                 }
               } catch {}
             }
           }
         }
-        await stream.write(frames.end(tokenCount));
+        await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
         recordRequestUsage({
           clientApiKeyId: c.get("managedApiKeyId") ?? null,
@@ -985,7 +985,7 @@ const handleResponses = async (c: any) => {
           status: 200,
           latencyMs: Date.now() - startTime,
           promptTokens,
-          completionTokens: estimateTokensFromText(completionText),
+          completionTokens: estimateTokensFromCharacterCount(completionCharacters),
           savedTokens,
           stream: true,
         });
