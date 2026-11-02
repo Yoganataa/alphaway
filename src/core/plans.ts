@@ -14,6 +14,7 @@ export interface Plan {
   rpmLimit: number;
   tpmLimit: number;
   concurrencyLimit: number;
+  tokenQuota: number;
   allowedModels: string[];
   createdAt: number;
   updatedAt: number;
@@ -25,6 +26,7 @@ export interface PlanInput {
   rpmLimit: number;
   tpmLimit: number;
   concurrencyLimit: number;
+  tokenQuota: number;
   allowedModels: string[];
 }
 
@@ -89,6 +91,7 @@ function normalizePlanInput(input: unknown, existing?: Plan): PlanInput {
     rpmLimit: normalizeLimit(source.rpmLimit, "rpmLimit", existing?.rpmLimit ?? 0),
     tpmLimit: normalizeLimit(source.tpmLimit, "tpmLimit", existing?.tpmLimit ?? 0),
     concurrencyLimit: normalizeLimit(source.concurrencyLimit, "concurrencyLimit", existing?.concurrencyLimit ?? 0),
+    tokenQuota: normalizeLimit(source.tokenQuota, "tokenQuota", existing?.tokenQuota ?? 0),
     allowedModels: normalizeAllowedModels(rawModels),
   };
 }
@@ -108,13 +111,14 @@ function mapPlan(row: any): Plan {
     rpmLimit: Number(row.rpm_limit || 0),
     tpmLimit: Number(row.tpm_limit || 0),
     concurrencyLimit: Number(row.concurrency_limit || 0),
+    tokenQuota: Number(row.token_quota || 0),
     allowedModels,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
   };
 }
 
-const PLAN_COLUMNS = "id, name, description, rpm_limit, tpm_limit, concurrency_limit, allowed_models, created_at, updated_at";
+const PLAN_COLUMNS = "id, name, description, rpm_limit, tpm_limit, concurrency_limit, token_quota, allowed_models, created_at, updated_at";
 
 export function listPlans(): Plan[] {
   return getDatabase().prepare(`SELECT ${PLAN_COLUMNS} FROM plans ORDER BY created_at ASC, name COLLATE NOCASE ASC`)
@@ -132,9 +136,9 @@ export function createPlan(input: unknown): Plan {
   const now = Date.now();
   const db = getDatabase();
   db.prepare(`
-    INSERT INTO plans (id, name, description, rpm_limit, tpm_limit, concurrency_limit, allowed_models, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, value.name, value.description, value.rpmLimit, value.tpmLimit, value.concurrencyLimit, JSON.stringify(value.allowedModels), now, now);
+    INSERT INTO plans (id, name, description, rpm_limit, tpm_limit, concurrency_limit, token_quota, allowed_models, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, value.name, value.description, value.rpmLimit, value.tpmLimit, value.concurrencyLimit, value.tokenQuota, JSON.stringify(value.allowedModels), now, now);
   return getPlan(id)!;
 }
 
@@ -144,9 +148,9 @@ export function updatePlan(id: string, input: unknown): Plan | null {
   const value = normalizePlanInput(input, existing);
   const result = getDatabase().prepare(`
     UPDATE plans SET name = ?, description = ?, rpm_limit = ?, tpm_limit = ?,
-      concurrency_limit = ?, allowed_models = ?, updated_at = ?
+      concurrency_limit = ?, token_quota = ?, allowed_models = ?, updated_at = ?
     WHERE id = ?
-  `).run(value.name, value.description, value.rpmLimit, value.tpmLimit, value.concurrencyLimit, JSON.stringify(value.allowedModels), Date.now(), id);
+  `).run(value.name, value.description, value.rpmLimit, value.tpmLimit, value.concurrencyLimit, value.tokenQuota, JSON.stringify(value.allowedModels), Date.now(), id);
   if (!Number(result.changes || 0)) return null;
   return getPlan(id);
 }
