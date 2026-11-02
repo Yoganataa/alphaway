@@ -3,10 +3,8 @@
  */
 
 import { Hono } from "hono";
-import fs from "fs";
 import {
   getDatabase,
-  getDbFilePath,
   getDatabaseStorageStats,
   vacuumDatabase,
   dbGetSetting,
