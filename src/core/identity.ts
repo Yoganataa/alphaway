@@ -132,12 +132,9 @@ function getSourceCacheFile() {
 
 function ensureCatalogCacheDirectory(dir) {
   const fs = require("fs");
-  const usesDefaultDataDir = process.env.OPENCODE_CACHE_DIR === undefined;
-  if (usesDefaultDataDir) ensurePrivateDirectory(resolveDataDir());
+  ensurePrivateDirectory(resolveDataDir());
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  if (usesDefaultDataDir && process.platform !== "win32") {
-    fs.chmodSync(dir, 0o700);
-  }
+  if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
 }
 const BOOT_FETCH = global.fetch;
 const CATALOG_CACHE_DIR = getCatalogCacheDir();
