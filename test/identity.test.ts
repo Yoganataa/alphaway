@@ -641,9 +641,14 @@ describe("identity: self-healing on gate rejection", () => {
       const sha = "d4a6223d017e17f1beaa91d3e6ecc6511c5132ad";
       const extracted = { sessionPrefix: "ses_", tools: identity.DEFAULT_TOOLS };
       identity.writeCachedSource(sha, extracted);
-      const cachePath = path.join(tmpDir, "cache", "source-recipe.json");
+      const cacheDir = path.join(tmpDir, "cache");
+      const cachePath = path.join(cacheDir, "source-recipe.json");
       assert.equal(fs.existsSync(cachePath), true);
       assert.equal(identity.readCachedSource(sha)?.ref, sha);
+      if (process.platform !== "win32") {
+        assert.equal(fs.statSync(tmpDir).mode & 0o777, 0o700);
+        assert.equal(fs.statSync(cacheDir).mode & 0o777, 0o700);
+      }
     } finally {
       if (previousDataDir === undefined) delete process.env.DATA_DIR;
       else process.env.DATA_DIR = previousDataDir;
