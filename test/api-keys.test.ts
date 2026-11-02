@@ -88,9 +88,6 @@ describe("administrator authentication and managed gateway API keys", () => {
   it("bounds global password KDF concurrency and queue size", async () => {
     const usernames = Array.from({ length: 24 }, () => `aw-p-${randomUUID().slice(0,12)}`);
     const attempts = usernames.map((username) => loginAdmin(username, "wrong-password"));
-    // loginAdmin awaits the slot-acquisition promise before starting KDF work.
-    await Promise.resolve();
-
     const queued = __getLoginKdfStateForTests();
     expect(queued.active).toBe(queued.maxConcurrent);
     expect(queued.queued).toBe(queued.maxQueued);
@@ -106,8 +103,6 @@ describe("administrator authentication and managed gateway API keys", () => {
   it("serializes concurrent password checks for the same username", async () => {
     const username = `aw-s-${randomUUID().slice(0,12)}`;
     const attempts = Array.from({ length: 8 }, () => loginAdmin(username, "wrong-password"));
-    await Promise.resolve();
-
     const queued = __getLoginKdfStateForTests();
     expect(queued.active).toBe(1);
     expect(queued.queued).toBe(0);
