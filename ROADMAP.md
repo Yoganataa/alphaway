@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Core implementation and in-repository hardening are implemented on `feat/phase-2-auth-admin-security`. Code head `bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d` passed CI run `41384043687` (#250) on Bun 1.4.4: 340 unit/protocol tests, 8 dashboard E2E, standalone build, installer smoke, and TLS fingerprint passed. The new hardening caps all admin/configuration and gateway JSON request bodies at 10 MiB with a streaming limit while retaining a stricter 16 KiB public admin-auth cap. Current checkpoint/roadmap commits are documentation-only after that verified implementation head; re-check Actions on the live branch before merge. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and the independent security review decision.
+**Status:** Phase 2 implementation and hardening remain active on `feat/phase-2-auth-admin-security`. Existing code head `bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d` passed CI #250; the current SQLite-only persistence cleanup (schema v5, importer/CLI removal and tests) is awaiting CI. Draft PR #4 remains open pending independent security review. SQLite is the only persistent application-state backend.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -24,9 +24,8 @@
 - [x] Bound proxy health cache reads to 1 MiB using no-follow descriptors and metadata checks, and cap the in-memory health map at 512 egress records; this cache remains best-effort and independent of canonical proxy configuration.
 - [x] Make `/health` recognize an encrypted CodeBuddy credential without exposing its value.
 - [x] Add AES-GCM tests for nonce uniqueness, authenticated decryption/tamper rejection, symlink refusal, and POSIX owner-only key-file permissions.
-- [x] Refuse symlinked legacy JSON sources; open through no-follow descriptors, verify file identity, and atomically replace processed sources with encrypted rollback envelopes. Provide `--restore-legacy-backup` for operator recovery.
-- [x] Bound legacy JSON import, backup verification, and encrypted restore reads; use no-follow descriptors, metadata-stability checks, and a maximum-size sentinel so source growth cannot trigger unbounded allocation.
-- [x] Whitelist fields imported from legacy usage analytics, TokenSaver, and proxy configuration; discard unknown credential-bearing properties rather than persisting arbitrary JSON.
+- [x] Retire the pre-SQLite standalone JSON importer and `--restore-legacy-backup` CLI. Runtime persistence now uses SQLite only; existing standalone JSON files are left untouched and are not imported.
+- [x] Add schema migration v5 to remove the obsolete `legacy_imports` ledger from existing databases while preserving canonical SQLite application data and immutable v1–v4 migration history.
 - [x] Normalize and rewrite older SQLite analytics, TokenSaver, and proxy settings through allowlisted schemas before exposing them to application/dashboard code.
 - [x] Encrypt destructive-migration SQLite snapshots as AES-256-GCM `.sqlite.awenc` envelopes and migrate historical plaintext migration/pre-restore snapshots before they are used.
 - [x] Stream SQLite backup encryption and restore with bounded 96 KiB file I/O, without an arbitrary database-size cap; emit v2 envelopes and preserve compatibility with v1 encrypted backups. Staged restore still runs SQLite `quick_check` before replacement.
@@ -34,7 +33,6 @@
 - [x] Migration v4 encrypts the legacy JSON-encoded `codebuddy_api_key` setting for databases that already reached v3, then re-arms the cleanup marker so startup repeats WAL checkpoint/VACUUM after replacing the old plaintext value.
 - [x] Redact raw, decoded, percent-encoded, and Bearer-prefixed provider credentials from custom-provider and CodeBuddy error responses/diagnostics; sanitize proxy connection-test errors.
 - [x] Preserve installer upgrade behavior and verify `.env`, SQLite state, and `secret-encryption.key` remain intact through the Linux installer smoke test.
-- [x] Document the proposed **preserve-and-skip** recovery policy for legacy JSON sources above 50 MiB or files that cannot be safely atomically replaced: do not parse, partially import, truncate, or delete the source automatically; preserve it and report the skip. POSIX mode is restricted to `0600`. The operator must create and verify an encrypted archive before moving the source out of configured import directories. This intentionally keeps a bounded plaintext residual rather than risking data loss or unbounded parsing; project-owner acceptance remains required.
 - [ ] Complete independent security review of PR #4 and resolve any findings before merge.
 - [x] Configure and verify repository Ruleset `Protect main`: active for `refs/heads/main`, no bypass actors, PR required, 0 approvals for the solo-developer workflow, conversation resolution required, four successful CI jobs required with strict up-to-date checks, deletion blocked, and non-fast-forward updates (force-push) blocked.
 
@@ -42,10 +40,11 @@
 
 - Migration v2 adds `api_keys`, `admin_users`, and `admin_sessions`; converts legacy API-key JSON records to hashes; and encrypts existing custom-provider/proxy credentials.
 - Migration v3 writes a retryable secret-residue cleanup marker. Startup enables SQLite `secure_delete`, checkpoints/truncates WAL, runs `VACUUM`, and marks cleanup complete after a successful final checkpoint.
-- Migration v4 converts the legacy `codebuddy_api_key` app setting from its JSON-encoded plaintext string into an AES-256-GCM envelope, then re-arms the v3 cleanup marker so SQLite free pages/WAL are scrubbed again.
+- Migration v4 converts a previously plaintext, JSON-serialized `codebuddy_api_key` value inside SQLite `app_settings` into an AES-256-GCM envelope, then re-arms the v3 cleanup marker so SQLite free pages/WAL are scrubbed again. This is a SQLite value migration, not a standalone JSON-file importer.
+- Migration v5 removes the obsolete `legacy_imports` bookkeeping table. Historical migrations v1–v4 remain unchanged; migration v5 removes only importer metadata and preserves canonical provider, API-key, usage, and settings rows.
 - The master encryption key is supplied by `ALPHAWAY_ENCRYPTION_KEY` or generated in the AlphaWay state directory. Back it up with the database and encrypted migration snapshots; losing it makes encrypted credentials and backups unrecoverable.
 - Legacy `API_KEY` and `BRIDGE_API_KEY` remain supported as environment-managed inference credentials. `CODEBUDDY_API_KEY` remains an optional environment override.
-- Windows ACL behavior for bootstrap, encryption-key, legacy source, and migration-backup files remains unverified and is explicitly deferred to Phase 7 hardening. POSIX `0600`/`0700` behavior is covered.
+- Windows ACL behavior for bootstrap/encryption-key files and SQLite migration backups remains unverified and is explicitly deferred to Phase 7 hardening. POSIX `0600`/`0700` behavior is covered.
 - Per-key Plan assignment and quota enforcement belong to Phase 3; do not add a placeholder Plan field during Phase 2.
 
 **Verification state**
@@ -53,7 +52,7 @@
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
 - Verified implementation head [`bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d`](https://github.com/Yoganataa/alphaway/commit/bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d), CI run [`41384043687`](https://github.com/Yoganataa/alphaway/actions/runs/41384043687) (#250): **340 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. Tests include streaming 24 MiB SQLite backup/restore, v1 encrypted backup compatibility, oversized proxy health-cache handling, and the 10 MiB default streamed request-body cap. The optional live upstream gate drill was skipped by design.
 - Repository Ruleset `Protect main` is active and enforces the four required jobs with strict up-to-date checks. Its required approval count is 0 for the solo developer; no bypass actors are configured.
-- Do not merge PR #4 or begin Phase 3 until the preserve-and-skip exception is accepted by the project owner, the independent security review decision/findings are resolved, and CI is green on the final PR head.
+- Do not merge PR #4 or begin Phase 3 until the independent security review is complete, findings are resolved, and CI is green on the final PR head.
 
 **Acceptance criteria**
 
@@ -61,4 +60,4 @@
 - Administrative operations require an authenticated administrator session; same-host cross-port Origin requests are rejected.
 - Existing OpenAI, Anthropic, and Codex gateway protocols retain documented authorization-header compatibility.
 - Managed caller keys and persisted upstream credentials are not stored as plaintext in their canonical database representations.
-- Legacy JSON and destructive-migration rollback snapshots are encrypted when successfully processed; oversized/unreplaceable legacy files remain an explicit preserve-and-skip/manual-archive exception. POSIX permissions are restricted; Windows ACLs remain Phase 7.
+- SQLite is the only persistent application-state backend. Standalone JSON files are neither imported nor modified. Encrypted SQLite migration snapshots retain v1/v2 restore compatibility; POSIX permissions are restricted and Windows ACLs remain Phase 7.
