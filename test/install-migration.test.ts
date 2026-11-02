@@ -35,6 +35,13 @@ describe("current AlphaWay installer and distribution contract", () => {
     expect(installer).toContain(".backup-app-");
   });
 
+  it("binds a newly created .env to BINDIR for manual starts", () => {
+    const installer = read("install.sh");
+    expect(installer).toContain('grep -Eq \'^[[:space:]]*DATA_DIR[[:space:]]*=.+$\' "$BINDIR/.env"');
+    expect(installer).toContain('print "DATA_DIR=" value');
+    expect(installer).toContain('mv "$ENV_TMP" "$BINDIR/.env"');
+  });
+
   it("validates TLS compatibility and the standalone binary before installation", () => {
     const installer = read("install.sh");
     expect(installer).toContain("run fingerprint:check");
