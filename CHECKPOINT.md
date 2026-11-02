@@ -6,8 +6,8 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest CI-verified Phase 2 code HEAD:** `bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d` (run `41384043687`, #250; subsequent checkpoint/roadmap sync is documentation-only).  
-> **Latest implementation verification:** code head `bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d` passed run `41384043687` (#250): **340 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed. The optional live upstream drill was skipped by design. The subsequent checkpoint/roadmap sync is documentation-only.  
+> **Latest CI-verified Phase 2 code HEAD: `8e45a4a2977c109e292981557b3336f9aed52038` (run `41386143754`, #268).
+> **Latest implementation verification: code head `8e45a4a2977c109e292981557b3336f9aed52038` passed run `41386143754` (#268): **331 unit/protocol tests passed, 0 failed** across 30 files (784 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed (17 cipher suites, 12 extensions). The v5 migration regression verifies removal of only the obsolete JSON-import ledger while canonical SQLite provider data is preserved. The optional live upstream drill was skipped by design.
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -240,10 +240,9 @@ Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. Re-
 The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged yet. Do not create another PR or start Phase 3.
 
 Next exact actions:
-1. Verify CI on the SQLite-only storage cleanup head after all code and documentation commits.
-2. Complete an independent security review of PR #4 and resolve findings. Required GitHub approval count remains 0 for the solo-developer workflow; this does not replace the independent review.
-3. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
-4. Do not merge PR #4 or start Phase 3 until Phase 2 acceptance criteria and independent review are complete.
+1. Complete an independent security review of PR #4 and resolve findings. Required GitHub approval count remains 0 for the solo-developer workflow; this does not replace the independent review.
+2. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
+3. Do not merge PR #4 or start Phase 3 until Phase 2 acceptance criteria and independent review are complete.
 
 Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
 ## 6. Working Rules for the Next Session
