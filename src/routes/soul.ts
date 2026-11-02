@@ -38,7 +38,7 @@ router.post("/", async (c) => {
   try {
     body = await readJsonRequestBody(c.req);
     if (!body || typeof body !== "object" || Array.isArray(body)) throw Object.assign(new Error("Invalid JSON body"), { statusCode: 400 });
-  } catch {
+  } catch (err: any) {
     const status = err?.statusCode === 413 ? 413 : 400;
     return c.json({ ok: false, error: status === 413 ? "Request body exceeds the 10 MiB limit" : "Invalid JSON body" }, status);
   }
