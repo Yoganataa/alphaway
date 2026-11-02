@@ -5,7 +5,7 @@
 
 import { Hono } from "hono";
 import * as egress from "../core/egress";
-import { adminRequestError } from "../core/admin-guard";
+import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
 
 export const proxyRoute = new Hono();
 
@@ -29,7 +29,8 @@ proxyRoute.get("/api/proxy", (c) => {
 
 proxyRoute.post("/api/proxy", async (c) => {
   try {
-    const body = await c.req.json();
+    const body = await readJsonRequestBody(c.req);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return c.json({ error: "A JSON object is required" }, 400);
     if (body.url === undefined && body.pool === undefined) {
       return c.json({ error: "Missing url or pool parameter" }, 400);
     }
@@ -47,19 +48,22 @@ proxyRoute.post("/api/proxy", async (c) => {
     }
     return c.json(egress.describe());
   } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+    const status = err?.statusCode === 413 ? 413 : 400;
+    return c.json({ error: status === 413 ? "Request body exceeds the 10 MiB limit" : err.message }, status);
   }
 });
 
 proxyRoute.post("/api/proxy/test", async (c) => {
   try {
-    const body = await c.req.json();
+    const body = await readJsonRequestBody(c.req);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return c.json({ error: "A JSON object is required" }, 400);
     const targetUrl = body.url;
     if (!targetUrl) return c.json({ ok: false, error: "Missing url parameter" }, 400);
 
     const result = await egress.testProxy(targetUrl, 5000);
     return c.json(result);
   } catch (err: any) {
-    return c.json({ ok: false, error: err.message }, 500);
+    const status = err?.statusCode === 413 ? 413 : 500;
+    return c.json({ ok: false, error: status === 413 ? "Request body exceeds the 10 MiB limit" : err.message }, status);
   }
 });
