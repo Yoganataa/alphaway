@@ -8,6 +8,27 @@ import * as codebuddy from "../src/providers/codebuddy";
 import * as opencode from "../src/providers/opencode";
 import { adminHeaders } from "./helpers/admin";
 
+describe("CodeBuddy OAuth authorization URL validation", () => {
+  it("accepts HTTPS authorization URLs on trusted CodeBuddy domains", () => {
+    expect(codebuddy.validateCodebuddyAuthUrl("https://www.codebuddy.ai/oauth/authorize?state=test"))
+      .toBe("https://www.codebuddy.ai/oauth/authorize?state=test");
+    expect(codebuddy.validateCodebuddyAuthUrl("https://login.workbuddy.ai/oauth/authorize"))
+      .toBe("https://login.workbuddy.ai/oauth/authorize");
+  });
+
+  it("rejects unsafe schemes, untrusted hosts, credentials, and nonstandard ports", () => {
+    for (const value of [
+      "javascript:alert(1)",
+      "http://www.codebuddy.ai/oauth",
+      "https://www.codebuddy.ai.evil.test/oauth",
+      "https://attacker@www.codebuddy.ai/oauth",
+      "https://www.codebuddy.ai:8443/oauth",
+    ]) {
+      expect(() => codebuddy.validateCodebuddyAuthUrl(value)).toThrow();
+    }
+  });
+});
+
 describe("codebuddy server integration tests", () => {
   let mockUpstream: any;
   let mockPort: number;
