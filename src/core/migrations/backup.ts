@@ -223,7 +223,7 @@ function decryptDatabaseBackupFile(encryptedPath: string, outputPath: string): v
       );
       if (chunk.length === 0) break;
       ciphertextPosition += chunk.length;
-      consumeCiphertextBase64(chunk.toString("ascii"));
+      consumeCiphertextBase64url(chunk.toString("ascii"));
     }
 
     if (ciphertextCarry.length === 1) {
@@ -296,7 +296,9 @@ function encryptPlainDatabaseBackup(plainPath: string): string {
   const tempPath = encryptedPath + "." + randomUUID() + ".tmp";
   try {
     encryptDatabaseBackupFile(plainPath, tempPath);
-    fs.renameSync(tempPath, encryptedPath);
+    // linkSync is an atomic no-replace publish: never clobber an existing backup.
+    fs.linkSync(tempPath, encryptedPath);
+    fs.unlinkSync(tempPath);
     fs.unlinkSync(plainPath);
     return encryptedPath;
   } finally {
@@ -371,7 +373,9 @@ export function createMigrationBackup(db: any, databasePath: string, migrationNa
     }
     if (process.platform !== "win32") fs.chmodSync(plainPath, 0o600);
     encryptDatabaseBackupFile(plainPath, encryptedTempPath);
-    fs.renameSync(encryptedTempPath, backupPath);
+    // Publish without replacing any pre-existing path, even under a race.
+    fs.linkSync(encryptedTempPath, backupPath);
+    fs.unlinkSync(encryptedTempPath);
     return backupPath;
   } finally {
     try { fs.unlinkSync(plainPath); } catch {}
