@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { getDatabase } from "./database";
-import { normalizeAllowedModels } from "./plans";
+import { resolveEffectivePolicy } from "./policy";
 
 export interface APIKeyRecord {
   id: string;
@@ -56,13 +56,15 @@ function safeSecretMatch(left: string, right: string): boolean {
 }
 
 function toRecord(row: any): APIKeyRecord {
+  const id = String(row.id);
+  const effective = row.status === "revoked" ? null : resolveEffectivePolicy(id);
   let scopes: string[] = ["inference"];
   try {
     const parsed = JSON.parse(row.scopes || "[]");
     if (Array.isArray(parsed)) scopes = parsed.filter((value: unknown) => typeof value === "string");
   } catch {}
   return {
-    id: String(row.id),
+    id,
     name: String(row.name),
     prefix: String(row.key_prefix),
     scopes,
@@ -78,11 +80,11 @@ function toRecord(row: any): APIKeyRecord {
     tokenQuota: row.token_quota == null ? null : Number(row.token_quota),
     allowedModels: row.allowed_models == null ? null : (() => { try { const value = JSON.parse(row.allowed_models); return normalizeAllowedModels(value); } catch { return []; } })(),
     totalTokensUsed: Number(row.total_tokens_used || 0),
-    effectiveRpmLimit: row.rate_limit_rpm == null ? Number(row.plan_rpm_limit || 0) : Number(row.rate_limit_rpm),
-    effectiveTpmLimit: row.rate_limit_tpm == null ? Number(row.plan_tpm_limit || 0) : Number(row.rate_limit_tpm),
-    effectiveConcurrencyLimit: row.concurrency_limit == null ? Number(row.plan_concurrency_limit || 0) : Number(row.concurrency_limit),
-    effectiveTokenQuota: row.token_quota == null ? Number(row.plan_token_quota || 0) : Number(row.token_quota),
-    effectiveAllowedModels: effectiveModels(row.allowed_models, row.plan_allowed_models),
+    effectiveRpmLimit: effective?.rpmLimit ?? 0,
+    effectiveTpmLimit: effective?.tpmLimit ?? 0,
+    effectiveConcurrencyLimit: effective?.concurrencyLimit ?? 0,
+    effectiveTokenQuota: effective?.tokenQuota ?? 0,
+    effectiveAllowedModels: effective?.allowedModels ?? [],
   };
 }
 
@@ -103,11 +105,6 @@ function getAPIKeyRecordRow(id: string): any {
   return getDatabase().prepare(API_KEY_SELECT + " WHERE k.id = ?").get(id);
 }
 
-function effectiveModels(keyModels: unknown, planModels: unknown): string[] {
-  const raw = keyModels !== null && keyModels !== undefined ? keyModels : planModels;
-  if (typeof raw !== "string" || !raw) return [];
-  try { return normalizeAllowedModels(JSON.parse(raw)); } catch { return []; }
-}
 
 function newSecret(): string {
   return `sk-aw-${randomBytes(32).toString("base64url")}`;
