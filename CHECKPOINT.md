@@ -6,8 +6,8 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest CI-verified Phase 2 code HEAD:** `c7f935e0fb823a28f087984dd5e801cb58ff4056` (run `41376483078`, #222; subsequent checkpoint/roadmap sync is documentation-only).  
-> **Latest implementation verification:** code head `c7f935e0fb823a28f087984dd5e801cb58ff4056` passed run `41376483078` (#222): **335 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed. The optional live upstream drill was skipped by design. The subsequent checkpoint/roadmap sync is documentation-only.  
+> **Latest CI-verified Phase 2 code HEAD:** `ceb97284108fdd0e13879886fe3fb6c9e311f47f` (run `41382850587`, #235; subsequent checkpoint/roadmap sync is documentation-only).  
+> **Latest implementation verification:** code head `ceb97284108fdd0e13879886fe3fb6c9e311f47f` passed run `41382850587` (#235): **338 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed. The optional live upstream drill was skipped by design. The subsequent checkpoint/roadmap sync is documentation-only.  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -36,28 +36,27 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - Managed inference keys stored as salted SHA-256 hashes with prefix lookup; create/list metadata/rename/rotate/revoke, inference scope, last-used timestamps, and request counts. Legacy `API_KEY` and `BRIDGE_API_KEY` remain supported.
 - Gateway inference authentication covers OpenAI, Anthropic, and Codex routes including aliases. Gateway caller credentials are not reused as upstream CodeBuddy credentials.
 - AES-256-GCM at-rest encryption for custom-provider API keys, proxy/pool/relay credentials, CodeBuddy OAuth credentials, processed legacy JSON rollback envelopes, and destructive-migration SQLite snapshots.
-- Existing plaintext SQLite migration/pre-restore snapshots are migrated to encrypted `.awenc` envelopes at startup or before restore. SQLite restore validates a staged database with `PRAGMA quick_check` before replacement.
+- Existing plaintext SQLite migration/pre-restore snapshots are migrated to encrypted `.awenc` envelopes at startup or before restore. New SQLite snapshots use streaming AES-256-GCM envelope v2 with bounded 96 KiB file I/O; restore streams both v1 and v2 envelopes into a staged file, runs `PRAGMA quick_check`, then replaces the database. No arbitrary maximum database size is imposed.
 - Migration v3 enables connection-local `PRAGMA secure_delete=ON` and records a retryable one-time cleanup marker. Startup checkpoints/truncates WAL, runs `VACUUM`, checkpoints again, and marks cleanup complete only after success. This removes logical SQLite page/WAL residue from the v2 credential migration; it is not a physical-media or filesystem-snapshot sanitization guarantee.
 - Migration v4 encrypts the legacy JSON-encoded `codebuddy_api_key` setting at rest and re-arms the secret-residue cleanup marker. This covers existing databases that had already completed migration v3 before the CodeBuddy credential gap was identified; startup repeats WAL checkpoint/VACUUM before returning the database.
 - Legacy JSON, usage analytics, TokenSaver, and proxy settings use explicit import/storage allowlists. Unknown credential-bearing fields are discarded; analytics/TokenSaver/proxy rows already present in SQLite are normalized and rewritten before use.
 - Legacy import rejects symlink sources, uses no-follow descriptors and file identity checks, and atomically replaces successfully processed JSON files with encrypted rollback envelopes. Initial import, backup re-verification, and encrypted restore reads are bounded (50 MiB plus a sentinel for plaintext, bounded envelope size for restore), with metadata stability checks; changing or oversized sources are skipped without parsing/replacing them. POSIX mode is restricted to `0600` and the plaintext residual remains documented.
+- Proxy pool health is a credential-free best-effort cache: restore reads are no-follow and capped at 1 MiB with file identity/metadata checks; the in-memory cache is capped at 512 egress records. Oversized/corrupt cache data is ignored without affecting proxy configuration.
 - Public administrator bootstrap/login JSON bodies are capped at 16 KiB using both Content-Length validation and a streaming byte limit; oversized requests return 413 before JSON parsing or KDF work.
 - Master encryption-key files are read as exactly 32 bytes plus a one-byte sentinel, and bootstrap token files are capped at 64 bytes with strict 43-character base64url validation; both verify descriptor identity/metadata stability.
 - Provider and CodeBuddy upstream diagnostic redaction covers raw, decoded, percent-encoded, Bearer-prefixed credentials; proxy connection-test diagnostics redact proxy authority credentials.
 - CodeBuddy OAuth returns no upstream access/refresh token to the browser; the dashboard uses the provider `state`/`authUrl` polling contract. The configured CodeBuddy token is read from encrypted SQLite or the environment override.
-- Bun test preload isolates SQLite state before importing app modules. Tests cover admin sessions, key lifecycle/scope/revocation, CSRF origin ports, analytics/settings allowlists, encrypted legacy and SQLite backups, AES-GCM tamper rejection, nonce uniqueness, symlink refusal, bounded legacy-file growth during import, and POSIX key-file permissions.
+- Bun test preload isolates SQLite state before importing app modules. Tests cover admin sessions, key lifecycle/scope/revocation, CSRF origin ports, analytics/settings allowlists, encrypted legacy and SQLite backups (including v1 restore compatibility and a 24 MiB streaming snapshot), oversized proxy health caches, AES-GCM tamper rejection, nonce uniqueness, symlink refusal, bounded legacy-file growth during import, and POSIX key-file permissions.
 - Installer smoke verifies the encryption master-key file survives an upgrade unchanged.
 
 ### GitHub / CI state at checkpoint
 
 - PR #4 is the only open PR, targets `main`, and remains **draft**. It is mergeable but must not be merged or used to start Phase 3 while the recovery-policy acceptance and independent security review remain outstanding.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- The latest verified Phase 2 code head `c7f935e0fb823a28f087984dd5e801cb58ff4056` passed GitHub Actions [run `41376483078`](https://github.com/Yoganataa/alphaway/actions/runs/41376483078) (#222): **335 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; build, TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. The installer smoke verified encryption master-key preservation through upgrade. Optional live upstream gate drill was skipped by design.
+- The latest verified Phase 2 code head `ceb97284108fdd0e13879886fe3fb6c9e311f47f` passed GitHub Actions [run `41382850587`](https://github.com/Yoganataa/alphaway/actions/runs/41382850587) (#235): **338 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; build, TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. The installer smoke verified encryption master-key preservation through upgrade. New tests also cover streaming SQLite backups (24 MiB) and legacy v1 restore compatibility. Optional live upstream gate drill was skipped by design.
 - Live PR review check: no submitted reviews, inline review comments/threads, or requested reviewers were present. Project-owner acceptance of the preserve-and-skip exception remains outstanding.
 - Repository Ruleset [`Protect main`](https://github.com/Yoganataa/alphaway/rules/26337025) is **active**, targets only `refs/heads/main`, and has an empty bypass list. It requires a PR, conversation resolution, up-to-date successful runs for the four required CI jobs (`Unit and protocol tests`, `Installer and embedded dashboard smoke test`, `UI and standalone binary build`, `Dashboard browser tests`), blocks branch deletion and force pushes, and requires zero approvals to support the solo-developer workflow. `current_user_can_bypass` is `never`.
 - The classic branch-protection endpoint is not readable by the GitHub integration (403); the active repository ruleset detail above is the source used to verify protection.
-- Windows ACL behavior is not verified. Keep it in Phase 7 hardening; POSIX `0600`/`0700` permissions are covered.
-- An earlier CI failure on commit `117b51a...` was caused by an invalid escaped regex. It was corrected; the subsequent functional head run above passed.
 - Windows ACL behavior is not verified. Keep it in Phase 7 hardening; POSIX `0600`/`0700` permissions are covered.
 
 ### Remaining Phase 2 gaps / boundaries
@@ -240,7 +239,7 @@ Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. Re-
 The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged yet. Do not create another PR or start Phase 3.
 
 Next exact actions:
-1. Verify CI on the final live PR head after the current bounded-read/auth-body hardening changes.
+1. Re-fetch and verify CI on the final live PR head after the current SQLite streaming-backup and proxy-health-cache hardening changes.
 2. Obtain project-owner acceptance of the documented preserve-and-skip/manual-archive exception for oversized or unsafe-to-replace legacy JSON sources.
 3. Decide and complete an independent security review of PR #4; resolve any findings. Required GitHub approval count remains 0 because the repository is maintained by a solo developer.
 4. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
