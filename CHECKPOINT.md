@@ -6,7 +6,7 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest verified Phase 2 code/test HEAD:** `aa9fd1bc81231996964a8fcbc4b095b0bbf58522`  
+> **Latest functional Phase 2 CI-verified HEAD:** `c2424e84611efaac66e3575a504be74684df25e3` (run `41368844575`; documentation sync follows)  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -18,7 +18,7 @@
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
-- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (current branch-head CI passed; full secret-flow audit and final review remain).
+- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (core implementation and in-repository secret-flow hardening complete; oversized/unreplaceable legacy-source policy and independent review remain).
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
@@ -30,33 +30,35 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 ### Phase 2 implementation on the active branch
 
 - First-admin bootstrap token, CLI-only token display, scrypt password hashes, bounded login throttling, hashed admin sessions, expiry/revocation, HttpOnly/SameSite cookie, and dashboard login/logout.
-- Default-deny administrator session gate for `/api/*`, with only status/session/bootstrap/login endpoints public; origin/host checks remain defense-in-depth.
-- Managed inference keys stored as salted SHA-256 hashes with prefix lookup; create/list metadata/rename/rotate/revoke, inference scopes, last-used timestamps, and request counts. Legacy `API_KEY` and `BRIDGE_API_KEY` remain supported.
+- Default-deny administrator session gate for `/api/*`; only status/session/bootstrap/login endpoints are public. Host/Origin validation compares scheme, host, and port and rejects same-host cross-port requests.
+- Managed inference keys stored as salted SHA-256 hashes with prefix lookup; create/list metadata/rename/rotate/revoke, inference scope, last-used timestamps, and request counts. Legacy `API_KEY` and `BRIDGE_API_KEY` remain supported.
 - Gateway inference authentication covers OpenAI, Anthropic, and Codex routes including aliases. Gateway caller credentials are not reused as upstream CodeBuddy credentials.
-- AES-256-GCM at-rest encryption for custom-provider API keys, proxy/pool/relay credentials, and CodeBuddy OAuth credentials. Legacy DB migration and JSON import paths encrypt credentials before persisting them.
-- CodeBuddy OAuth returns no upstream access/refresh token to the browser; the dashboard uses the provider's `state`/`authUrl` polling contract. The configured CodeBuddy token is read from encrypted SQLite or the documented environment override.
-- Upstream custom-provider and CodeBuddy error bodies redact provider credentials. `/health` recognizes an encrypted CodeBuddy credential without returning its value.
-- Bun test preload isolates SQLite state before importing app modules. Tests cover admin sessions, key lifecycle/scope/revocation, CodeBuddy credential separation/redaction, legacy imports, migration encryption, AES-GCM tamper rejection, nonce uniqueness, symlink refusal, and POSIX key-file permissions.
-- Login username/password length and failed-login memory are bounded; API-key labels reject control characters. Installer smoke verifies the encryption master-key file survives an upgrade unchanged.
+- AES-256-GCM at-rest encryption for custom-provider API keys, proxy/pool/relay credentials, CodeBuddy OAuth credentials, processed legacy JSON rollback envelopes, and destructive-migration SQLite snapshots.
+- Existing plaintext SQLite migration/pre-restore snapshots are migrated to encrypted `.awenc` envelopes at startup or before restore. SQLite restore validates a staged database with `PRAGMA quick_check` before replacement.
+- Legacy JSON, usage analytics, TokenSaver, and proxy settings use explicit import/storage allowlists. Unknown credential-bearing fields are discarded; analytics/TokenSaver/proxy rows already present in SQLite are normalized and rewritten before use.
+- Legacy import rejects symlink sources, uses no-follow descriptors and file identity checks, and atomically replaces successfully processed JSON files with encrypted rollback envelopes. Oversized (`>50 MiB`) or unsafe-to-replace sources are not imported/encrypted; POSIX mode is restricted to `0600` and the plaintext residual remains documented.
+- Provider and CodeBuddy upstream diagnostic redaction covers raw, decoded, percent-encoded, Bearer-prefixed credentials; proxy connection-test diagnostics redact proxy authority credentials.
+- CodeBuddy OAuth returns no upstream access/refresh token to the browser; the dashboard uses the provider `state`/`authUrl` polling contract. The configured CodeBuddy token is read from encrypted SQLite or the environment override.
+- Bun test preload isolates SQLite state before importing app modules. Tests cover admin sessions, key lifecycle/scope/revocation, CSRF origin ports, analytics/settings allowlists, encrypted legacy and SQLite backups, AES-GCM tamper rejection, nonce uniqueness, symlink refusal, and POSIX key-file permissions.
+- Installer smoke verifies the encryption master-key file survives an upgrade unchanged.
 
 ### GitHub / CI state at checkpoint
 
-- PR #4 is the only open PR, targets `main`, and remains **draft**. No review submissions or inline review threads were present at the last check.
+- PR #4 is the only open PR, targets `main`, and remains **draft**. Do not merge it or start Phase 3 in this checkpoint.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- Latest CI-verified Phase 2 branch head: `7cb72121d7fd4b9467cf6c93294afa70079fa9ea`.
-- GitHub Actions run `41340700836` passed on Bun 1.4.4 for that exact head: **314 unit/protocol tests passed, 0 failed** across 31 files; transport fingerprint passed (17 ciphers/12 extensions), standalone binary build passed, installer/embedded-dashboard smoke passed including SHA-256 proof that `secret-encryption.key` survives upgrade unchanged, and dashboard E2E passed (**8 passed, 0 failed**). The optional live upstream gate drill was skipped by design.
-- This run includes custom-provider chat error redaction, legacy JSON symlink refusal, and POSIX owner-only mode assertions for retained JSON rollback backups.
-- The earlier installer-smoke failures were caused by reading a `GITHUB_ENV` value inside the same shell step. The check now uses a local `key_digest_before` variable; runs `41339302362`, `41339526068`, `41339693714`, `41340243880`, `41340495437`, and `41340700836` all passed the corrected smoke test.
-- Reviews and inline review threads were empty at the last check. PR #4 remains draft; re-check mergeability/ahead-behind against live `main` when resuming.
+- Functional Phase 2 head `c2424e84611efaac66e3575a504be74684df25e3` passed GitHub Actions run [`41368844575`](https://github.com/Yoganataa/alphaway/actions/runs/41368844575): **327 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Installer smoke verified the encryption master-key file survived upgrade unchanged. Optional live upstream gate drill was skipped by design.
+- README/ROADMAP/CHECKPOINT synchronization commits follow the functional CI-verified head. Re-fetch PR head and Actions before merge; require green CI for the final docs head.
+- An earlier CI failure on commit `117b51a...` was caused by an invalid escaped regex. It was corrected; the subsequent functional head run above passed.
+- Windows ACL behavior is not verified. Keep it in Phase 7 hardening; POSIX `0600`/`0700` permissions are covered.
+
 ### Remaining Phase 2 gaps / boundaries
 
+- Decide and document the operator recovery policy for legacy JSON sources above 50 MiB or sources that cannot be atomically replaced. They remain plaintext but are owner-only (`0600`) on POSIX and produce a skipped import report.
+- Independent security review of PR #4 is outstanding. Keep PR #4 draft until review and acceptance criteria are complete.
+- Windows ACL enforcement for generated master-key/bootstrap files and legacy/SQLite backups is deferred to Phase 7.
 - Per-key Plan assignment is deferred to Phase 3 with the Plan model and enforcement semantics. Phase 2 API keys already have inference scope and lifecycle metadata.
-- Complete the secrets audit across logs, diagnostics, analytics, backup/export, and persistence paths. Custom-provider and CodeBuddy upstream error redaction is covered, but legacy JSON rollback backups remain plaintext. The importer now refuses symlinks and restricts POSIX source files to mode `0600`; decide whether to encrypt, relocate, or remove the backups after a verified rollback window.
-- Windows ACL enforcement for generated master-key/bootstrap files and retained legacy JSON backups is not implemented or verified. POSIX 0600/0700 behavior is tested; Windows ACL verification belongs to Phase 7 hardening.
-- Final PR review is outstanding. Keep PR #4 draft; do not merge and do not start Phase 3.
 
 **Verification boundary:** CI evidence is GitHub Actions on Linux x86_64 with Bun 1.4.4. No local Bun test/build was run in this session. macOS launchd and Windows runtime/ACL behavior are not verified.
-
 ## 2. Agreed Product Direction
 
 The goal is to evolve AlphaWay without replacing its core gateway:
@@ -224,16 +226,16 @@ test/verify-quick.test.ts
 
 ### Current Phase 2 work
 
-Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. Latest CI-verified head was `6a0bbf0b2c2958e41342e903eca64f46ca542890`; `main` was `e2492fb3a995677d24f3078b7925a2c48c877ca7`. Re-fetch live refs, PR, and Actions before making changes.
+Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. Functional CI-verified head was `c2424e84611efaac66e3575a504be74684df25e3`; `main` was `e2492fb3a995677d24f3078b7925a2c48c877ca7`. Re-fetch live refs, PR, and Actions before making changes.
 
-The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged until the remaining secret-flow audit and security review are complete. Do not create another PR or start Phase 3.
+The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged yet. Do not create another PR or start Phase 3.
 
 Next exact actions:
-1. Complete the end-to-end secret audit across logs, diagnostics, analytics, backup/export, and persistence.
-2. Decide the lifecycle for retained plaintext legacy JSON rollback backups: encrypt, relocate to separately protected storage, or remove them after a verified rollback window. The importer refuses symlink sources and applies POSIX mode `0600`, but does not encrypt file contents.
-3. Keep Windows ACL verification marked as Phase 7 hardening unless a verified implementation is added.
-4. Update PR #4 with findings and request review/mark ready only after the secret audit is signed off.
-5. Do not merge PR #4 or start Phase 3 until all Phase 2 acceptance criteria and review findings are resolved.
+1. Verify CI completes on the latest documentation-synchronized PR head.
+2. Decide the operator policy for legacy JSON sources above 50 MiB or files that cannot be safely replaced; they remain owner-restricted plaintext and are reported as skipped.
+3. Obtain independent security review for PR #4 and resolve all findings. Keep the PR draft until that review is complete.
+4. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
+5. Do not merge PR #4 or start Phase 3 until the residual legacy-source policy, Phase 2 acceptance criteria, and review findings are resolved.
 
 Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
 ## 6. Working Rules for the Next Session
