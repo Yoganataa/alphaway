@@ -3,7 +3,7 @@ import { app } from "../src/app";
 import { adminHeaders, adminRequest } from "./helpers/admin";
 import { issueAPIKey } from "../src/core/api-keys";
 import { getDatabase } from "../src/core/database";
-import { __getLoginKdfStateForTests, loginAdmin } from "../src/core/admin-auth";
+import { __clearFailedLoginsForTests, __getFailedLoginStateForTests, __getLoginKdfStateForTests, __seedFailedLoginForTests, loginAdmin } from "../src/core/admin-auth";
 import { randomUUID } from "node:crypto";
 
 describe("administrator authentication and managed gateway API keys", () => {
@@ -83,6 +83,34 @@ describe("administrator authentication and managed gateway API keys", () => {
     }
     expect(await loginAdmin("alphaway-throttle-check", "wrong-password")).toEqual({ error: "rate_limited" });
     expect(await loginAdmin("alphaway-throttle-check", "another-wrong-password")).toEqual({ error: "rate_limited" });
+  });
+
+  it("does not evict active login lockouts when the bounded username map is full", () => {
+    __clearFailedLoginsForTests();
+    const now = Date.now();
+    const firstUsername = "protected-admin-target";
+    try {
+      for (let index = 0; index < 4096; index += 1) {
+        const accepted = __seedFailedLoginForTests(`spray-${index}`, {
+          count: 5,
+          firstAt: now,
+          lockedUntil: now + 15 * 60 * 1000,
+        });
+        expect(accepted).toBe(true);
+      }
+
+      const overflowAccepted = __seedFailedLoginForTests(firstUsername, {
+        count: 1,
+        firstAt: now,
+        lockedUntil: 0,
+      });
+      expect(overflowAccepted).toBe(false);
+      expect(__getFailedLoginStateForTests("spray-0").attempt?.lockedUntil).toBe(now + 15 * 60 * 1000);
+      expect(__getFailedLoginStateForTests(firstUsername).attempt).toBeNull();
+      expect(__getFailedLoginStateForTests(firstUsername).size).toBe(4096);
+    } finally {
+      __clearFailedLoginsForTests();
+    }
   });
 
   it("bounds global password KDF concurrency and queue size", async () => {
