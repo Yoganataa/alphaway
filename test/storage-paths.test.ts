@@ -84,6 +84,18 @@ describe("9router-style SQLite storage path contract", () => {
     });
   });
 
+  it("preserves the SQLite :memory: special path", () => {
+    const resolved = resolveStoragePaths({
+      env: { DB_PATH: ":memory:" },
+      envFile: {},
+      cwd: "/workspace",
+      homeDir: "/home/operator",
+      platform: "linux",
+    });
+    expect(resolved.databasePath).toBe(":memory:");
+    expect(resolved.explicitDatabasePath).toBe(true);
+  });
+
   it("recognizes existing DB_PATH directory layouts in 9router-go order", () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-db-path-"));
     const old = {
