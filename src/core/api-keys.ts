@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { getDatabase } from "./database";
+import { normalizeAllowedModels } from "./plans";
 
 export interface APIKeyRecord {
   id: string;
@@ -10,6 +11,12 @@ export interface APIKeyRecord {
   lastUsedAt: number | null;
   requestsCount: number;
   status: "active" | "revoked";
+  planId: string | null;
+  planName: string | null;
+  rateLimitRpm: number | null;
+  rateLimitTpm: number | null;
+  concurrencyLimit: number | null;
+  allowedModels: string[] | null;
 }
 
 export interface APIKeyCredential {
@@ -56,6 +63,12 @@ function toRecord(row: any): APIKeyRecord {
     lastUsedAt: row.last_used_at == null ? null : Number(row.last_used_at),
     requestsCount: Number(row.requests_count || 0),
     status: row.status === "revoked" ? "revoked" : "active",
+    planId: row.plan_id == null ? null : String(row.plan_id),
+    planName: row.plan_name == null ? null : String(row.plan_name),
+    rateLimitRpm: row.rate_limit_rpm == null ? null : Number(row.rate_limit_rpm),
+    rateLimitTpm: row.rate_limit_tpm == null ? null : Number(row.rate_limit_tpm),
+    concurrencyLimit: row.concurrency_limit == null ? null : Number(row.concurrency_limit),
+    allowedModels: row.allowed_models == null ? null : (() => { try { const value = JSON.parse(row.allowed_models); return normalizeAllowedModels(value); } catch { return []; } })(),
   };
 }
 
@@ -65,7 +78,7 @@ function newSecret(): string {
 
 export function listAPIKeys(): APIKeyRecord[] {
   const rows = getDatabase().prepare(
-    "SELECT id, name, key_prefix, scopes, status, created_at, last_used_at, requests_count FROM api_keys ORDER BY created_at DESC"
+    "SELECT k.*, p.name AS plan_name FROM api_keys k LEFT JOIN plans p ON p.id = k.plan_id ORDER BY k.created_at DESC"
   ).all();
   return rows.map(toRecord);
 }
@@ -122,6 +135,63 @@ export function recordAPIKeyUse(id: string): void {
   getDatabase().prepare(
     "UPDATE api_keys SET last_used_at = ?, requests_count = requests_count + 1 WHERE id = ? AND status = 'active'"
   ).run(Date.now(), id);
+}
+
+export interface APIKeyPolicyPatch {
+  planId?: string | null;
+  rateLimitRpm?: number | null;
+  rateLimitTpm?: number | null;
+  concurrencyLimit?: number | null;
+  allowedModels?: string[] | null;
+}
+
+function normalizeOverride(value: unknown, field: string): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > 1_000_000) {
+    throw new Error(field + " must be null or an integer from 0 to 1000000");
+  }
+  return value;
+}
+
+/** Update the Plan assignment and nullable per-key policy overrides atomically. */
+export function setAPIKeyPolicy(id: string, patch: APIKeyPolicyPatch): APIKeyRecord | null {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("A policy object is required");
+  const db = getDatabase();
+  const current = db.prepare("SELECT * FROM api_keys WHERE id = ? AND status = 'active'").get(id);
+  if (!current) return null;
+
+  let planId = current.plan_id == null ? null : String(current.plan_id);
+  if (Object.prototype.hasOwnProperty.call(patch, "planId")) {
+    if (patch.planId !== null && (typeof patch.planId !== "string" || !patch.planId.trim() || patch.planId.length > 128)) {
+      throw new Error("planId must be a valid Plan ID or null");
+    }
+    planId = typeof patch.planId === "string" ? patch.planId.trim() : null;
+    if (planId && !db.prepare("SELECT 1 AS found FROM plans WHERE id = ?").get(planId)) {
+      throw new Error("The selected Plan does not exist");
+    }
+  }
+
+  const rpm = Object.prototype.hasOwnProperty.call(patch, "rateLimitRpm")
+    ? normalizeOverride(patch.rateLimitRpm, "rateLimitRpm")
+    : current.rate_limit_rpm == null ? null : Number(current.rate_limit_rpm);
+  const tpm = Object.prototype.hasOwnProperty.call(patch, "rateLimitTpm")
+    ? normalizeOverride(patch.rateLimitTpm, "rateLimitTpm")
+    : current.rate_limit_tpm == null ? null : Number(current.rate_limit_tpm);
+  const concurrency = Object.prototype.hasOwnProperty.call(patch, "concurrencyLimit")
+    ? normalizeOverride(patch.concurrencyLimit, "concurrencyLimit")
+    : current.concurrency_limit == null ? null : Number(current.concurrency_limit);
+
+  let allowedModels: string | null = current.allowed_models == null ? null : String(current.allowed_models);
+  if (Object.prototype.hasOwnProperty.call(patch, "allowedModels")) {
+    if (patch.allowedModels === null) allowedModels = null;
+    else allowedModels = JSON.stringify(normalizeAllowedModels(patch.allowedModels));
+  }
+
+  db.prepare("UPDATE api_keys SET plan_id = ?, rate_limit_rpm = ?, rate_limit_tpm = ?, concurrency_limit = ?, allowed_models = ? WHERE id = ? AND status = 'active'")
+    .run(planId, rpm, tpm, concurrency, allowedModels, id);
+
+  const row = db.prepare("SELECT k.*, p.name AS plan_name FROM api_keys k LEFT JOIN plans p ON p.id = k.plan_id WHERE k.id = ?").get(id);
+  return row ? toRecord(row) : null;
 }
 
 export function renameAPIKey(id: string, nameInput: string): APIKeyRecord | null {
