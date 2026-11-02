@@ -2,6 +2,7 @@
 
 const crypto = require("crypto");
 const { getCodeBuddyApiKey, setCodeBuddyApiKey } = require("../core/codebuddy-credentials");
+const { embeddedProviderUrlSecrets, redactCredentialEchoes } = require("../core/provider-url-secrets");
 
 /**
  * CodeBuddy International (WorkBuddy AI) upstream integration for AlphaWay.
@@ -635,9 +636,8 @@ async function testCodebuddyPing(apiKey, model = "deepseek-v4.1-flash") {
     }
     const classified = classifyCodebuddyError(res.status, json);
     const serialized = JSON.stringify(classified);
-    const safeClassified = apiKey
-      ? JSON.parse(serialized.split(apiKey).join("[REDACTED]").split("Bearer [REDACTED]").join("[REDACTED]"))
-      : classified;
+    const secrets = [apiKey, ...embeddedProviderUrlSecrets(url)];
+    const safeClassified = JSON.parse(redactCredentialEchoes(serialized, secrets, 3000));
     return { ok: false, status: res.status, classified: safeClassified };
   }
 
