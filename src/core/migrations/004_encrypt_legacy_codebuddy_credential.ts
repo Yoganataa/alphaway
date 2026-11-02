@@ -12,6 +12,7 @@ import type { Migration } from "./types";
 export const encryptLegacyCodeBuddyCredentialMigration: Migration = {
   version: 4,
   name: "encrypt-legacy-codebuddy-credential",
+  destructive: true,
   up(db) {
     const setting = db.prepare(
       "SELECT value FROM app_settings WHERE key = ?"
