@@ -61,7 +61,7 @@ export function normalizeAllowedModels(input: unknown): string[] {
 }
 
 function normalizeLimit(value: unknown, field: string, fallback = 0): number {
-  const number = value === undefined ? fallback : Number(value);
+  const number = value === undefined ? fallback : value;
   if (!Number.isSafeInteger(number) || number < 0 || number > MAX_POLICY_LIMIT) {
     throw new Error(`${field} must be an integer from 0 to ${MAX_POLICY_LIMIT}`);
   }
