@@ -689,37 +689,6 @@ async function testCodebuddyPing(apiKey, model = "deepseek-v4.1-flash") {
 /**
  * Interactive CLI OAuth Login runner
  */
-/**
- * Launch a browser using a fixed executable and an argument vector.
- * `shell: false` ensures URL metacharacters cannot become shell syntax.
- */
-function openAuthUrlInBrowser(
-  authUrl,
-  spawnProcess = require("node:child_process").spawn,
-  platform = process.platform
-) {
-  const command = platform === "win32"
-    ? "rundll32.exe"
-    : platform === "darwin"
-      ? "open"
-      : "xdg-open";
-  const args = platform === "win32"
-    ? ["url.dll,FileProtocolHandler", authUrl]
-    : [authUrl];
-  const child = spawnProcess(command, args, {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
-    shell: false,
-  });
-  if (typeof child?.on === "function") {
-    child.on("error", () => {
-      console.warn("Could not launch the system browser for CodeBuddy authorization.");
-    });
-  }
-  if (typeof child?.unref === "function") child.unref();
-}
-
 async function loginCodebuddyCli() {
   console.log("\n" + "=".repeat(65));
   console.log("            CodeBuddy.ai / WorkBuddy OAuth Login Helper          ");
@@ -749,14 +718,9 @@ async function loginCodebuddyCli() {
   console.log("-".repeat(65));
   console.log("Menunggu otorisasi akun CodeBuddy...");
 
-  // Open the validated URL without a shell. OAuth URLs are remote input and
-  // must never be interpolated into a command string.
-  try {
-    openAuthUrlInBrowser(authUrl);
-    console.log("🌐 Mencoba membuka browser otomatis...");
-  } catch {
-    console.warn("⚠️ Browser could not be opened automatically; use the URL printed above.");
-  }
+  // Never pass an OAuth URL to a shell or child process. The URL is printed
+  // above so the operator can open it explicitly in their chosen browser.
+  console.log("Buka URL otorisasi di atas secara manual untuk melanjutkan.");
 
   const pollIntervalMs = 2500;
   const maxAttempts = 120; // 5 menit
@@ -820,7 +784,6 @@ if (require.main === module || process.argv.includes("--login-codebuddy") || pro
 
 module.exports = {
   validateCodebuddyAuthUrl,
-  __openAuthUrlInBrowser: openAuthUrlInBrowser,
   CODEBUDDY_INTL_URL,
   CODEBUDDY_MODELS,
   CODEBUDDY_UA,
