@@ -77,7 +77,7 @@ function acquireLockFile(lockPath: string, scope: string): () => void {
     }
     // Fail closed on stale locks. Automatic unlink after a separate PID check
     // has a TOCTOU race with a concurrent startup; require operator cleanup.
-    throw new Error("A stale AlphaWay " + scope + " lock exists. Remove " + lockPath + " only after confirming no AlphaWay process is using it.");
+    throw new Error("A stale AlphaWay process lock exists (" + scope + "). Remove " + lockPath + " only after confirming no AlphaWay process is using it.");
   }
 
   let lockIdentity: { dev: number; ino: number };
