@@ -147,7 +147,7 @@ describe("SQLite migration runner", () => {
       .prepare("SELECT id, name, api_key FROM custom_providers WHERE id = ?")
       .get("legacy-provider");
 
-    expect(result.currentVersion).toBe(4);
+    expect(result.currentVersion).toBe(5);
     expect(row.id).toBe("legacy-provider");
     expect(row.name).toBe("Legacy");
     expect(row.api_key).toMatch(/^awenc:v1:/);
@@ -229,7 +229,7 @@ describe("SQLite migration runner", () => {
     const marker = JSON.parse(db.prepare("SELECT value FROM app_settings WHERE key = ?")
       .get("alpha_security_secret_scrub").value);
 
-    expect(result.currentVersion).toBe(4);
+    expect(result.currentVersion).toBe(5);
     expect(stored).toMatch(/^awenc:v1:/);
     expect(stored).not.toContain(legacyCredential);
     expect(decryptSecret(stored)).toBe(legacyCredential);
