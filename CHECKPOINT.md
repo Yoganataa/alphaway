@@ -6,8 +6,8 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest Phase 2 code HEAD before this checkpoint sync:** `0e7d191ba745b7e64e3a7a28d4fece88167c36c4` (CI run is queued; latest completed run #212 verified the prior hardening commit `a64bbe2311465db98f0b7da531c3d1ffa4167f80`).  
-> **Latest completed implementation verification:** commit `a64bbe2311465db98f0b7da531c3d1ffa4167f80` passed run `41375651424` (#212): 332 unit/protocol tests and 8 dashboard E2E passed, with build, TLS fingerprint, and installer smoke successful. Later security commits extend bounded public auth payloads and sensitive-file reads; verify CI on the current head before merge.  
+> **Latest CI-verified Phase 2 code HEAD:** `c7f935e0fb823a28f087984dd5e801cb58ff4056` (run `41376483078`, #222; subsequent checkpoint/roadmap sync is documentation-only).  
+> **Latest implementation verification:** code head `c7f935e0fb823a28f087984dd5e801cb58ff4056` passed run `41376483078` (#222): **335 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed. The optional live upstream drill was skipped by design. The subsequent checkpoint/roadmap sync is documentation-only.  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -52,7 +52,7 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 
 - PR #4 is the only open PR, targets `main`, and remains **draft**. It is mergeable but must not be merged or used to start Phase 3 while the recovery-policy acceptance and independent security review remain outstanding.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- The latest completed code+test verification before the final security hardening commits was `a64bbe2311465db98f0b7da531c3d1ffa4167f80`, CI [run `41375651424`](https://github.com/Yoganataa/alphaway/actions/runs/41375651424) (#212): **332 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; build, TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Later commits add a 16 KiB public admin-auth body limit and bounded master-key/bootstrap/backup reads; their final-head CI must be inspected before merge.
+- The latest verified Phase 2 code head `c7f935e0fb823a28f087984dd5e801cb58ff4056` passed GitHub Actions [run `41376483078`](https://github.com/Yoganataa/alphaway/actions/runs/41376483078) (#222): **335 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; build, TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. The installer smoke verified encryption master-key preservation through upgrade. Optional live upstream gate drill was skipped by design.
 - Live PR review check: no submitted reviews, inline review comments/threads, or requested reviewers were present. Project-owner acceptance of the preserve-and-skip exception remains outstanding.
 - Repository Ruleset [`Protect main`](https://github.com/Yoganataa/alphaway/rules/26337025) is **active**, targets only `refs/heads/main`, and has an empty bypass list. It requires a PR, conversation resolution, up-to-date successful runs for the four required CI jobs (`Unit and protocol tests`, `Installer and embedded dashboard smoke test`, `UI and standalone binary build`, `Dashboard browser tests`), blocks branch deletion and force pushes, and requires zero approvals to support the solo-developer workflow. `current_user_can_bypass` is `never`.
 - The classic branch-protection endpoint is not readable by the GitHub integration (403); the active repository ruleset detail above is the source used to verify protection.
@@ -67,7 +67,7 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - Windows ACL enforcement for generated master-key/bootstrap files and legacy/SQLite backups is deferred to Phase 7.
 - Per-key Plan assignment is deferred to Phase 3 with the Plan model and enforcement semantics. Phase 2 API keys already have inference scope and lifecycle metadata.
 
-**Verification boundary:** CI evidence is GitHub Actions on Linux x86_64 with Bun 1.4.4. No local Bun test/build was run in this session. macOS launchd and Windows runtime/ACL behavior are not verified.
+**Verification boundary:** CI evidence is GitHub Actions on Linux x86_64 with Bun 1.4.4. No local Bun test/build was run in this session; GitHub Actions is the verified test environment. macOS launchd and Windows runtime/ACL behavior are not verified.
 ## 2. Agreed Product Direction
 
 The goal is to evolve AlphaWay without replacing its core gateway:
