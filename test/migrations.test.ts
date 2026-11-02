@@ -21,12 +21,13 @@ describe("SQLite migration runner", () => {
     const result = runMigrations(db);
 
     expect(result).toEqual({
-      currentVersion: 4,
+      currentVersion: 5,
       applied: [
         { version: 1, name: "initial-schema" },
         { version: 2, name: "auth-security" },
         { version: 3, name: "secret-residue-cleanup" },
         { version: 4, name: "encrypt-legacy-codebuddy-credential" },
+        { version: 5, name: "remove-legacy-json-import-ledger" },
       ],
     });
 
@@ -39,7 +40,7 @@ describe("SQLite migration runner", () => {
     expect(tables).toContain("custom_providers");
     expect(tables).toContain("request_logs");
     expect(tables).toContain("app_settings");
-    expect(tables).toContain("legacy_imports");
+    expect(tables).not.toContain("legacy_imports");
     expect(tables).toContain("api_keys");
     expect(tables).toContain("admin_users");
     expect(tables).toContain("admin_sessions");
@@ -52,8 +53,38 @@ describe("SQLite migration runner", () => {
       { version: 2, name: "auth-security" },
       { version: 3, name: "secret-residue-cleanup" },
       { version: 4, name: "encrypt-legacy-codebuddy-credential" },
+      { version: 5, name: "remove-legacy-json-import-ledger" },
     ]);
     expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub").value).toBe(JSON.stringify("pending"));
+  });
+
+  it("removes the obsolete JSON import ledger when upgrading an existing v4 SQLite database", () => {
+    db = openDatabase();
+    runMigrations(db, MIGRATIONS.slice(0, 4));
+    db.prepare(`
+      INSERT INTO legacy_imports (source_key, checksum, status, imported_at, row_count, details)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run("custom_providers:/old/path", "abc123", "imported", "2026-11-01T00:00:00.000Z", 3, null);
+    db.prepare(`
+      INSERT INTO custom_providers (
+        id, name, base_url, api_key, protocol, models, enabled, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("sqlite-provider", "SQLite Provider", "https://provider.example", "encrypted-key", "openai", "[]", 1, Date.now());
+
+    const result = runMigrations(db);
+    const ledger = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
+    ).get("legacy_imports");
+    const provider = db.prepare(
+      "SELECT id, name FROM custom_providers WHERE id = ?"
+    ).get("sqlite-provider");
+
+    expect(result).toEqual({
+      currentVersion: 5,
+      applied: [{ version: 5, name: "remove-legacy-json-import-ledger" }],
+    });
+    expect(ledger).toBeNull();
+    expect(provider).toEqual({ id: "sqlite-provider", name: "SQLite Provider" });
   });
 
   it("hashes legacy plaintext API keys and removes the legacy setting atomically", () => {
@@ -80,7 +111,7 @@ describe("SQLite migration runner", () => {
       .update(legacySecret, "utf8")
       .digest("hex");
 
-    expect(result.currentVersion).toBe(4);
+    expect(result.currentVersion).toBe(5);
     expect(stored.name).toBe("Legacy Integration");
     expect(stored.key_prefix).toBe(legacySecret.slice(0, 16));
     expect(stored.secret_hash).toBe(expectedHash);
@@ -211,11 +242,11 @@ describe("SQLite migration runner", () => {
     const first = runMigrations(db);
     const second = runMigrations(db);
 
-    expect(first.applied).toHaveLength(4);
+    expect(first.applied).toHaveLength(5);
     expect(second.applied).toHaveLength(0);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(4);
+    ).toBe(5);
   });
 
   it("rolls back migration DDL and history when a migration fails", () => {
@@ -223,7 +254,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const failingMigration: Migration = {
-      version: 5,
+      version: 6,
       name: "failing-test-migration",
       up(database) {
         database.exec("CREATE TABLE should_rollback (id INTEGER PRIMARY KEY)");
@@ -232,7 +263,7 @@ describe("SQLite migration runner", () => {
     };
 
     expect(() => runMigrations(db, [...MIGRATIONS, failingMigration])).toThrow(
-      /Migration 5 .* simulated interruption/
+      /Migration 6 .* simulated interruption/
     );
 
     const table = db
@@ -251,7 +282,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const recoveredMigration: Migration = {
-      version: 5,
+      version: 6,
       name: "recovered-test-migration",
       up(database) {
         database.exec("CREATE TABLE recovered_state (value TEXT NOT NULL)");
@@ -259,13 +290,13 @@ describe("SQLite migration runner", () => {
     };
 
     const result = runMigrations(db, [...MIGRATIONS, recoveredMigration]);
-    expect(result.currentVersion).toBe(5);
+    expect(result.currentVersion).toBe(6);
     expect(result.applied).toEqual([
-      { version: 5, name: "recovered-test-migration" },
+      { version: 6, name: "recovered-test-migration" },
     ]);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(5);
+    ).toBe(6);
   });
 
   it("refuses destructive migrations unless a backup callback is provided", () => {
@@ -273,7 +304,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const destructiveMigration: Migration = {
-      version: 5,
+      version: 6,
       name: "destructive-test-migration",
       destructive: true,
       up(database) {
