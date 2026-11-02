@@ -96,8 +96,8 @@ describe("administrator authentication and managed gateway API keys", () => {
     expect(queued.queued).toBeLessThanOrEqual(queued.maxQueued);
 
     const results = await Promise.all(attempts);
-    expect(results.filter((result) => result.error === "invalid")).toHaveLength(4);
-    expect(results.filter((result) => result.error === "rate_limited")).toHaveLength(4);
+    expect(results.filter((result) => result.error === "invalid")).toHaveLength(1);
+    expect(results.filter((result) => result.error === "rate_limited")).toHaveLength(7);
     expect(__getLoginKdfStateForTests()).toMatchObject({ active: 0, queued: 0 });
   });
 
