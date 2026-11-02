@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { createMigrationBackup, restoreDatabaseBackup } from "../core/migrations/backup";
 import { closeDatabase, getDatabase, getDbFilePath } from "../core/database";
-import { resolveDataDir } from "../core/storage-paths";
 import { acquireAlphaWayProcessLock } from "../core/process-lock";
 
 function usage(): never {
