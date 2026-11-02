@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Phase 2 is **merged** into `main` via PR #4. Merge commit `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` contains source head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. PR CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. A direct full SARIF scan on earlier remediated source head `ee317f3` produced 0 JavaScript/TypeScript and 0 Actions results. The original pre-merge baseline had 14 CodeQL alerts with remediations in PR #4; the current open-alert count was not independently accessible through this session and must be checked in GitHub Security. All six inline PR review threads are resolved. Solo maintainer acceptance is recorded; no second human reviewer participated.
+**Status:** Phase 2 is **merged** into `main` via PR #4. Merge commit `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` contains source head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. PR CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. A direct full SARIF scan on earlier remediated source head `ee317f3` produced 0 JavaScript/TypeScript and 0 Actions results. The original pre-merge baseline had 14 CodeQL alerts with remediations in PR #4; the maintainer's GitHub Security screenshot filtered to `is:open branch:main` on 2026-11-02 confirms **0 Open / 14 Closed**. All six inline PR review threads are resolved. Solo maintainer acceptance is recorded; no second human reviewer participated.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -87,3 +87,40 @@
 - Existing OpenAI, Anthropic, and Codex gateway protocols retain documented authorization-header compatibility.
 - Managed caller keys and persisted upstream credentials are not stored as plaintext in their canonical database representations.
 - SQLite is the only persistent application-state backend. Standalone JSON files are neither imported nor modified. Encrypted SQLite migration snapshots retain v1/v2 restore compatibility; POSIX permissions are restricted and Windows ACLs remain Phase 7.
+
+### Phase 3 — Plans, Limits, and Request Enforcement
+
+**Status:** Active on branch `feat/phase-3-plans-limits-enforcement`, based on `main` at `a28ed9baef0c698ec879d649a24726706d1eee3d`. Phase 2 is merged. Maintainer-confirmed CodeQL inventory on `main` is **0 Open / 14 Closed** (GitHub Security screenshot, filter `is:open branch:main`, 2026-11-02). The source audit found that AlphaWay currently has no Plans table, no per-key usage attribution, and no request policy enforcement. The current Quota Tracker UI synthesizes RPM/TPM values using `Math.random()` and must be replaced with persisted measurements.
+
+**Priority:** P1 — usage governance and request enforcement
+
+**Product and policy contract**
+- A Plan is a reusable policy template assigned to an individual managed API key. Plan quota/limit counters are per key; assigning multiple keys to one Plan does not pool their allowances.
+- Effective policy precedence: explicit per-key override > assigned Plan field > unlimited default. Per-key policy columns must be nullable so `NULL` means inherit and numeric `0` means explicitly unlimited.
+- Numeric limit `0` means unlimited. Existing managed keys with no Plan/overrides remain unlimited to preserve current behavior.
+- Initial dimensions: requests per rolling minute (RPM), tokens per rolling minute (TPM), in-flight concurrency, token quota, period, and model allowlist.
+- Token quota periods: daily, weekly, monthly, and total. Calendar period boundaries use UTC.
+- Empty model allowlist means any model; a non-empty allowlist is evaluated before provider dispatch. Validation must reject malformed/ambiguous patterns.
+- `hardCutoff` blocks new requests after token quota exhaustion; when false, the request is allowed but usage is marked over-budget. `alertPct` is a dashboard warning threshold only; no email/webhook notification is implied.
+- Rate/concurrency/token policy applies to managed API keys only. Legacy `API_KEY` / `BRIDGE_API_KEY` environment credentials remain compatible and do not gain DB-backed plan limits in this phase.
+- Do not add USD spending caps: the current cost/savings number is an estimate and is not an authoritative billing/pricing source.
+- Historical request logs remain unattributed. Per-key usage attribution begins with requests after the migration.
+
+**Implementation stages**
+- [ ] **3.1 — Persistence and policy CRUD:** migration v6 adds `plans`, nullable plan assignment/override columns to `api_keys`, and nullable `api_key_id` attribution to `request_logs`, with indexes and foreign-key/delete behavior. Implement validated admin CRUD and assignment endpoints. Deleting a Plan with assigned keys must return 409; no cascading policy change.
+- [ ] **3.2 — Effective policy resolution:** resolve per-key override → Plan → unlimited; validate the complete policy before using it; treat storage/read failures as policy errors, never as permission to bypass limits. Add request-scoped managed-key identity to Hono context.
+- [ ] **3.3 — Enforcement and metering:** enforce RPM/TPM, per-key concurrency, token quotas and model allowlists at the common gateway boundary for OpenAI Chat, Anthropic Messages, Codex Responses, and supported aliases. Ensure streaming concurrency is held until stream completion/cancellation. Attribute request/token usage by key; use upstream token usage where available and document estimates otherwise. Return stable 429 rate/quota errors with appropriate retry/reset metadata and 403 for model restrictions.
+- [ ] **3.4 — Dashboard contracts:** replace synthetic quota figures with actual persisted key/plan usage; add Plan management and per-key Plan assignment/override controls; show effective policy, usage window, remaining budget, and alert threshold. Never label simulated or unknown values as real-time quota.
+- [ ] **3.5 — Verification:** migration upgrade v5→v6 preserves canonical data; tests cover policy precedence, Plan CRUD/assignment, protected admin routes, invalid inputs, zero/unlimited semantics, UTC period boundaries, rate/concurrency limits, stream release/cancellation, model restrictions, quota cutoff, legacy environment-key compatibility, and failure-closed storage behavior.
+
+**Acceptance criteria**
+- Admin can create, inspect, update, and delete a Plan; deletion is refused while keys reference it.
+- Admin can assign/unassign a Plan for each managed key and configure nullable per-key overrides without losing existing key metadata.
+- Effective policy is deterministic and identical across every supported inference protocol and alias.
+- Requests exceeding an enforced limit are rejected before upstream dispatch; requests allowed by soft quota policy remain measurable and visibly marked over-budget.
+- Request usage is attributed to the correct managed key from the first request after migration; legacy environment keys remain unassigned.
+- Concurrency slots are released when non-streaming requests finish and streaming responses complete or are cancelled.
+- The Quota Tracker contains no random/synthetic consumption figures; it shows real measurements or an explicit unavailable/unknown state.
+- All new admin endpoints are covered by the existing default-deny administrator session middleware.
+- CI and CodeQL pass on the final Phase 3 PR head; no existing protocol, provider, installer, SQLite backup, or Phase 2 behavior regresses.
+
