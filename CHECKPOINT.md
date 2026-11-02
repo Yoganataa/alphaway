@@ -6,8 +6,7 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Last previously CI-verified functional Phase 2 HEAD:** `c2424e84611efaac66e3575a504be74684df25e3` (run `41368844575`)  
-> **Current Phase 2 hardening code head before documentation sync:** `df1d5b179f32ebb0e51652a3ee69f10bfd2fd798` (new CI result not yet available)  
+> **Latest CI-verified Phase 2 code HEAD:** `b7b12eb6d48ca1fcc8db25b811c0c93456eef007` (run `41371184264`; documentation sync follows)  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -19,7 +18,7 @@
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
-- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (core implementation and in-repository hardening complete; preserve-and-skip legacy recovery policy decided; independent security review remains).
+- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (core implementation and in-repository hardening complete; preserve-and-skip recovery policy documented, owner acceptance and independent security review remain).
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
@@ -38,6 +37,7 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - AES-256-GCM at-rest encryption for custom-provider API keys, proxy/pool/relay credentials, CodeBuddy OAuth credentials, processed legacy JSON rollback envelopes, and destructive-migration SQLite snapshots.
 - Existing plaintext SQLite migration/pre-restore snapshots are migrated to encrypted `.awenc` envelopes at startup or before restore. SQLite restore validates a staged database with `PRAGMA quick_check` before replacement.
 - Migration v3 enables connection-local `PRAGMA secure_delete=ON` and records a retryable one-time cleanup marker. Startup checkpoints/truncates WAL, runs `VACUUM`, checkpoints again, and marks cleanup complete only after success. This removes logical SQLite page/WAL residue from the v2 credential migration; it is not a physical-media or filesystem-snapshot sanitization guarantee.
+- Migration v4 encrypts the legacy JSON-encoded `codebuddy_api_key` setting at rest and re-arms the secret-residue cleanup marker. This covers existing databases that had already completed migration v3 before the CodeBuddy credential gap was identified; startup repeats WAL checkpoint/VACUUM before returning the database.
 - Legacy JSON, usage analytics, TokenSaver, and proxy settings use explicit import/storage allowlists. Unknown credential-bearing fields are discarded; analytics/TokenSaver/proxy rows already present in SQLite are normalized and rewritten before use.
 - Legacy import rejects symlink sources, uses no-follow descriptors and file identity checks, and atomically replaces successfully processed JSON files with encrypted rollback envelopes. Oversized (`>50 MiB`) or unsafe-to-replace sources are not imported/encrypted; POSIX mode is restricted to `0600` and the plaintext residual remains documented.
 - Provider and CodeBuddy upstream diagnostic redaction covers raw, decoded, percent-encoded, Bearer-prefixed credentials; proxy connection-test diagnostics redact proxy authority credentials.
@@ -49,14 +49,14 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 
 - PR #4 is the only open PR, targets `main`, and remains **draft**. Do not merge it or start Phase 3 in this checkpoint.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- Functional Phase 2 head `c2424e84611efaac66e3575a504be74684df25e3` passed GitHub Actions run [`41368844575`](https://github.com/Yoganataa/alphaway/actions/runs/41368844575): **327 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Installer smoke verified the encryption master-key file survived upgrade unchanged. Optional live upstream gate drill was skipped by design.
-- README/ROADMAP/CHECKPOINT synchronization commits follow the functional CI-verified head. Re-fetch PR head and Actions before merge; require green CI for the final docs head.
+- Phase 2 code head `b7b12eb6d48ca1fcc8db25b811c0c93456eef007` passed GitHub Actions run [`41371184264`](https://github.com/Yoganataa/alphaway/actions/runs/41371184264): **330 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Installer smoke verified the encryption master-key file survived upgrade unchanged. Optional live upstream gate drill was skipped by design.
+- `CHECKPOINT.md`, `ROADMAP.md`, and PR #4 description are being synchronized after this verified code head; require green CI on the final docs head before merge.
 - An earlier CI failure on commit `117b51a...` was caused by an invalid escaped regex. It was corrected; the subsequent functional head run above passed.
 - Windows ACL behavior is not verified. Keep it in Phase 7 hardening; POSIX `0600`/`0700` permissions are covered.
 
 ### Remaining Phase 2 gaps / boundaries
 
-- Operator recovery policy is **preserve-and-skip** for legacy JSON sources above 50 MiB or sources that cannot be safely atomically replaced: do not parse, partially import, truncate, or delete them automatically. Preserve the source and report the skip; POSIX mode is restricted to `0600`. The operator must create and verify an encrypted archive before moving the source out of configured import directories. Windows ACL enforcement remains unverified and requires manual OS-level protection until Phase 7.
+- Proposed operator recovery policy is **preserve-and-skip** for legacy JSON sources above 50 MiB or sources that cannot be safely atomically replaced: do not parse, partially import, truncate, or delete them automatically. Preserve the source and report the skip; POSIX mode is restricted to `0600`. The operator must create and verify an encrypted archive before moving the source out of configured import directories. Project-owner acceptance is still required. Windows ACL enforcement remains unverified and requires manual OS-level protection until Phase 7.
 - Independent security review of PR #4 is outstanding. Keep PR #4 draft until review and acceptance criteria are complete.
 - Windows ACL enforcement for generated master-key/bootstrap files and legacy/SQLite backups is deferred to Phase 7.
 - Per-key Plan assignment is deferred to Phase 3 with the Plan model and enforcement semantics. Phase 2 API keys already have inference scope and lifecycle metadata.
