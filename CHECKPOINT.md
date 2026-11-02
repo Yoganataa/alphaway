@@ -6,7 +6,8 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest functional Phase 2 CI-verified HEAD:** `c2424e84611efaac66e3575a504be74684df25e3` (run `41368844575`; documentation sync follows)  
+> **Last previously CI-verified functional Phase 2 HEAD:** `c2424e84611efaac66e3575a504be74684df25e3` (run `41368844575`)  
+> **Current Phase 2 hardening code head before documentation sync:** `df1d5b179f32ebb0e51652a3ee69f10bfd2fd798` (new CI result not yet available)  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -18,7 +19,7 @@
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
-- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (core implementation and in-repository secret-flow hardening complete; oversized/unreplaceable legacy-source policy and independent review remain).
+- [ ] Phase 2 — Authentication, API Keys, and Administrative Access (core implementation and in-repository hardening complete; preserve-and-skip legacy recovery policy decided; independent security review remains).
 - [ ] Phase 3 — Plans, Limits, and Request Enforcement.
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
@@ -30,11 +31,13 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 ### Phase 2 implementation on the active branch
 
 - First-admin bootstrap token, CLI-only token display, scrypt password hashes, bounded login throttling, hashed admin sessions, expiry/revocation, HttpOnly/SameSite cookie, and dashboard login/logout.
+- Administrator login KDF concurrency is bounded globally (4 active, 16 queued); same-username password checks are serialized so parallel guesses cannot race the failed-login throttle. Overload is rejected as rate-limited.
 - Default-deny administrator session gate for `/api/*`; only status/session/bootstrap/login endpoints are public. Host/Origin validation compares scheme, host, and port and rejects same-host cross-port requests.
 - Managed inference keys stored as salted SHA-256 hashes with prefix lookup; create/list metadata/rename/rotate/revoke, inference scope, last-used timestamps, and request counts. Legacy `API_KEY` and `BRIDGE_API_KEY` remain supported.
 - Gateway inference authentication covers OpenAI, Anthropic, and Codex routes including aliases. Gateway caller credentials are not reused as upstream CodeBuddy credentials.
 - AES-256-GCM at-rest encryption for custom-provider API keys, proxy/pool/relay credentials, CodeBuddy OAuth credentials, processed legacy JSON rollback envelopes, and destructive-migration SQLite snapshots.
 - Existing plaintext SQLite migration/pre-restore snapshots are migrated to encrypted `.awenc` envelopes at startup or before restore. SQLite restore validates a staged database with `PRAGMA quick_check` before replacement.
+- Migration v3 enables connection-local `PRAGMA secure_delete=ON` and records a retryable one-time cleanup marker. Startup checkpoints/truncates WAL, runs `VACUUM`, checkpoints again, and marks cleanup complete only after success. This removes logical SQLite page/WAL residue from the v2 credential migration; it is not a physical-media or filesystem-snapshot sanitization guarantee.
 - Legacy JSON, usage analytics, TokenSaver, and proxy settings use explicit import/storage allowlists. Unknown credential-bearing fields are discarded; analytics/TokenSaver/proxy rows already present in SQLite are normalized and rewritten before use.
 - Legacy import rejects symlink sources, uses no-follow descriptors and file identity checks, and atomically replaces successfully processed JSON files with encrypted rollback envelopes. Oversized (`>50 MiB`) or unsafe-to-replace sources are not imported/encrypted; POSIX mode is restricted to `0600` and the plaintext residual remains documented.
 - Provider and CodeBuddy upstream diagnostic redaction covers raw, decoded, percent-encoded, Bearer-prefixed credentials; proxy connection-test diagnostics redact proxy authority credentials.
@@ -53,7 +56,7 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 
 ### Remaining Phase 2 gaps / boundaries
 
-- Decide and document the operator recovery policy for legacy JSON sources above 50 MiB or sources that cannot be atomically replaced. They remain plaintext but are owner-only (`0600`) on POSIX and produce a skipped import report.
+- Operator recovery policy is **preserve-and-skip** for legacy JSON sources above 50 MiB or sources that cannot be safely atomically replaced: do not parse, partially import, truncate, or delete them automatically. Preserve the source and report the skip; POSIX mode is restricted to `0600`. The operator must create and verify an encrypted archive before moving the source out of configured import directories. Windows ACL enforcement remains unverified and requires manual OS-level protection until Phase 7.
 - Independent security review of PR #4 is outstanding. Keep PR #4 draft until review and acceptance criteria are complete.
 - Windows ACL enforcement for generated master-key/bootstrap files and legacy/SQLite backups is deferred to Phase 7.
 - Per-key Plan assignment is deferred to Phase 3 with the Plan model and enforcement semantics. Phase 2 API keys already have inference scope and lifecycle metadata.
