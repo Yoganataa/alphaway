@@ -344,19 +344,33 @@ function importTokenSaverConfig(db: any, payload: any): ImportOutcome {
   if (safe.soulMode && !["auto", "preset", "custom"].includes(String(safe.soulMode))) delete safe.soulMode;
   return { status: "imported", rowCount: insertAppSettingIfMissing(db, "tokensaver_config", safe) };
 }
+function sameFileSnapshot(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
 function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksum: string, expectedStat?: fs.Stats): boolean {
   const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
   try {
     const pathStat = fs.lstatSync(filePath);
     if (pathStat.isSymbolicLink() || !pathStat.isFile()) return false;
     const sourceFd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
-    let current: string;
+    let current: string | null;
     try {
-      const currentStat = fs.fstatSync(sourceFd);
-      if (currentStat.dev !== pathStat.dev || currentStat.ino !== pathStat.ino) return false;
-      if (expectedStat && (currentStat.dev !== expectedStat.dev || currentStat.ino !== expectedStat.ino)) return false;
+      const openedStat = fs.fstatSync(sourceFd);
+      if (openedStat.dev !== pathStat.dev || openedStat.ino !== pathStat.ino) return false;
+      if (expectedStat && (openedStat.dev !== expectedStat.dev || openedStat.ino !== expectedStat.ino)) return false;
       if (process.platform !== "win32") fs.fchmodSync(sourceFd, 0o600);
-      current = fs.readFileSync(sourceFd, "utf8");
+      // Establish the stable baseline after fchmod, then keep the second read
+      // subject to the same hard byte limit as the initial legacy import.
+      const baseline = fs.fstatSync(sourceFd);
+      if (!baseline.isFile() || baseline.size > MAX_LEGACY_JSON_BYTES) return false;
+      current = readUtf8WithinLimit(sourceFd, MAX_LEGACY_JSON_BYTES);
+      const afterRead = fs.fstatSync(sourceFd);
+      if (current === null || !sameFileSnapshot(baseline, afterRead)) return false;
     } finally {
       fs.closeSync(sourceFd);
     }
@@ -380,11 +394,18 @@ function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksu
     if (latestPathStat.isSymbolicLink() || !latestPathStat.isFile()) return false;
     if (expectedStat && (latestPathStat.dev !== expectedStat.dev || latestPathStat.ino !== expectedStat.ino)) return false;
     const verifyFd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
-    let latestContents: string;
+    let latestContents: string | null;
     try {
-      const latestStat = fs.fstatSync(verifyFd);
-      if (latestStat.dev !== latestPathStat.dev || latestStat.ino !== latestPathStat.ino) return false;
-      latestContents = fs.readFileSync(verifyFd, "utf8");
+      const baseline = fs.fstatSync(verifyFd);
+      if (
+        !baseline.isFile() ||
+        baseline.dev !== latestPathStat.dev ||
+        baseline.ino !== latestPathStat.ino ||
+        baseline.size > MAX_LEGACY_JSON_BYTES
+      ) return false;
+      latestContents = readUtf8WithinLimit(verifyFd, MAX_LEGACY_JSON_BYTES);
+      const afterRead = fs.fstatSync(verifyFd);
+      if (latestContents === null || !sameFileSnapshot(baseline, afterRead)) return false;
     } finally {
       fs.closeSync(verifyFd);
     }
@@ -420,7 +441,11 @@ export function restoreLegacyBackup(encryptedPath: string, outputPath: string): 
     if (!sourceStat.isFile() || sourceStat.dev !== sourcePathStat.dev || sourceStat.ino !== sourcePathStat.ino) throw new Error("Encrypted backup source changed while it was being opened");
     const maxEncryptedBytes = Math.ceil(MAX_LEGACY_JSON_BYTES * 4 / 3) + 4096;
     if (sourceStat.size > maxEncryptedBytes) throw new Error("Encrypted backup exceeds the restore size limit");
-    envelope = fs.readFileSync(sourceFd, "utf8").trim();
+    const boundedEnvelope = readUtf8WithinLimit(sourceFd, maxEncryptedBytes);
+    const afterRead = fs.fstatSync(sourceFd);
+    if (boundedEnvelope === null) throw new Error("Encrypted backup exceeds the restore size limit or changed while being read");
+    if (!sameFileSnapshot(sourceStat, afterRead)) throw new Error("Encrypted backup changed while being read");
+    envelope = boundedEnvelope.trim();
   } finally {
     fs.closeSync(sourceFd);
   }
