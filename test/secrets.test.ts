@@ -1,11 +1,27 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { decryptSecret, encryptSecret, isEncryptedSecret } from "../src/core/secrets";
+import { __resetSecretKeyCacheForTests, decryptSecret, encryptSecret, isEncryptedSecret } from "../src/core/secrets";
 
-const stateDir = process.env.DATA_DIR;
-if (!stateDir) throw new Error("test/setup.ts must set DATA_DIR before secret tests run");
-const keyPath = path.join(stateDir, "secret-encryption.key");
+let stateDir = "";
+let keyPath = "";
+let previousDataDir: string | undefined;
+
+beforeEach(() => {
+  previousDataDir = process.env.DATA_DIR;
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-secrets-test-"));
+  process.env.DATA_DIR = stateDir;
+  keyPath = path.join(stateDir, "secret-encryption.key");
+  __resetSecretKeyCacheForTests();
+});
+
+afterEach(() => {
+  __resetSecretKeyCacheForTests();
+  if (previousDataDir === undefined) delete process.env.DATA_DIR;
+  else process.env.DATA_DIR = previousDataDir;
+  fs.rmSync(stateDir, { recursive: true, force: true });
+});
 
 describe("authenticated secret storage", () => {
   it("refuses a symlink at the master-key path", () => {
