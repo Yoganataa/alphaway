@@ -13,7 +13,8 @@ import os from "node:os";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 
-const ENVELOPE = "awenc:v1:";
+const ENVELOPE_V1 = "awenc:v1:";
+const ENVELOPE_V2 = "awenc:v2:";
 const KEY_BYTES = 32;
 const IV_BYTES = 12;
 let cachedKey: Buffer | null = null;
@@ -138,7 +139,13 @@ function masterKey(): Buffer {
 }
 
 export function isEncryptedSecret(value: string | null | undefined): boolean {
-  return typeof value === "string" && value.startsWith(ENVELOPE);
+  return typeof value === "string" &&
+    (value.startsWith(ENVELOPE_V1) || value.startsWith(ENVELOPE_V2));
+}
+
+/** Internal file-backup encryption key access; returns a defensive copy. */
+export function getSecretEncryptionKeyForBackup(): Buffer {
+  return Buffer.from(masterKey());
 }
 
 export function encryptSecret(value: string | null | undefined): string {
@@ -156,7 +163,8 @@ export function decryptSecret(value: string | null | undefined): string {
   const stored = String(value || "");
   if (!isEncryptedSecret(stored)) return stored;
 
-  const parts = stored.slice(ENVELOPE.length).split(".");
+  const prefix = stored.startsWith(ENVELOPE_V2) ? ENVELOPE_V2 : ENVELOPE_V1;
+  const parts = stored.slice(prefix.length).split(".");
   if (parts.length !== 3) throw new Error("Stored secret has an invalid encryption envelope");
 
   const [ivText, tagText, ciphertextText] = parts;
