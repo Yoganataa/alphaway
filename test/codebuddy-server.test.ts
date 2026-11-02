@@ -21,7 +21,7 @@ describe("CodeBuddy OAuth authorization URL validation", () => {
   it("does not execute or spawn a process from remote OAuth URLs", () => {
     const source = fs.readFileSync(path.resolve(import.meta.dir, "../src/providers/codebuddy.ts"), "utf8");
     expect(source).not.toContain("child_process");
-    expect(source).not.toMatch(/\\b(?:exec|spawn|execFile)(?:Sync)?\\s*\\(/);
+    expect(source).not.toMatch(/\b(?:exec|spawn|execFile)(?:Sync)?\s*\(/);
   });
 
   it("rejects unsafe schemes, untrusted hosts, credentials, and nonstandard ports", () => {
