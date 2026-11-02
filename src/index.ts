@@ -17,8 +17,6 @@ if (typeof (globalThis as any).Bun === "undefined") {
 
 import { app } from "./app";
 import { getAdminBootstrapTokenForCli } from "./core/admin-auth";
-import { restoreLegacyBackup } from "./core/legacy-imports";
-import path from "node:path";
 import { handleDaemonCli } from "./features/daemon";
 import { startTunnel } from "./features/tunnel";
 import { opencode } from "./providers";
@@ -26,24 +24,6 @@ import { opencode } from "./providers";
 const PORT = parseInt(process.env.PORT || "20129", 10);
 const HOST = process.env.HOST || "127.0.0.1";
 
-// Restore a rollback JSON file that was encrypted after its successful import.
-const restoreFlag = process.argv.indexOf("--restore-legacy-backup");
-if (restoreFlag >= 0) {
-  const encryptedPath = process.argv[restoreFlag + 1];
-  const outputPath = process.argv[restoreFlag + 2];
-  if (!encryptedPath || !outputPath || path.extname(outputPath).toLowerCase() !== ".json") {
-    console.error("Usage: alphaway --restore-legacy-backup <encrypted-source.json> <new-output.json>");
-    process.exit(2);
-  }
-  try {
-    restoreLegacyBackup(encryptedPath, outputPath);
-    console.log("Encrypted legacy backup restored to " + path.resolve(outputPath));
-    process.exit(0);
-  } catch (error: any) {
-    console.error("Could not restore encrypted legacy backup: " + (error?.message || String(error)));
-    process.exit(1);
-  }
-}
 // Print the bootstrap token only from a local CLI invocation; never expose it over HTTP.
 if (process.argv.includes("--show-admin-bootstrap-token")) {
   const token = getAdminBootstrapTokenForCli();
@@ -70,7 +50,6 @@ Usage:
 
 Options:
   --show-admin-bootstrap-token  Show the one-time first-admin setup token
-  --restore-legacy-backup <encrypted.json> <output.json>  Restore an encrypted legacy rollback copy
   -d, --daemon     Run AlphaWay as a background daemon process
   --status         Check the status of the running AlphaWay daemon
   --stop           Stop the running AlphaWay daemon
