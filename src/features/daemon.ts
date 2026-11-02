@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { resolveDataDir, ensurePrivateDirectory } = require("../core/storage-paths");
-const { acquireAlphaWayProcessLock } = require("../core/process-lock");
+const { acquireAlphaWayProcessLock, getAlphaWayDatabaseLockPath } = require("../core/process-lock");
 
 function getStateDir() {
   const dir = resolveDataDir();
@@ -99,8 +99,9 @@ function stopDaemon() {
 function spawnDaemon(port = 20129, host = "127.0.0.1", publicUrl = "") {
   const pidFile = getPidFilePath();
   const instanceLock = path.join(getStateDir(), "alphaway.lock");
-  if (fs.existsSync(instanceLock)) {
-    console.error("[AlphaWay] An AlphaWay instance or stale data-directory lock already exists. Stop the active service or inspect alphaway.lock before starting another instance.");
+  const databaseLock = getAlphaWayDatabaseLockPath();
+  if (fs.existsSync(instanceLock) || (databaseLock && fs.existsSync(databaseLock))) {
+    console.error("[AlphaWay] An AlphaWay instance or stale process/database lock already exists. Stop the active service or inspect the matching alphaway.lock file before starting another instance.");
     process.exit(1);
   }
 
@@ -174,8 +175,9 @@ function handleDaemonCli(port, host, publicUrl) {
     process.exit(0);
   }
 
-  // Every foreground, systemd/launchd, and daemon process holds the same
-  // exclusive data-directory lock. Database restore acquires this lock too.
+  // Every foreground, systemd/launchd, and daemon process holds both the
+  // data-directory compatibility lock and canonical SQLite database lock.
+  // Database restore acquires the destination database lock as well.
   acquireAlphaWayProcessLock();
 
   // Preserve the legacy daemon PID file for --status/--stop. Foreground and
