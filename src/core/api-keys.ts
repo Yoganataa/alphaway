@@ -192,6 +192,9 @@ function normalizeOverride(value: unknown, field: string): number | null {
 /** Update the Plan assignment and nullable per-key policy overrides atomically. */
 export function setAPIKeyPolicy(id: string, patch: APIKeyPolicyPatch): APIKeyRecord | null {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("A policy object is required");
+  const allowedFields = new Set(["planId", "rateLimitRpm", "rateLimitTpm", "concurrencyLimit", "tokenQuota", "allowedModels"]);
+  const unknownFields = Object.keys(patch).filter((key) => !allowedFields.has(key));
+  if (unknownFields.length) throw new Error("Unknown API key policy field(s): " + unknownFields.join(", "));
   const db = getDatabase();
   const current = db.prepare("SELECT * FROM api_keys WHERE id = ? AND status = 'active'").get(id);
   if (!current) return null;
