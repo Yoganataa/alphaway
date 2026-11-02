@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Core implementation and in-repository hardening are implemented on `feat/phase-2-auth-admin-security`. Code head `c7f935e0fb823a28f087984dd5e801cb58ff4056` passed CI run `41376483078` (#222) on Bun 1.4.4: 335 unit/protocol tests, 8 dashboard E2E, standalone build, installer smoke, and TLS fingerprint passed. Current checkpoint/roadmap commits are documentation-only after that verified implementation head; re-check Actions on the live branch before merge. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and the independent security review decision.
+**Status:** Core implementation and in-repository hardening are implemented on `feat/phase-2-auth-admin-security`. Code head `ceb97284108fdd0e13879886fe3fb6c9e311f47f` passed CI run `41382850587` (#235) on Bun 1.4.4: 338 unit/protocol tests, 8 dashboard E2E, standalone build, installer smoke, and TLS fingerprint passed. The new hardening adds streaming SQLite backup/restore with v1 compatibility and bounded proxy health-cache reads. Current checkpoint/roadmap commits are documentation-only after that verified implementation head; re-check Actions on the live branch before merge. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and the independent security review decision.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -20,6 +20,7 @@
 - [x] Bound administrator password KDF concurrency globally (4 active, 16 queued), reject queue overflow, and serialize KDF checks per username to prevent parallel throttle bypass.
 - [x] Cap public administrator bootstrap/login JSON bodies at 16 KiB using Content-Length validation and a streaming byte limit; reject oversized requests with 413 before JSON parsing/KDF work.
 - [x] Bound master encryption-key reads to exactly 32 bytes plus a sentinel and bootstrap-token file reads to 64 bytes; validate file identity/metadata and strict token format.
+- [x] Bound proxy health cache reads to 1 MiB using no-follow descriptors and metadata checks, and cap the in-memory health map at 512 egress records; this cache remains best-effort and independent of canonical proxy configuration.
 - [x] Make `/health` recognize an encrypted CodeBuddy credential without exposing its value.
 - [x] Add AES-GCM tests for nonce uniqueness, authenticated decryption/tamper rejection, symlink refusal, and POSIX owner-only key-file permissions.
 - [x] Refuse symlinked legacy JSON sources; open through no-follow descriptors, verify file identity, and atomically replace processed sources with encrypted rollback envelopes. Provide `--restore-legacy-backup` for operator recovery.
@@ -27,6 +28,7 @@
 - [x] Whitelist fields imported from legacy usage analytics, TokenSaver, and proxy configuration; discard unknown credential-bearing properties rather than persisting arbitrary JSON.
 - [x] Normalize and rewrite older SQLite analytics, TokenSaver, and proxy settings through allowlisted schemas before exposing them to application/dashboard code.
 - [x] Encrypt destructive-migration SQLite snapshots as AES-256-GCM `.sqlite.awenc` envelopes and migrate historical plaintext migration/pre-restore snapshots before they are used.
+- [x] Stream SQLite backup encryption and restore with bounded 96 KiB file I/O, without an arbitrary database-size cap; emit v2 envelopes and preserve compatibility with v1 encrypted backups. Staged restore still runs SQLite `quick_check` before replacement.
 - [x] After the v2 credential migration, enable SQLite `secure_delete`, checkpoint/truncate WAL, `VACUUM`, and checkpoint again under a retryable v3 marker before startup serves requests. This is logical SQLite cleanup, not physical-media sanitization.
 - [x] Migration v4 encrypts the legacy JSON-encoded `codebuddy_api_key` setting for databases that already reached v3, then re-arms the cleanup marker so startup repeats WAL checkpoint/VACUUM after replacing the old plaintext value.
 - [x] Redact raw, decoded, percent-encoded, and Bearer-prefixed provider credentials from custom-provider and CodeBuddy error responses/diagnostics; sanitize proxy connection-test errors.
@@ -48,7 +50,7 @@
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- Verified implementation head [`c7f935e0fb823a28f087984dd5e801cb58ff4056`](https://github.com/Yoganataa/alphaway/commit/c7f935e0fb823a28f087984dd5e801cb58ff4056), CI run [`41376483078`](https://github.com/Yoganataa/alphaway/actions/runs/41376483078) (#222): **335 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. The optional live upstream gate drill was skipped by design.
+- Verified implementation head [`ceb97284108fdd0e13879886fe3fb6c9e311f47f`](https://github.com/Yoganataa/alphaway/commit/ceb97284108fdd0e13879886fe3fb6c9e311f47f), CI run [`41382850587`](https://github.com/Yoganataa/alphaway/actions/runs/41382850587) (#235): **338 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. Tests include streaming 24 MiB SQLite backup/restore and v1 encrypted backup compatibility. The optional live upstream gate drill was skipped by design.
 - Repository Ruleset `Protect main` is active and enforces the four required jobs with strict up-to-date checks. Its required approval count is 0 for the solo developer; no bypass actors are configured.
 - Do not merge PR #4 or begin Phase 3 until the preserve-and-skip exception is accepted by the project owner, the independent security review decision/findings are resolved, and CI is green on the final PR head.
 
