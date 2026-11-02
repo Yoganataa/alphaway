@@ -139,8 +139,8 @@
                   <p class="text-xs text-text-muted mt-1">{plan.description || "No description"}</p>
                 </div>
                 <div class="flex gap-1 shrink-0">
-                  <Button variant="ghost" size="xs" onclick={() => startEdit(plan)}>Edit</Button>
-                  <Button variant="ghost" size="xs" onclick={() => removePlan(plan)}>Delete</Button>
+                  <Button variant="ghost" size="sm" onclick={() => startEdit(plan)}>Edit</Button>
+                  <Button variant="ghost" size="sm" onclick={() => removePlan(plan)}>Delete</Button>
                 </div>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
@@ -167,7 +167,7 @@
     <section class="rounded-xl border border-border-subtle bg-surface-1 p-4">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold text-text-main">{editingId ? "Edit Plan" : "Create Plan"}</h3>
-        {#if editingId}<Button variant="ghost" size="xs" onclick={resetForm}>Cancel</Button>{/if}
+        {#if editingId}<Button variant="ghost" size="sm" onclick={resetForm}>Cancel</Button>{/if}
       </div>
       <form class="space-y-3" onsubmit={savePlan}>
         <label class="block space-y-1">
