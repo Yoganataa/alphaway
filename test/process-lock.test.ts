@@ -71,6 +71,18 @@ describe("AlphaWay process/data-directory lock", () => {
     expect(fs.readFileSync(lockPath, "utf8")).toBe("2147483647\n");
   });
 
+  it("refuses a symlink at the canonical SQLite database path", () => {
+    if (process.platform === "win32") return;
+    const directory = useTemporaryDataDir();
+    const realDatabase = path.join(directory, "db", "real.sqlite");
+    const linkedDatabase = path.join(directory, "db", "linked.sqlite");
+    fs.mkdirSync(path.dirname(realDatabase), { recursive: true });
+    fs.writeFileSync(realDatabase, "");
+    fs.symlinkSync(realDatabase, linkedDatabase);
+
+    expect(() => getAlphaWayDatabaseLockPath(linkedDatabase)).toThrow(/non-symlink SQLite file/);
+  });
+
   it("refuses a symlink at the process lock path", () => {
     if (process.platform === "win32") return;
     const directory = useTemporaryDataDir();
