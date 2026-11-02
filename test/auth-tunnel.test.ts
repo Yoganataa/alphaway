@@ -64,6 +64,22 @@ describe("auth & tunnel configuration", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects oversized bootstrap and login payloads before JSON parsing", async () => {
+    const body = JSON.stringify({
+      bootstrapToken: "invalid-token",
+      username: "admin",
+      password: "x".repeat(20 * 1024),
+    });
+    for (const endpoint of ["/api/admin/auth/bootstrap", "/api/admin/auth/login"]) {
+      const res = await fetch(`http://127.0.0.1:${port}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      expect(res.status).toBe(413);
+    }
+  });
+
   it("exposes tunnel endpoint and auth requirement in /health", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);
