@@ -22,7 +22,7 @@
   - **Caveman & ADHD Personas**: Concise, high-density responses with *Auto-Clarity Guard* that automatically disengages upon detecting sensitive or dangerous commands.
 - **SOUL.md Engine & Soul Studio (SoulSpec Standard)**:
   - **Persistent Personality Injection**: Anchor the AI model to a unified character sheet (`SOUL.md`), eradicating corporate fluff, sycophancy, and filler phrases across all tri-protocol endpoints.
-  - **Cascading Auto-Discovery**: Automatic hierarchical resolution: Local Project (`./SOUL.md`) → Global Default (`~/.alphaway/SOUL.md`) → Built-in Presets (`Atlas`, `Minimalist`, `Socratic`).
+  - **Cascading Auto-Discovery**: Automatic hierarchical resolution: Local Project (`./SOUL.md`) → Global Default (`$DATA_DIR/SOUL.md`, default `~/.alphaway/SOUL.md`) → Built-in Presets (`Atlas`, `Minimalist`, `Socratic`).
   - **Interactive Soul Studio**: Dashboard markdown editor with live token estimation and interactive prompt framing preview sandbox.
 - **Comprehensive 9Router-Go UI/UX Architecture (Svelte 5 + Tailwind CSS v4)**:
   - **Endpoint View (`/dashboard/endpoint`)**: Origin endpoint (`http://127.0.0.1:20129/v1`), Cloudflare Named & Quick Tunnel status, API key gate switch, API key management (create, one-time display, copy, rotate, revoke), and multi-client snippet tabs (Cursor, Continue, Claude Code, Roo-Code, Python, Node, cURL).
@@ -37,7 +37,7 @@
   - **Soul Studio (`/dashboard/soul`)**: In-browser personality editor with live token estimation and interactive prompt framing preview sandbox.
   - **Interactive Playground (`/dashboard/playground`)**: Multi-model prompt test suite with streaming SSE output and real-time reasoning content.
 - **Embedded SQLite Storage Engine**:
-  - Native Bun SQLite (`bun:sqlite`) ACID persistence with WAL mode concurrency (`~/.alphaway/alphaway.sqlite`).
+  - Native Bun SQLite (`bun:sqlite`) ACID persistence with WAL mode concurrency (`$DATA_DIR/db/data.sqlite`, default `~/.alphaway/db/data.sqlite`).
   - Indexed queries for request logs, custom providers, and settings with automated fallback and migration.
 - **100% Bun-Native Architecture & BoringSSL TLS Parity**:
   - Engineered from the ground up exclusively for the **Bun** runtime (zero Node.js dependencies, native `bun:sqlite` engine, and high-performance Hono on Bun HTTP).
@@ -127,13 +127,23 @@ alphaway.exe
 ## ⚙️ Environment Configuration (`.env`)
 
 ```ini
+# 0. Persistent storage (9router-go-style path contract)
+# Default DATA_DIR: ~/.alphaway on Linux/macOS; %APPDATA%/AlphaWay on Windows.
+# Default DB_PATH: $DATA_DIR/db/data.sqlite.
+DATA_DIR=
+DB_PATH=
+
+# Compatibility aliases for older AlphaWay service files and deployments.
+ALPHAWAY_STATE_DIR=
+ALPHAWAY_DB_PATH=
+
 # Optional legacy environment-managed inference key. Prefer dashboard-issued keys.
 API_KEY=
 BRIDGE_API_KEY=
 
 # Optional 32-byte AES-256-GCM master key (64 hex characters or base64).
-# When unset, AlphaWay creates ~/.alphaway/secret-encryption.key with mode 0600 on POSIX.
-# Back up this key separately from alphaway.sqlite.
+# When unset, AlphaWay creates $DATA_DIR/secret-encryption.key with mode 0600 on POSIX.
+# Back up this key separately from the SQLite database and encrypted backups.
 ALPHAWAY_ENCRYPTION_KEY=
 
 # Enable only behind a trusted reverse proxy that overwrites X-Forwarded-Proto.
@@ -176,15 +186,17 @@ All `/api/*` management endpoints require an administrator session. The session 
 
 CodeBuddy upstream credentials are separate from the AlphaWay gateway key. The dashboard OAuth flow and CLI OAuth login store the CodeBuddy token encrypted in SQLite; the HTTP polling response never returns the access token. `CODEBUDDY_API_KEY` remains an optional environment override for existing deployments. An explicit `x-codebuddy-api-key` may be sent per request when no server-side credential is configured. AlphaWay never forwards its gateway `Authorization` token as the CodeBuddy upstream credential.
 
-Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encrypted at rest with AES-256-GCM. When `ALPHAWAY_ENCRYPTION_KEY` is unset, AlphaWay generates `~/.alphaway/secret-encryption.key`. Back up that file together with the database and its backups; losing the encryption key makes encrypted credentials and snapshots unrecoverable. POSIX key-file permissions are restricted to the owner.
+Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encrypted at rest with AES-256-GCM. When `ALPHAWAY_ENCRYPTION_KEY` is unset, AlphaWay generates `$DATA_DIR/secret-encryption.key` (default `~/.alphaway/secret-encryption.key`). Back up that file together with the database and encrypted backups; losing the encryption key makes encrypted credentials and snapshots unrecoverable. POSIX key-file permissions are restricted to the owner.
 
-Destructive SQLite migration snapshots are stored as AES-256-GCM envelopes (`*.sqlite.awenc`) under the state directory's `backups/` folder. Older plaintext migration snapshots and pre-restore copies are converted to encrypted envelopes during startup; a legacy plaintext snapshot passed to the restore helper is converted before use. Keep the encryption key with the database and backup set. Windows ACL behavior for these files is not yet verified.
+AlphaWay uses SQLite as its sole persistent application-state store. Custom providers, API keys, authentication sessions, usage history, TokenSaver settings, and proxy configuration are stored in `$DATA_DIR/db/data.sqlite` (default `~/.alphaway/db/data.sqlite`); sensitive credentials are encrypted or hashed according to their role. See [DATABASE.md](DATABASE.md) for the complete path, permission, WAL, backup, restore, and maintenance contract.
 
-AlphaWay uses SQLite as its sole persistent application-state store. Custom providers, API keys, authentication sessions, usage history, TokenSaver settings, and proxy configuration are stored in `alphaway.sqlite`; sensitive credentials are encrypted or hashed according to their role.
+Destructive migration snapshots and manual physical backups are encrypted AES-256-GCM `.sqlite.awenc` files under `$DATA_DIR/db/backups/`. Older plaintext migration snapshots and pre-restore copies are converted to encrypted envelopes during startup. Create a manual full-database snapshot with `bun run db:backup`; restore one with `bun run db:restore -- /path/to/backup.sqlite.awenc` after stopping all AlphaWay service instances. Restore validates the staged database with `PRAGMA quick_check` and preserves the existing database as an encrypted pre-restore snapshot. Windows ACL behavior for these files is not yet verified.
+
+For compatibility, an existing `$DATA_DIR/alphaway.sqlite` remains active while `$DATA_DIR/db/data.sqlite` is absent. This prevents an upgrade from silently creating an empty database. It is not moved automatically; use a verified backup and a deliberate offline migration to relocate it.
 
 Standalone JSON configuration-file import and recovery are not supported. AlphaWay does not scan for, import, modify, or delete old files such as `custom_providers.json`, `usage_stats.json`, `tokensaver.json`, or `proxy.json`. Such files from older installations remain untouched but are ignored. Export or recreate any required settings before moving to this SQLite-only version.
 
-Back up the SQLite database using a SQLite-aware procedure that accounts for WAL state. Keep `secret-encryption.key` together with the database and encrypted migration snapshots; losing the key makes encrypted credentials and snapshots unrecoverable.
+Back up the SQLite database using `bun run db:backup` or a SQLite-aware procedure that accounts for WAL state. Keep `secret-encryption.key` together with the encrypted backup set; losing the key makes encrypted credentials and snapshots unrecoverable.
 
 ---
 ## 🔌 Client Integration Guide (Tri-Protocol)
