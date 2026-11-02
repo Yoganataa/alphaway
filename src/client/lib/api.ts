@@ -417,6 +417,11 @@ export interface APIKeyRecord {
   concurrencyLimit: number | null;
   tokenQuota: number | null;
   allowedModels: string[] | null;
+  effectiveRpmLimit: number;
+  effectiveTpmLimit: number;
+  effectiveConcurrencyLimit: number;
+  effectiveTokenQuota: number;
+  effectiveAllowedModels: string[];
   status: "active" | "revoked";
 }
 
