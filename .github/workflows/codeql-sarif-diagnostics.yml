@@ -1,6 +1,8 @@
 name: CodeQL SARIF diagnostics
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches:
       - feat/phase-2-auth-admin-security
