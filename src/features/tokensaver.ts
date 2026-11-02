@@ -139,7 +139,7 @@ const DEFAULT_CONFIG = {
 let currentConfig = { ...DEFAULT_CONFIG };
 
 function sanitizeConfig(input) {
-  const safe = { ...DEFAULT_CONFIG };
+  const safe: any = { ...DEFAULT_CONFIG };
   if (!input || typeof input !== "object" || Array.isArray(input)) return safe;
   for (const [key, fallback] of Object.entries(DEFAULT_CONFIG)) {
     const value = input[key];
