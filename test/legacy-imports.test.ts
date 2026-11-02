@@ -73,7 +73,9 @@ describe("legacy JSON import", () => {
       totalTokens: 200,
       savedTokens: 15,
       estimatedSavingsUsd: 0.01,
-      byModel: { "legacy-model": { requests: 4, promptTokens: 120, completionTokens: 80, totalTokens: 200, lastUsed: "2026-10-31T00:00:00.000Z" } },
+      apiKey: "usage-snapshot-secret-must-not-persist",
+      authorization: "Bearer usage-snapshot-auth-secret",
+      byModel: { "legacy-model": { requests: 4, promptTokens: 120, completionTokens: 80, totalTokens: 200, lastUsed: "2026-10-31T00:00:00.000Z", apiKey: "nested-model-secret" } },
       byProtocol: {
         openai: { requests: 4, tokens: 200, promptTokens: 120, completionTokens: 80, lastUsed: "2026-10-31T00:00:00.000Z" },
         anthropic: { requests: 0, tokens: 0, promptTokens: 0, completionTokens: 0, lastUsed: "" },
@@ -100,6 +102,8 @@ describe("legacy JSON import", () => {
           totalTokens: 50,
           savedTokens: 5,
           stream: false,
+          authorization: "Bearer usage-log-header-secret",
+          headers: { cookie: "session-cookie-secret" },
         },
       ],
     });
@@ -109,7 +113,9 @@ describe("legacy JSON import", () => {
     writeJson(stateDir, "proxy.json", {
       url: "http://user:secret@127.0.0.1:3128",
       strategy: "failover",
-      pool: [{ id: "egress-1", label: "primary", url: "http://user:secret@127.0.0.1:3128", enabled: true, weight: 1 }],
+      headers: { authorization: "Bearer unknown-proxy-header-secret" },
+      password: "unknown-proxy-password-secret",
+      pool: [{ id: "egress-1", label: "primary", url: "http://user:secret@127.0.0.1:3128", enabled: true, weight: 1, password: "unknown-pool-password-secret", headers: { authorization: "Bearer pool-header-secret" } }],
       cooldownMs: 180000,
       maxCooldownMs: 900000,
     });
@@ -143,6 +149,10 @@ describe("legacy JSON import", () => {
     const usage = readSetting("usage_stats_snapshot");
     expect(usage.totalRequests).toBe(4);
     expect(usage.dailyHistory["2026-10-31"].tokens).toBe(200);
+    expect(JSON.stringify(usage)).not.toContain("usage-snapshot-secret-must-not-persist");
+    expect(JSON.stringify(usage)).not.toContain("nested-model-secret");
+    expect(JSON.stringify(usage)).not.toContain("usage-log-header-secret");
+    expect(JSON.stringify(usage)).not.toContain("session-cookie-secret");
     expect(db.prepare("SELECT id FROM request_logs WHERE id = ?").get("req_legacy_001")).toBeDefined();
 
     // Pre-existing SQLite state wins over either JSON source.
@@ -152,6 +162,14 @@ describe("legacy JSON import", () => {
     expect(importedProxy.url).toMatch(/^awenc:v1:/);
     expect(importedProxy.pool[0].url).toMatch(/^awenc:v1:/);
     expect(JSON.stringify(importedProxy)).not.toContain("user:secret");
+    expect(JSON.stringify(importedProxy)).not.toContain("unknown-proxy-header-secret");
+    expect(JSON.stringify(importedProxy)).not.toContain("unknown-proxy-password-secret");
+    expect(JSON.stringify(importedProxy)).not.toContain("unknown-pool-password-secret");
+    expect(JSON.stringify(importedProxy)).not.toContain("pool-header-secret");
+    expect(importedProxy.headers).toBeUndefined();
+    expect(importedProxy.password).toBeUndefined();
+    expect(importedProxy.pool[0].password).toBeUndefined();
+    expect(importedProxy.pool[0].headers).toBeUndefined();
     expect(decryptSecret(importedProxy.url)).toBe("http://user:secret@127.0.0.1:3128");
     expect(decryptSecret(importedProxy.pool[0].url)).toBe("http://user:secret@127.0.0.1:3128");
     expect(importedProxy.strategy).toBe("failover");
@@ -197,6 +215,47 @@ describe("legacy JSON import", () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM request_logs").get().count).toBe(1);
     expect(db.prepare("SELECT COUNT(*) AS count FROM legacy_imports").get().count).toBe(5);
   }));
+  it("whitelists legacy TokenSaver settings and drops unknown usage credentials", () => withSandbox(false, ({ db, stateDir, readSetting }) => {
+    writeJson(stateDir, "tokensaver.json", {
+      rtkEnabled: true,
+      rtkMaxLines: 400,
+      soulMode: "custom",
+      soulCustomContent: "Keep this configured prompt.",
+      apiKey: "tokensaver-api-key-must-not-persist",
+      authorization: "Bearer tokensaver-auth-must-not-persist",
+    });
+    writeJson(stateDir, "usage_stats.json", {
+      totalRequests: 2,
+      accessToken: "usage-access-token-must-not-persist",
+      byModel: { "model-a": { requests: 2, apiKey: "nested-secret-must-not-persist" } },
+      recentLogs: [{
+        id: "legacy-safe-log", timestamp: "2026-10-31T10:00:00.000Z", model: "model-a",
+        provider: "opencode", protocol: "openai", status: 200, promptTokens: 2, completionTokens: 3,
+        authorization: "Bearer request-log-secret-must-not-persist",
+      }],
+    });
+
+    const reports = importLegacyJson(db, stateDir, []);
+    expect(reports).toHaveLength(2);
+    const tokenSaver = readSetting("tokensaver_config");
+    expect(tokenSaver).toMatchObject({ rtkEnabled: true, rtkMaxLines: 400, soulMode: "custom", soulCustomContent: "Keep this configured prompt." });
+    expect(tokenSaver.apiKey).toBeUndefined();
+    expect(tokenSaver.authorization).toBeUndefined();
+
+    const usage = readSetting("usage_stats_snapshot");
+    expect(usage.totalRequests).toBe(2);
+    expect(usage.byModel["model-a"].requests).toBe(2);
+    expect(usage.accessToken).toBeUndefined();
+    expect(usage.byModel["model-a"].apiKey).toBeUndefined();
+    expect(usage.recentLogs[0].authorization).toBeUndefined();
+    expect(JSON.stringify(usage)).not.toContain("usage-access-token-must-not-persist");
+    expect(JSON.stringify(usage)).not.toContain("nested-secret-must-not-persist");
+    expect(JSON.stringify(usage)).not.toContain("request-log-secret-must-not-persist");
+
+    const tokenSaverSource = fs.readFileSync(path.join(stateDir, "tokensaver.json"), "utf8");
+    expect(isEncryptedSecret(tokenSaverSource.trim())).toBe(true);
+  }));
+
   it("refuses symlinked legacy JSON sources instead of reading through them", () => withSandbox(false, ({ db, stateDir }) => {
     const target = path.join(stateDir, "provider-data.json");
     const source = path.join(stateDir, "custom_providers.json");
