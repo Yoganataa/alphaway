@@ -35,10 +35,11 @@ describe("current AlphaWay installer and distribution contract", () => {
     expect(installer).toContain(".backup-app-");
   });
 
-  it("binds a newly created .env to BINDIR for manual starts", () => {
+  it("binds an empty .env DATA_DIR to BINDIR for manual starts", () => {
     const installer = read("install.sh");
-    expect(installer).toContain('grep -Eq \'^[[:space:]]*DATA_DIR[[:space:]]*=.+$\' "$BINDIR/.env"');
-    expect(installer).toContain('print "DATA_DIR=" value');
+    expect(installer).toContain('configured_data_dir=""');
+    expect(installer).toContain('DATA_DIR=*) configured_data_dir="${env_line#DATA_DIR=}" ;;');
+    expect(installer).toContain('printf \'DATA_DIR=%s\\n\' "$BINDIR"');
     expect(installer).toContain('mv "$ENV_TMP" "$BINDIR/.env"');
   });
 
