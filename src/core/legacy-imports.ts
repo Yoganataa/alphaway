@@ -487,6 +487,11 @@ function importSourceFile(
       return { sourceKey, status: "skipped", rowCount: 0, details: "Only regular legacy JSON files can be imported." };
     }
     if (process.platform !== "win32") fs.fchmodSync(sourceFd!, 0o600);
+    // fchmod changes ctime, so take the baseline after permission hardening.
+    stat = fs.fstatSync(sourceFd!);
+    if (stat.dev !== pathStat.dev || stat.ino !== pathStat.ino) {
+      return { sourceKey, status: "skipped", rowCount: 0, details: "Legacy source changed while its permissions were being secured." };
+    }
     if (stat.size > MAX_LEGACY_JSON_BYTES) {
       return {
         sourceKey,
