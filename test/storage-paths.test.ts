@@ -190,7 +190,7 @@ describe("9router-style SQLite storage path contract", () => {
       "PATH=\"C:\\\\Users\\\\Nata\"",
       "NEWLINE=\"line\\nnext\"",
       "LITERAL=\"\\\\n\"",
-      "UNKNOWN=\"\\\\q\"",
+      "UNKNOWN=\"\\q\"",
       "QUOTED=\"say \\\"hi\\\"\"",
     ].join("\n"));
 
