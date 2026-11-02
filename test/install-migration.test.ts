@@ -38,7 +38,9 @@ describe("current AlphaWay installer and distribution contract", () => {
   it("resolves and persists DATA_DIR for manual starts and managed services", () => {
     const installer = read("install.sh");
     expect(installer).toContain('configured_data_dir="${DATA_DIR:-}"');
-    expect(installer).toContain('DATA_DIR=*) env_file_data_dir="${env_line#DATA_DIR=}" ;;');
+    expect(installer).toContain('DATA_DIR=*)\n        env_file_data_dir="${env_line#DATA_DIR=}"');
+    expect(installer).toContain('configured_data_dir="$BINDIR/$configured_data_dir"');
+    expect(installer).toContain('pwd -P)');
     expect(installer).toContain('configured_data_dir="$BINDIR"');
     expect(installer).toContain('printf \'\\nDATA_DIR=%s\\n\' "$configured_data_dir"');
     expect(installer).toContain('export DATA_DIR');
