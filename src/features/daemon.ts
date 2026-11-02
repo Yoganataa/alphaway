@@ -130,7 +130,9 @@ function spawnDaemon(port = 20129, host = "127.0.0.1", publicUrl = "") {
 
   child.unref();
 
-  fs.writeFileSync(pidFile, String(child.pid), "utf8");
+  // The child acquires the shared exclusive PID lock after startup; do not
+  // pre-create it here or the child would mistake its parent-created file for
+  // another running AlphaWay process.
   console.log(`[AlphaWay] Daemon started successfully in background! (PID: ${child.pid})`);
   console.log(`[AlphaWay] Local API: http://${host}:${port}/v1`);
   if (publicUrl) {
