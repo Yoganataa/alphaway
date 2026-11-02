@@ -47,7 +47,7 @@ function readLockPid(lockPath: string): number {
 export function acquireAlphaWayProcessLock(): () => void {
   const dataDir = resolveDataDir();
   ensurePrivateDirectory(dataDir);
-  const lockPath = path.join(dataDir, "alphaway.pid");
+  const lockPath = path.join(dataDir, "alphaway.lock");
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let fd: number;
@@ -62,7 +62,7 @@ export function acquireAlphaWayProcessLock(): () => void {
       // Fail closed on stale locks. Automatic unlink after a separate PID check
       // has a TOCTOU race with a concurrent startup; use --status to remove a
       // stale PID file after confirming that no AlphaWay process is running.
-      throw new Error("A stale AlphaWay process lock exists. Run 'alphaway --status' to clear it after confirming the service is stopped.");
+      throw new Error("A stale AlphaWay process lock exists. Remove the alphaway.lock file only after confirming that no AlphaWay process is running.");
     }
 
     try {
