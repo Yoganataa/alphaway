@@ -3,8 +3,11 @@
  */
 
 import { Hono } from "hono";
+import path from "node:path";
+import { createMigrationBackup } from "../core/migrations/backup";
 import {
   getDatabase,
+  getDbFilePath,
   getDatabaseStorageStats,
   vacuumDatabase,
   dbGetSetting,
@@ -223,6 +226,28 @@ settingsRoute.post("/api/console-logs/clear", (c) => {
   clearConsoleLogs();
   pushLog("info", "[Console] Log buffer cleared by operator");
   return c.json({ ok: true });
+});
+
+// Download an encrypted, SQLite-aware physical snapshot. This is deliberately
+// not a JSON settings export; it contains the complete AlphaWay SQLite database.
+settingsRoute.get("/api/settings/database/backup", (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+
+  try {
+    const backupPath = createMigrationBackup(getDatabase(), getDbFilePath(), "operator-manual");
+    const backupFile = Bun.file(backupPath);
+    pushLog("info", "[Database] Created encrypted physical SQLite backup");
+    return c.body(backupFile.stream(), 200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${path.basename(backupPath)}"`,
+      "Content-Length": String(backupFile.size),
+      "Cache-Control": "no-store",
+    });
+  } catch (error: any) {
+    pushLog("error", "[Database] Could not create encrypted SQLite backup: " + (error?.message || String(error)));
+    return c.json({ ok: false, error: error?.message || "Could not create SQLite backup" }, 500);
+  }
 });
 
 // Database diagnostics use the same stats/vacuum route contract as 9router-go.
