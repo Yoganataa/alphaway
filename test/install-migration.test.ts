@@ -30,8 +30,8 @@ describe("current AlphaWay installer and distribution contract", () => {
     const installer = read("install.sh");
     expect(installer).toContain('APPDIR="$BINDIR/app"');
     expect(installer).toContain('"$BINDIR/.env"');
-    expect(installer).toContain("DATA_DIR=$BINDIR");
-    expect(installer.match(/Environment=\"DATA_DIR=\$BINDIR\"/g)?.length).toBe(2);
+    expect(installer).toContain("DATA_DIR=$DATA_DIR");
+    expect(installer.match(/Environment=\"DATA_DIR=\$DATA_DIR\"/g)?.length).toBe(2);
     expect(installer).toContain(".backup-app-");
   });
 
