@@ -54,7 +54,8 @@ A default installation uses this structure:
 │   ├── catalog.json            # OpenCode model/provider catalog cache
 │   └── source-recipe.json      # OpenCode identity/source recipe cache
 ├── secret-encryption.key      # 32-byte AES-256-GCM master key
-├── alphaway.pid               # exclusive process/data-directory lock for all server modes
+├── alphaway.lock              # exclusive process/data-directory lock for all server modes
+├── alphaway.pid               # daemon PID metadata, only in daemon mode
 ├── alphaway.log               # daemon log, when daemon mode is used
 ├── pool-health.json           # bounded, non-secret proxy health cache
 └── SOUL.md                    # optional global personality file
@@ -103,7 +104,7 @@ Restore an encrypted snapshot only after stopping the AlphaWay service:
 bun run db:restore -- /absolute/path/to/alphaway-before-operator-manual-....sqlite.awenc
 \`\`\`
 
-The restore path stages the decrypted database, runs SQLite \`PRAGMA quick_check\`, checkpoints and backs up the existing database, then replaces the destination. It rejects invalid encrypted files and does not overwrite the source backup. The server holds an exclusive `alphaway.pid` data-directory lock in foreground, daemon, systemd, and launchd modes. Restore acquires the same lock atomically and refuses to proceed while any AlphaWay process owns it; a new server also cannot start during restore. If a crash leaves a stale PID file, run `alphaway --status` after confirming no service is running to clear it, then retry.
+The restore path stages the decrypted database, runs SQLite \`PRAGMA quick_check\`, checkpoints and backs up the existing database, then replaces the destination. It rejects invalid encrypted files and does not overwrite the source backup. The server holds an exclusive `alphaway.pid` data-directory lock in foreground, daemon, systemd, and launchd modes. Restore acquires the same lock atomically and refuses to proceed while any AlphaWay process owns it; a new server also cannot start during restore. If a crash leaves a stale `alphaway.lock`, remove that file manually only after confirming no AlphaWay process is running; then retry.
 
 For a manual filesystem-level restore, stop AlphaWay and preserve the database together with any \`-wal\` and \`-shm\` files. A live copy of only \`data.sqlite\` is not a consistent backup.
 
