@@ -73,6 +73,35 @@ export function getDbFilePath(): string {
 
 let dbInstance: any = null;
 
+/**
+ * Remove pre-encryption credential remnants from SQLite free pages and WAL.
+ * This runs once after migration v2; a pending marker makes an interrupted
+ * cleanup retry safely on the next startup. This is logical database cleanup,
+ * not a guarantee against filesystem snapshots or physical-media remanence.
+ */
+function scrubLegacySecretResidue(db: any): void {
+  const marker = db.prepare(
+    "SELECT value FROM app_settings WHERE key = ?"
+  ).get("alpha_security_secret_scrub") as { value: string } | undefined;
+  if (marker?.value !== JSON.stringify("pending")) return;
+
+  const checkpoint = () => {
+    const result = db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as any;
+    const busy = Number(result?.busy ?? result?.[0] ?? 0);
+    if (busy !== 0) {
+      throw new Error("SQLite WAL checkpoint was busy; secret cleanup cannot proceed safely");
+    }
+  };
+
+  checkpoint();
+  db.exec("VACUUM;");
+  checkpoint();
+  db.prepare(
+    "UPDATE app_settings SET value = ?, updated_at = ? WHERE key = ?"
+  ).run(JSON.stringify("complete"), Date.now(), "alpha_security_secret_scrub");
+  checkpoint();
+}
+
 export function getDatabase(): any {
   if (dbInstance) return dbInstance;
 
@@ -116,12 +145,18 @@ export function getDatabase(): any {
   // intact. A failed migration aborts startup instead of silently booting with
   // a partially upgraded schema.
   try {
+    // secure_delete is connection-local; keep it enabled for future credential
+    // updates/deletes as well as the initial v2 migration.
+    dbInstance.exec("PRAGMA secure_delete = ON;");
+
     const migrationResult = runMigrations(dbInstance, undefined, {
       beforeDestructiveMigration: (migration) => {
         const backupPath = createMigrationBackup(dbInstance, dbPath, migration.name);
         console.warn(`[AlphaWay] Created pre-migration backup: ${backupPath}`);
       },
     });
+    if (!isMemory) scrubLegacySecretResidue(dbInstance);
+
     if (migrationResult.applied.length > 0) {
       console.info(
         `[AlphaWay] SQLite schema migrated to v${migrationResult.currentVersion} (${migrationResult.applied.length} migration(s))`
