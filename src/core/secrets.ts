@@ -9,7 +9,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import { ensurePrivateDirectory, resolveDataDir } from "./storage-paths";
 
 
@@ -127,6 +127,23 @@ function loadOrCreateKey(): Buffer {
 function masterKey(): Buffer {
   if (!cachedKey) cachedKey = loadOrCreateKey();
   return cachedKey;
+}
+
+/**
+ * Derive a purpose-separated opaque identifier from data that may contain secrets.
+ * The keyed digest prevents an observer of metadata files from testing credential
+ * guesses offline without also obtaining AlphaWay's local master encryption key.
+ */
+export function deriveSecretIdentifier(purpose: string, value: string): string {
+  const context = String(purpose || "").trim();
+  if (!/^[a-z0-9][a-z0-9:._/-]{0,127}$/i.test(context)) {
+    throw new Error("Secret identifier purpose must be a short stable label");
+  }
+  return createHmac("sha256", masterKey())
+    .update(context, "utf8")
+    .update("\0", "utf8")
+    .update(String(value), "utf8")
+    .digest("hex");
 }
 
 /** Reset only the in-memory key cache between isolated unit tests. */

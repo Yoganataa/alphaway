@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { __resetSecretKeyCacheForTests, decryptSecret, encryptSecret, isEncryptedSecret } from "../src/core/secrets";
+import { __resetSecretKeyCacheForTests, decryptSecret, deriveSecretIdentifier, encryptSecret, isEncryptedSecret } from "../src/core/secrets";
 
 let stateDir = "";
 let keyPath = "";
@@ -69,6 +69,15 @@ describe("authenticated secret storage", () => {
     const tampered = "awenc:v1:" + parts.join(".");
 
     expect(() => decryptSecret(tampered)).toThrow();
+  });
+
+  it("derives stable purpose-separated identifiers with the local master key", () => {
+    const input = "http://proxy-user:guessable-password@proxy.example:8080";
+    const first = deriveSecretIdentifier("proxy-health-id:v2", input);
+
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(deriveSecretIdentifier("proxy-health-id:v2", input)).toBe(first);
+    expect(deriveSecretIdentifier("other-purpose", input)).not.toBe(first);
   });
 
   it("creates a 32-byte owner-only key file on POSIX", () => {

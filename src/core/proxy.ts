@@ -32,13 +32,13 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("./database");
-const { encryptSecret, decryptSecret } = require("./secrets");
+const { encryptSecret, decryptSecret, deriveSecretIdentifier } = require("./secrets");
 const { resolveDataDir, ensurePrivateDirectory } = require("./storage-paths");
 
 const CONFIG_SETTING_KEY = "proxy_config";
 const CONFIG_SETTING_LABEL = `SQLite app_settings.${CONFIG_SETTING_KEY}`;
 const HEALTH_FILE_NAME = "pool-health.json";
-const HEALTH_VERSION = 1;
+const HEALTH_VERSION = 2;
 const MAX_HEALTH_FILE_BYTES = 1024 * 1024;
 const MAX_HEALTH_RECORDS = 512;
 const ENV_OVERRIDE = "UPSTREAM_PROXY_URL";
@@ -325,12 +325,12 @@ function pruneHealth(entries) {
 }
 
 /**
- * Stable, non-secret id for one egress. The health file sits beside a config
- * that already holds proxy credentials; a second copy of every token would be
- * a second thing to leak, and the record only has to be matchable, not readable.
+ * Stable opaque id for one egress. Proxy URLs may contain passwords, so an
+ * unkeyed fast hash would permit offline guessing from the health cache. Use a
+ * purpose-separated HMAC bound to the local master key instead.
  */
 function healthId(key) {
-  return crypto.createHash("sha256").update(key).digest("hex").slice(0, 16);
+  return deriveSecretIdentifier("proxy-health-id:v2", key).slice(0, 32);
 }
 
 function healthLabel(key) {
