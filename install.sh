@@ -207,11 +207,16 @@ if [ -z "$configured_data_dir" ]; then
   else
     printf '\nDATA_DIR=%s\n' "$BINDIR" >> "$BINDIR/.env"
   fi
+  configured_data_dir="$BINDIR"
 fi
+
+DATA_DIR="$configured_data_dir"
+export DATA_DIR
+mkdir -p "$DATA_DIR"
 
 # --------------------------------------------------------- service stop ---
 stop_managed_background() {
-  local pid_file="$BINDIR/alphaway.pid"
+  local pid_file="$DATA_DIR/alphaway.pid"
   [ -f "$pid_file" ] || return 0
   local pid command_line
   pid="$(cat "$pid_file" 2>/dev/null || true)"
@@ -348,7 +353,7 @@ User=$(id -un)
 WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
-Environment="DATA_DIR=$BINDIR"
+Environment="DATA_DIR=$DATA_DIR"
 ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
@@ -382,7 +387,7 @@ Type=simple
 WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
-Environment="DATA_DIR=$BINDIR"
+Environment="DATA_DIR=$DATA_DIR"
 ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
@@ -418,7 +423,7 @@ install_launchd_service() {
   <dict>
     <key>PORT</key><string>$PORT</string>
     <key>HOST</key><string>$HOST</string>
-    <key>DATA_DIR</key><string>$BINDIR</string>
+    <key>DATA_DIR</key><string>$DATA_DIR</string>
   </dict>
   <key>StandardOutPath</key><string>$HOME/Library/Logs/alphaway.log</string>
   <key>StandardErrorPath</key><string>$HOME/Library/Logs/alphaway.log</string>
@@ -434,20 +439,20 @@ PLIST
 }
 
 start_background() {
-  local log_file="$BINDIR/alphaway.log"
+  local log_file="$DATA_DIR/alphaway.log"
 
   # Change directory in the installer shell and detach the executable
   # directly; never put a background child inside a command-substitution or
   # subshell, which can keep a piped installer alive until the child exits.
   pushd "$BINDIR" >/dev/null
   if command -v setsid >/dev/null 2>&1; then
-    setsid env PORT="$PORT" HOST="$HOST" DATA_DIR="$BINDIR" \
+    setsid env PORT="$PORT" HOST="$HOST" DATA_DIR="$DATA_DIR" \
       "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
   else
-    nohup env PORT="$PORT" HOST="$HOST" DATA_DIR="$BINDIR" \
+    nohup env PORT="$PORT" HOST="$HOST" DATA_DIR="$DATA_DIR" \
       "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
   fi
-  echo $! > "$BINDIR/alphaway.pid"
+  echo $! > "$DATA_DIR/alphaway.pid"
   popd >/dev/null
 }
 
@@ -520,10 +525,10 @@ say "AlphaWay is healthy"
 say "Dashboard : http://$PROBE_HOST:$PORT/"
 say "API       : http://$PROBE_HOST:$PORT/v1"
 say "Config    : $BINDIR/.env"
-say "State     : $BINDIR"
+say "State     : $DATA_DIR"
 case "$SERVICE_SCOPE" in
   system) say "Logs      : journalctl -u alphaway -f" ;;
   user) say "Logs      : journalctl --user -u alphaway -f" ;;
   launchd) say "Logs      : tail -f $HOME/Library/Logs/alphaway.log" ;;
-  *) say "Logs      : tail -f $BINDIR/alphaway.log" ;;
+  *) say "Logs      : tail -f $DATA_DIR/alphaway.log" ;;
 esac
