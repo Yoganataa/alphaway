@@ -392,8 +392,8 @@ export function createMigrationBackup(db: any, databasePath: string, migrationNa
 
   try {
     db.exec("PRAGMA wal_checkpoint(FULL)");
-    const escapedPath = plainPath.replace(/\x27/g, "\x27\x27");
-    db.exec("VACUUM INTO '" + escapedPath + "'");
+    // Bind the output path as data; never assemble SQL from a filesystem path.
+    db.query("VACUUM INTO ?").run(plainPath);
     const stat = fs.statSync(plainPath);
     if (!stat.isFile() || stat.size === 0) {
       throw new Error("SQLite VACUUM INTO did not produce a readable backup file");
