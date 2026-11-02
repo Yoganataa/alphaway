@@ -121,6 +121,7 @@ export interface RequestLogEntry {
   totalTokens: number;
   savedTokens: number;
   stream: boolean;
+  clientApiKeyId?: string | null;
 }
 
 export interface ModelUsageSummary {
