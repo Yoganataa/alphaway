@@ -4,11 +4,11 @@
 >
 > **Checkpoint date:** 2026-11-02 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active workstream:** Phase 3 — Plans, Limits, and Request Enforcement (queued; implementation not started).
+> **Active workstream:** Phase 3 — Plans, Limits, and Request Enforcement. Implementation branch: `feat/phase-3-plans-limits`; documentation and implementation work in progress.
 > **Phase 2 merge commit on `main`:** `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` (PR #4).  
 > **Latest merged Phase 2 code head:** `b057042362f6497852cb037ed7be2ec4c0aa63a4`; merged into `main` by `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9`.  
 > **Latest CI verification:** PR CI [#425](https://github.com/Yoganataa/alphaway/actions/runs/41442485797) passed on Phase 2 head `b057042`. Post-merge CI [#426](https://github.com/Yoganataa/alphaway/actions/runs/41448272244) passed on merge commit `dc08b6d`; all four mandatory jobs succeeded and the optional live upstream drill was skipped by design.  
-> **Latest CodeQL verification:** PR CodeQL [#210](https://github.com/Yoganataa/alphaway/actions/runs/41442479398) passed on `b057042`; default-branch CodeQL [#211](https://github.com/Yoganataa/alphaway/actions/runs/41448263339) passed on merge commit `dc08b6d` for JavaScript/TypeScript and Actions. Direct full SARIF [run #41426255599](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) on earlier remediated source head `ee317f3` returned zero results in both analyzers. The current open-alert count in GitHub Security was not independently accessible through this session and must not be assumed to be zero.  
+> **Latest CodeQL verification:** Default-branch CodeQL [#213](https://github.com/Yoganataa/alphaway/actions/runs/41448964076) completed successfully on `main` HEAD `a28ed9b` for JavaScript/TypeScript and Actions. GitHub Security code-scanning screenshot (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed**; the former baseline alerts are resolved.
 > **Maintainer review decision:** This is a solo-developer repository with zero required approvals. The maintainer accepted residual review risk after passing CI/CodeQL evidence and resolution of all six inline review threads. No second human reviewer participated.  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (merged; merge commit `dc08b6d`).  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
@@ -17,12 +17,12 @@
 
 ## 1. Current Status
 
-**Phase 0, Phase 1, and Phase 2 are merged into `main`. Phase 2 PR #4 merged at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. PR CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. The previous 14-alert default-branch baseline was remediated in Phase 2; a separate current open-alert count still needs direct confirmation in GitHub Security. The solo maintainer accepted the review risk after all six inline review threads were resolved; no second human reviewer participated. Phase 3 is next but has not started.
+**Phase 0, Phase 1, and Phase 2 are merged into `main`. Phase 2 PR #4 merged at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. PR CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. CI #428 and CodeQL #213 passed on documentation merge commit `a28ed9b`. GitHub Security confirms 0 open / 14 closed CodeQL alerts for `is:open branch:main` (screenshot supplied by project owner, 2026-11-02). The solo maintainer accepted the Phase 2 review risk after all six inline review threads were resolved; no second human reviewer participated. Phase 3 is now active on `feat/phase-3-plans-limits`.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
 - [x] Phase 2 — Authentication, API Keys, and Administrative Access (PR #4 merged; PR and post-merge CI/CodeQL checks passed).
-- [ ] Phase 3 — Plans, Limits, and Request Enforcement.
+- [ ] Phase 3 — Plans, Limits, and Request Enforcement (active; current PR work tracked on `feat/phase-3-plans-limits`).
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
@@ -65,7 +65,7 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - Post-merge CI [#426](https://github.com/Yoganataa/alphaway/actions/runs/41448272244) passed on merge commit `dc08b6d`: unit/protocol tests, UI/standalone build, dashboard browser tests, and installer/embedded dashboard smoke all succeeded. The optional live upstream gate drill was skipped by design.
 - Default-branch CodeQL [#211](https://github.com/Yoganataa/alphaway/actions/runs/41448263339) passed both JavaScript/TypeScript and Actions jobs on merge commit `dc08b6d`.
 - The direct full SARIF scan at [run #41426255599](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) found zero results in both analyzers on the earlier remediated source head `ee317f3`. The PR and default-branch CodeQL workflows also passed on the later Phase 2 heads.
-- The original 14-alert inventory was captured on pre-merge `main` at `e2492fb`; corresponding remediations were included in PR #4. The current open-alert count was not available through this session's GitHub connector, so do not claim that the repository alert inventory is zero without checking GitHub Security.
+- GitHub Security screenshot supplied by the project owner on 2026-11-02, filtered to `is:open branch:main`, confirms **0 Open / 14 Closed**. Default-branch CodeQL #213 passed on `a28ed9b`.
 - All six inline review threads on PR #4 are resolved. The maintainer accepted residual review risk for the solo-developer workflow after checking CI/CodeQL evidence and the resolved threads; no second human reviewer participated.
 - Repository Ruleset [Protect main](https://github.com/Yoganataa/alphaway/rules/26337025) is active for `refs/heads/main`; it requires a PR, conversation resolution, four mandatory CI jobs with strict up-to-date checks, and blocks deletion/force pushes. It requires zero approvals.
 - Windows ACL behavior for generated bootstrap/encryption-key files and SQLite migration backups remains unverified and is deferred to Phase 7; POSIX `0600`/`0700` behavior is covered.
@@ -245,12 +245,12 @@ test/verify-quick.test.ts
 
 ### Current Phase 2 work
 
-Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. The direct full SARIF scan on earlier remediated source head `ee317f3` returned zero results for JavaScript/TypeScript and Actions. The current open-alert count must still be checked directly in GitHub Security. Do not repeat Phase 2 remediation work.
+Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 passed. CI #428 and CodeQL #213 passed on documentation merge commit `a28ed9b`. GitHub Security currently shows 0 open / 14 closed CodeQL alerts for `main` (2026-11-02 screenshot). Do not repeat Phase 2 remediation work.
 
 Next actions:
-1. Phase 2 is merged. Before beginning Phase 3, verify the current open CodeQL alert inventory in GitHub Security; do not infer a zero count from workflow success alone.
+1. CodeQL baseline is clean: 0 open / 14 closed in GitHub Security for `main` (2026-11-02 screenshot). Continue Phase 3 from `feat/phase-3-plans-limits`.
 2. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
-3. Merge the checkpoint/roadmap refresh PR before beginning Phase 3. Do not reopen or recreate Phase 2 work unless a verified regression is found.
+3. Do not reopen or recreate Phase 0–2 work unless a verified regression is found. Keep this Phase 3 work in its dedicated branch/PR and merge only after required CI/CodeQL checks pass.
 
 Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
 ## 6. Working Rules for the Next Session
@@ -259,7 +259,7 @@ Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field 
 - The live repository/PR state takes precedence over this checkpoint if newer commits exist.
 - Keep backend runtime Bun + TypeScript + Hono. Preserve OpenCode TLS/BoringSSL behavior and all documented gateway protocols.
 - Do not weaken or remove tests to make CI green. Do not claim tests/builds/CI passed unless the actual result was inspected.
-- Work only on the active phase. Phase 2 is merged; Phase 3 is next. Do not begin Phase 3 until the checkpoint/roadmap refresh PR is merged and the live repository/CodeQL state has been checked.
+- Work only on the active phase. Phase 2 is merged; Phase 3 is active on `feat/phase-3-plans-limits`. GitHub Security confirms 0 open / 14 closed CodeQL alerts on `main`.
 - Update this checkpoint and the roadmap after meaningful work, including branch/PR state, changed paths, verification evidence, open risks, and exact next action.
 - If work is interrupted, leave a committed state and an accurate checkpoint; do not claim background work.
 
@@ -267,13 +267,15 @@ Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field 
 
 ```text
 Lanjutkan AlphaWay dari repository https://github.com/Yoganataa/alphaway.
-Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Setelah itu periksa live main, PR yang masih terbuka, Ruleset Protect main, serta hasil GitHub Actions dan CodeQL terbaru sebelum mengubah apa pun.
+Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Periksa live main, branch `feat/phase-3-plans-limits`, PR aktif, Ruleset Protect main, dan hasil GitHub Actions sebelum mengubah apa pun.
 
-Phase 0 PR #1, Phase 1 PR #3, dan Phase 2 PR #4 sudah merged. Phase 2 merge commit: dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9; source head: b057042362f6497852cb037ed7be2ec4c0aa63a4. PR CI #425, PR CodeQL #210, post-merge CI #426, dan default-branch CodeQL #211 semuanya passed. Direct full SARIF pada source head ee317f3 sebelumnya menghasilkan 0 JavaScript/TypeScript dan 0 Actions results. Jangan mengklaim open-alert inventory saat ini nol sebelum mengeceknya langsung di GitHub Security.
+Phase 0 PR #1, Phase 1 PR #3, Phase 2 PR #4, dan dokumentasi sync PR #5 sudah merged. Main saat Phase 3 dimulai: a28ed9baef0c698ec879d649a24726706d1eee3d. CI #428 dan CodeQL #213 passed. GitHub Security screenshot 2026-11-02 dengan filter `is:open branch:main` menunjukkan 0 Open / 14 Closed alerts.
 
-Phase 2 mencakup admin bootstrap/session, managed API key lifecycle, gateway/admin auth separation, AES-256-GCM credential storage, SQLite-only persistence, schema migration v5, encrypted streaming backup/restore, cross-process database locking, request-body limits, diagnostic redaction, dan CodeQL remediation. Semua enam inline review threads PR #4 resolved. Untuk workflow solo developer, maintainer menerima residual risk setelah memeriksa CI/CodeQL dan review threads; tidak ada second-human review.
+Phase 2 merampungkan admin bootstrap/session, managed API key lifecycle, gateway/admin auth separation, AES-256-GCM credential storage, SQLite-only persistence, migration v5, encrypted streaming backup/restore, cross-process DB locking, body limits, diagnostic redaction, dan CodeQL remediation. Jangan ulangi.
 
-Backend tetap Bun 1.4.4 + TypeScript + Hono. SQLite adalah satu-satunya persistent application-state backend; jangan menambahkan importer atau recovery berbasis JSON. Plan assignment dan quota enforcement termasuk Phase 3. Windows ACL verification tetap di Phase 7.
+Phase 3 — Plans, Limits, and Request Enforcement — sedang dikerjakan pada `feat/phase-3-plans-limits`. Backend wajib tetap Bun >=1.4.4 + TypeScript + Hono; SQLite adalah satu-satunya state store. Jangan port backend Go dari 9router-go. Gunakan 9router-go sebagai referensi konsep policy/behavior saja.
 
-Phase 3 — Plans, Limits, and Request Enforcement — adalah fase berikutnya, tetapi belum dimulai. Periksa status live dan verifikasi open CodeQL alerts terlebih dahulu. Pertahankan perubahan minimal, jangan ulangi pekerjaan Phase 0–2, dan update CHECKPOINT.md serta ROADMAP.md setiap ada perubahan fase yang bermakna.
+Sasaran Phase 3: reusable Plan templates; assign/unassign plans pada managed API keys; satu resolver effective policy (global defaults -> plan -> explicit key overrides); enforce model allowlists, RPM, prompt TPM, concurrency, token usage quota dengan metering akurat; attribute usage ledger ke managed key; real quota/plan UI tanpa data acak. Legacy environment keys dan key tanpa Plan harus tetap backward-compatible/unrestricted. Jangan membuat fake USD cost budgets karena AlphaWay belum punya pricing ledger tepercaya; period spend ceiling hanya boleh ditambahkan bila sumber harga/meter akurat tersedia. Semua 3 protokol (OpenAI Chat, Anthropic Messages, Codex Responses) dan aliases wajib dites.
+
+Phase 3 belum dianggap selesai sampai acceptance criteria di ROADMAP.md dan semua required CI/CodeQL checks pass. Jangan weaken tests. Update checkpoint setiap ada progress bermakna.
 ```
