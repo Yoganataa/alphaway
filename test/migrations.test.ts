@@ -21,11 +21,13 @@ describe("SQLite migration runner", () => {
     const result = runMigrations(db);
 
     expect(result).toEqual({
-      currentVersion: 3,
+      currentVersion: 4,
       applied: [
         { version: 1, name: "initial-schema" },
         { version: 2, name: "auth-security" },
         { version: 3, name: "secret-residue-cleanup" },
+      { version: 4, name: "encrypt-legacy-codebuddy-credential" },
+        { version: 4, name: "encrypt-legacy-codebuddy-credential" },
       ],
     });
 
@@ -78,7 +80,7 @@ describe("SQLite migration runner", () => {
       .update(legacySecret, "utf8")
       .digest("hex");
 
-    expect(result.currentVersion).toBe(3);
+    expect(result.currentVersion).toBe(4);
     expect(stored.name).toBe("Legacy Integration");
     expect(stored.key_prefix).toBe(legacySecret.slice(0, 16));
     expect(stored.secret_hash).toBe(expectedHash);
@@ -180,17 +182,40 @@ describe("SQLite migration runner", () => {
     expect(decryptSecret(stored.pool[1].url)).toBe(config.pool[1].url);
     expect(decryptSecret(stored.pool[1].token)).toBe(config.pool[1].token);
   });
+  it("encrypts a legacy CodeBuddy credential on databases already at migration v3 and rearms residue cleanup", () => {
+    db = openDatabase();
+    runMigrations(db, MIGRATIONS.slice(0, 3));
+
+    const legacyCredential = "codebuddy-legacy-access-token";
+    db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .run("codebuddy_api_key", JSON.stringify(legacyCredential), Date.now());
+    db.prepare("UPDATE app_settings SET value = ? WHERE key = ?")
+      .run(JSON.stringify("complete"), "alpha_security_secret_scrub");
+
+    const result = runMigrations(db);
+    const stored = JSON.parse(db.prepare("SELECT value FROM app_settings WHERE key = ?")
+      .get("codebuddy_api_key").value) as string;
+    const marker = JSON.parse(db.prepare("SELECT value FROM app_settings WHERE key = ?")
+      .get("alpha_security_secret_scrub").value);
+
+    expect(result.currentVersion).toBe(4);
+    expect(stored).toMatch(/^awenc:v1:/);
+    expect(stored).not.toContain(legacyCredential);
+    expect(decryptSecret(stored)).toBe(legacyCredential);
+    expect(marker).toBe("pending");
+  });
+
   it("does not reapply already-recorded migrations on repeated startup", () => {
     db = openDatabase();
 
     const first = runMigrations(db);
     const second = runMigrations(db);
 
-    expect(first.applied).toHaveLength(3);
+    expect(first.applied).toHaveLength(4);
     expect(second.applied).toHaveLength(0);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(3);
+    ).toBe(4);
   });
 
   it("rolls back migration DDL and history when a migration fails", () => {
@@ -198,7 +223,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const failingMigration: Migration = {
-      version: 4,
+      version: 5,
       name: "failing-test-migration",
       up(database) {
         database.exec("CREATE TABLE should_rollback (id INTEGER PRIMARY KEY)");
@@ -207,7 +232,7 @@ describe("SQLite migration runner", () => {
     };
 
     expect(() => runMigrations(db, [...MIGRATIONS, failingMigration])).toThrow(
-      /Migration 4 .* simulated interruption/
+      /Migration 5 .* simulated interruption/
     );
 
     const table = db
@@ -218,7 +243,7 @@ describe("SQLite migration runner", () => {
       .get().count;
 
     expect(table).toBeNull();
-    expect(count).toBe(3);
+    expect(count).toBe(4);
   });
 
   it("can retry a migration after its failed attempt was rolled back", () => {
@@ -226,7 +251,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const recoveredMigration: Migration = {
-      version: 4,
+      version: 5,
       name: "recovered-test-migration",
       up(database) {
         database.exec("CREATE TABLE recovered_state (value TEXT NOT NULL)");
@@ -234,13 +259,13 @@ describe("SQLite migration runner", () => {
     };
 
     const result = runMigrations(db, [...MIGRATIONS, recoveredMigration]);
-    expect(result.currentVersion).toBe(4);
+    expect(result.currentVersion).toBe(5);
     expect(result.applied).toEqual([
-      { version: 4, name: "recovered-test-migration" },
+      { version: 5, name: "recovered-test-migration" },
     ]);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(4);
+    ).toBe(5);
   });
 
   it("refuses destructive migrations unless a backup callback is provided", () => {
@@ -248,7 +273,7 @@ describe("SQLite migration runner", () => {
     runMigrations(db);
 
     const destructiveMigration: Migration = {
-      version: 4,
+      version: 5,
       name: "destructive-test-migration",
       destructive: true,
       up(database) {
@@ -269,7 +294,7 @@ describe("SQLite migration runner", () => {
     });
 
     expect(backupWasCreated).toBe(true);
-    expect(result.currentVersion).toBe(4);
+    expect(result.currentVersion).toBe(5);
   });
 
   it("rejects a database created by a newer application schema", () => {
