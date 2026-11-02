@@ -122,11 +122,18 @@ async function dispatchWithPolicy(
     return policyRejection(c, protocol, 403, "model_not_allowed", "The requested model is not allowed by this API key's effective policy.");
   }
 
+  let dispatchBody = body;
   if (policy.tokenQuota > 0) {
     const remaining = Math.max(0, policy.tokenQuota - policy.totalTokensUsed);
-    if (remaining <= 0 || promptTokens > remaining) {
-      return policyRejection(c, protocol, 429, "token_quota_exceeded", "The API key token quota has been exhausted or cannot cover this prompt.");
+    const completionBudget = remaining - promptTokens;
+    if (remaining <= 0 || completionBudget <= 0) {
+      return policyRejection(c, protocol, 429, "token_quota_exceeded", "The API key token quota has been exhausted or cannot cover this prompt and a completion.");
     }
+    const requestedOutput = Number(body.max_tokens);
+    const boundedOutput = Number.isSafeInteger(requestedOutput) && requestedOutput > 0
+      ? Math.min(requestedOutput, completionBudget)
+      : completionBudget;
+    dispatchBody = { ...body, max_tokens: boundedOutput };
   }
 
   const gate: PolicyGateResult = acquireManagedKeyRequest(policy.keyId, policy, promptTokens);
@@ -145,7 +152,7 @@ async function dispatchWithPolicy(
   }
 
   try {
-    const response = await dispatchToUpstream(rawReq, body, targetModel, isStream, signal);
+    const response = await dispatchToUpstream(rawReq, dispatchBody, targetModel, isStream, signal);
     return releaseWhenBodyConsumed(response, gate.release);
   } catch (error) {
     gate.release();
