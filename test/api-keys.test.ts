@@ -3,7 +3,8 @@ import { app } from "../src/app";
 import { adminHeaders, adminRequest } from "./helpers/admin";
 import { issueAPIKey } from "../src/core/api-keys";
 import { getDatabase } from "../src/core/database";
-import { loginAdmin } from "../src/core/admin-auth";
+import { __getLoginKdfStateForTests, loginAdmin } from "../src/core/admin-auth";
+import { randomUUID } from "node:crypto";
 
 describe("administrator authentication and managed gateway API keys", () => {
   beforeEach(() => {
@@ -82,6 +83,22 @@ describe("administrator authentication and managed gateway API keys", () => {
     }
     expect(await loginAdmin("alphaway-throttle-check", "wrong-password")).toEqual({ error: "rate_limited" });
     expect(await loginAdmin("alphaway-throttle-check", "another-wrong-password")).toEqual({ error: "rate_limited" });
+  });
+
+  it("bounds concurrent password KDF work and rechecks throttling after queueing", async () => {
+    const username = `alphaway-parallel-${randomUUID()}`;
+    const attempts = Array.from({ length: 8 }, () => loginAdmin(username, "wrong-password"));
+
+    const queued = __getLoginKdfStateForTests();
+    expect(queued.active).toBe(queued.maxConcurrent);
+    expect(queued.queued).toBe(4);
+    expect(queued.active).toBeLessThanOrEqual(queued.maxConcurrent);
+    expect(queued.queued).toBeLessThanOrEqual(queued.maxQueued);
+
+    const results = await Promise.all(attempts);
+    expect(results.filter((result) => result.error === "invalid")).toHaveLength(4);
+    expect(results.filter((result) => result.error === "rate_limited")).toHaveLength(4);
+    expect(__getLoginKdfStateForTests()).toMatchObject({ active: 0, queued: 0 });
   });
 
   it("requires a gateway credential on every inference alias", async () => {
