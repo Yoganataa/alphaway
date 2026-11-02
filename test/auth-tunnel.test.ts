@@ -1,6 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect } from "bun:test";
 import { app } from "../src/app";
-import { readJsonRequestBody } from "../src/core/admin-guard";
+import { readJsonRequestBody, MAX_BODY_BYTES } from "../src/core/admin-guard";
 
 describe("auth & tunnel configuration", () => {
   let server: any;
@@ -80,6 +80,25 @@ describe("auth & tunnel configuration", () => {
       caught = error;
     }
     expect(caught?.statusCode).toBe(413);
+  });
+
+  it("enforces the default 10 MiB JSON limit for streamed bodies without Content-Length", async () => {
+    const oversizedChunk = new Uint8Array(MAX_BODY_BYTES + 1);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(oversizedChunk);
+        controller.close();
+      },
+    });
+    const request = { raw: { headers: new Headers(), body: stream } };
+    let caught: any;
+    try {
+      await readJsonRequestBody(request);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught?.statusCode).toBe(413);
+    expect(caught?.code).toBe("payload_too_large");
   });
 
   it("rejects oversized bootstrap and login payloads before JSON parsing", async () => {
