@@ -694,10 +694,9 @@ async function loginCodebuddyCli() {
   console.log("            CodeBuddy.ai / WorkBuddy OAuth Login Helper          ");
   console.log("=".repeat(65) + "\n");
 
-  const currentKey = getCodeBuddyApiKey();
-  if (currentKey) {
-    const sub = extractJwtSub(currentKey);
-    console.log(`ℹ️  Token saat ini terdeteksi untuk user: ${sub || "Authenticated"}`);
+  // Check configuration without exposing claims derived from the credential.
+  if (getCodeBuddyApiKey()) {
+    console.log("ℹ️  Credential CodeBuddy saat ini sudah dikonfigurasi.");
     console.log(`   Memulai sesi OAuth baru...\n`);
   }
 
