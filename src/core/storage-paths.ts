@@ -21,6 +21,43 @@ function nonEmpty(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+/** Decode supported escapes in a double-quoted .env value exactly once. */
+function decodeDoubleQuotedValue(value: string): string {
+  let decoded = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const current = value[index];
+    if (current !== "\\" || index + 1 >= value.length) {
+      decoded += current;
+      continue;
+    }
+
+    const escaped = value[index + 1];
+    switch (escaped) {
+      case "n":
+        decoded += "\n";
+        break;
+      case "r":
+        decoded += "\r";
+        break;
+      case "t":
+        decoded += "\t";
+        break;
+      case "\\":
+        decoded += "\\";
+        break;
+      case "\"":
+        decoded += "\"";
+        break;
+      default:
+        // Preserve unknown escapes rather than silently changing user data.
+        decoded += `\\${escaped}`;
+        break;
+    }
+    index += 1;
+  }
+  return decoded;
+}
+
 /**
  * Parse the small, conventional KEY=VALUE subset used by the application's
  * .env file. Runtime environment variables always take precedence.
@@ -32,12 +69,11 @@ export function parseEnvFile(content: string): Record<string, string> {
     if (!match) continue;
     const key = match[1];
     let value = match[2] ?? "";
-    if (value.length >= 2 && value[0] === value[value.length - 1] && (value[0] === "\"" || value[0] === "'")) {
+    if (value.length >= 2 && value[0] === value[value.length - 1] && (value[0] === "\""
+      || value[0] === "'")) {
       const quote = value[0];
       value = value.slice(1, -1);
-      if (quote === "\"") {
-        value = value.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\\\/g, "\\").replace(/\\\"/g, "\"");
-      }
+      if (quote === "\"") value = decodeDoubleQuotedValue(value);
     } else {
       value = value.replace(/\s+#.*$/, "").trim();
     }
