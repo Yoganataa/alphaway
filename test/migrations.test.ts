@@ -66,6 +66,22 @@ describe("SQLite migration runner", () => {
     expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub").value).toBe(JSON.stringify("pending"));
   });
 
+  it("requires encrypted database backups before irreversible credential migrations", () => {
+    db = openDatabase();
+    const backedUp: string[] = [];
+
+    runMigrations(db, MIGRATIONS, {
+      beforeDestructiveMigration(migration) {
+        backedUp.push(migration.name);
+      },
+    });
+
+    expect(backedUp).toEqual([
+      "auth-security",
+      "encrypt-legacy-codebuddy-credential",
+    ]);
+  });
+
   it("removes the obsolete JSON import ledger when upgrading an existing v4 SQLite database", () => {
     db = openDatabase();
     runTestMigrations(db, MIGRATIONS.slice(0, 4));
