@@ -156,7 +156,7 @@ export function encryptSecret(value: string | null | undefined): string {
   const cipher = createCipheriv("aes-256-gcm", masterKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return ENVELOPE + [iv.toString("base64url"), tag.toString("base64url"), ciphertext.toString("base64url")].join(".");
+  return ENVELOPE_V1 + [iv.toString("base64url"), tag.toString("base64url"), ciphertext.toString("base64url")].join(".");
 }
 
 export function decryptSecret(value: string | null | undefined): string {
