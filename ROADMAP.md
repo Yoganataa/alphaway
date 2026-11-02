@@ -87,3 +87,74 @@
 - Existing OpenAI, Anthropic, and Codex gateway protocols retain documented authorization-header compatibility.
 - Managed caller keys and persisted upstream credentials are not stored as plaintext in their canonical database representations.
 - SQLite is the only persistent application-state backend. Standalone JSON files are neither imported nor modified. Encrypted SQLite migration snapshots retain v1/v2 restore compatibility; POSIX permissions are restricted and Windows ACLs remain Phase 7.
+
+---
+
+### Phase 3 — Plans, Limits, and Request Enforcement
+
+**Status:** Active implementation on `feat/phase-3-plans-limits`. Phase 2 is merged and GitHub Security confirms **0 open / 14 closed** CodeQL alerts on `main` (filter `is:open branch:main`, screenshot supplied by the project owner on 2026-11-02). Main baseline at phase start: `a28ed9baef0c698ec879d649a24726706d1eee3d`.
+
+**Goal:** Add enforceable, reusable policy tiers for managed AlphaWay API keys without changing legacy environment-key behavior or the OpenAI/Anthropic/Codex protocol contracts. Keep one effective-policy resolver as the only source of truth for key-scoped model access, rate limits, concurrency, and token allowances.
+
+**Architecture constraints**
+
+- Runtime remains Bun 1.4.4+, TypeScript, Hono, and native Bun SQLite. Do not port the Go backend from 9router-go.
+- Reuse the Phase 2 managed `api_keys` table and hashed credential authentication. Never persist raw key secrets.
+- Add SQLite migration v6 (additive only). Preserve migrations v1–v5 and existing records. No JSON persistence/import/rollback path.
+- Policy scope applies to managed API keys only. Environment-managed `API_KEY` / `BRIDGE_API_KEY` and managed keys without an assigned Plan stay unrestricted unless explicit backward-compatible per-key policy is configured.
+- No implicit default Plan assignment for existing or newly created keys. Unassigned means no Plan restrictions.
+- A Plan is a reusable template. Per-key overrides apply only when explicitly set; unset fields inherit from the Plan. Use bounded integer validation and explicit semantics for zero/unset.
+- Resolve the effective policy once per request after model alias normalization and before upstream dispatch. Enforce consistently across OpenAI Chat, Anthropic Messages, Codex Responses, and all legacy aliases.
+- Key request accounting must be attributable by stable managed key ID, not raw secret, prefix alone, or the upstream provider credential. Historical request rows remain unattributed; do not backfill guessed ownership.
+- In-flight concurrency slots must be released on success, error, stream completion, cancellation, and body cancellation. State maps must be bounded and avoid memory growth from arbitrary callers.
+- Never display synthetic/random RPM or TPM values. Quota Tracker must use real AlphaWay gateway policy/usage data or explicitly show that an upstream provider quota is unavailable.
+- Do not implement USD spend caps with hardcoded model prices. AlphaWay currently lacks a trustworthy pricing ledger. Token quotas may be enforced only after streaming and non-streaming token accounting is made deterministic and covered; never use the current fixed streaming completion estimate.
+
+**Work breakdown / acceptance criteria**
+
+**3.1 — SQLite schema and policy model**
+- [ ] Add migration v6 with a reusable `plans` table and nullable `api_keys.plan_id` foreign-key assignment plus explicitly nullable per-key override columns.
+- [ ] Define and validate a typed Plan/PlanInput model: name, description, RPM, TPM, concurrency, lifetime token quota, optional period token budget (daily/weekly/monthly/total), alert percentage, hard cutoff, and allowed-model patterns.
+- [ ] Add a single `resolveEffectivePolicy` function with precedence: configured global defaults → assigned Plan → explicit key overrides. Unassigned/no-plan remains unrestricted.
+- [ ] Define model allowlist matching semantics (exact IDs and explicit wildcard rules); default empty list means unrestricted. Normalize aliases before evaluating the list.
+- [ ] Add transactional repository operations: create/list/get/update/delete Plans, count keys assigned to a Plan, and set/clear a managed key's Plan/overrides. Reject deleting a Plan while keys still reference it unless an explicit reassignment is part of the same transaction.
+- [ ] Cover migration from a v5 database, fresh database initialization, rollback on failure, and preservation of existing keys/usage/settings.
+
+**3.2 — Request attribution and metering**
+- [ ] Add nullable `client_api_key_id` to request logs through v6 and carry the ID in request-scoped context after gateway auth. Never store the API key secret.
+- [ ] Make request logging include managed-key identity for all three protocols and error responses. Keep environment-key traffic unattributed.
+- [ ] Replace hardcoded streaming completion-token counts with measured/estimated streamed text accounting using the existing token estimator; non-streaming uses provider usage when present and a documented fallback estimator otherwise.
+- [ ] Ensure one request is charged once even when protocol translation, stream consumption, retries, or client cancellation occur. Define when a failed upstream attempt is charged.
+- [ ] Add queries for per-key usage by window and lifetime; use indexed stable key IDs and safe date boundaries.
+
+**3.3 — Enforcement**
+- [ ] Implement bounded per-key RPM sliding windows, prompt TPM window/token bucket, and concurrency gates. Reject excess usage with consistent 429 responses and `Retry-After`; do not create unbounded queues.
+- [ ] Apply effective model allowlists to normalized models across OpenAI, Anthropic, and Codex routes before dispatch.
+- [ ] Enforce lifetime and optional period token budgets only after metering semantics are reliable. Return documented 429/402-style response semantics consistently across protocols; never silently reset a budget.
+- [ ] Release concurrency slots for every completion/error/cancellation path, including streaming responses. Add leak and double-release tests.
+- [ ] Keep provider-specific upstream quota separate from AlphaWay per-client policy. Never represent synthetic provider RPM/TPM as real provider quota.
+
+**3.4 — Admin API and dashboard**
+- [ ] Add admin-session-protected Plan CRUD endpoints with strict input validation and bounded request bodies.
+- [ ] Extend managed API key create/update/read APIs to assign/clear Plan and explicit per-key overrides. API responses expose only key metadata and effective policy, never secret hash/salt.
+- [ ] Add Plans management UI and Plan assignment in the API key management UI.
+- [ ] Replace random values in `QuotaTrackerView.svelte` with API-backed per-key limit/usage details. Show unavailable for upstream quotas not exposed by a provider.
+- [ ] Add accurate per-key usage view and clear empty/loading/error states.
+
+**3.5 — Verification**
+- [ ] Unit tests for policy precedence, validation, wildcard model access, RPM/TPM/concurrency windows, budget rollover, token accounting, map bounds, retries, cancellation, and concurrency release.
+- [ ] Integration tests for Plan CRUD/assignment/deletion constraints and enforcement across OpenAI Chat, Anthropic Messages, Codex Responses, and aliases.
+- [ ] Regression tests prove legacy env keys and unassigned managed keys keep current behavior.
+- [ ] Dashboard browser tests cover Plan CRUD, assignment, policy display, and truthful Quota Tracker values.
+- [ ] Run repository-mandated Bun 1.4.4 frozen install, unit tests, fingerprint check, E2E, build, and installer syntax check. Do not weaken tests or claim unrun checks.
+
+**Out of scope / deferred**
+- Provider-specific quota probing unless an upstream API provides authoritative quota values.
+- USD spend budgets and cost alerts until accurate, versioned model/provider pricing and request-cost attribution exist.
+- Multi-tenant Plan ownership; AlphaWay remains a single-tenant local gateway.
+- Plan billing, subscriptions, account provisioning, and payment integrations.
+- Queueing requests behind saturated keys; Phase 3 initially rejects rather than introducing unbounded waiting.
+- Windows ACL verification remains Phase 7.
+
+**Reference:** 9router-go policy resolver, Plans CRUD, and per-key limiter are behavioral references only. Adapt all persistence and execution to AlphaWay's Bun/TypeScript/Hono/SQLite architecture.
+
