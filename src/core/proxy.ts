@@ -502,9 +502,15 @@ function loadFromDisk() {
   }
 
   const storedConfig = dbGetSetting(CONFIG_SETTING_KEY, null);
-  const json = storedConfig && typeof storedConfig === "object" && !Array.isArray(storedConfig)
-    ? decryptProxyConfig(storedConfig)
+  const safeStoredConfig = storedConfig && typeof storedConfig === "object" && !Array.isArray(storedConfig)
+    ? mapConfigSecrets(storedConfig, (value) => value)
     : storedConfig;
+  if (safeStoredConfig && JSON.stringify(safeStoredConfig) !== JSON.stringify(storedConfig)) {
+    try { dbSetSetting(CONFIG_SETTING_KEY, safeStoredConfig); } catch {}
+  }
+  const json = safeStoredConfig && typeof safeStoredConfig === "object" && !Array.isArray(safeStoredConfig)
+    ? decryptProxyConfig(safeStoredConfig)
+    : safeStoredConfig;
   if (!json || typeof json !== "object" || Array.isArray(json)) {
     const error = json === null
       ? null
@@ -742,16 +748,27 @@ function describe(now = Date.now()) {
 /** Persist the complete proxy configuration as one SQLite setting. */
 function mapConfigSecrets(input, transform) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return input;
-  const config = { ...input };
-  if (typeof config.url === "string") config.url = transform(config.url);
-  if (Array.isArray(config.pool)) {
-    config.pool = config.pool.map((entry) => {
+  const config = {};
+  if (typeof input.url === "string") config.url = transform(input.url);
+  if (["round-robin", "random", "failover"].includes(input.strategy)) config.strategy = input.strategy;
+  for (const field of ["cooldownMs", "maxCooldownMs"]) {
+    if (Number.isFinite(Number(input[field]))) config[field] = Number(input[field]);
+  }
+  if (Array.isArray(input.pool)) {
+    config.pool = input.pool.map((entry) => {
       if (typeof entry === "string") return transform(entry);
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
-      const safe = { ...entry };
-      for (const field of ["url", "token", "auth"]) {
-        if (typeof safe[field] === "string") safe[field] = transform(safe[field]);
+      const safe = {};
+      for (const field of ["id", "label"]) {
+        if (typeof entry[field] === "string") safe[field] = entry[field].slice(0, 64);
       }
+      for (const field of ["direct", "relay", "enabled"]) {
+        if (typeof entry[field] === "boolean") safe[field] = entry[field];
+      }
+      if (Number.isFinite(Number(entry.weight))) safe.weight = Math.min(100, Math.max(1, Number(entry.weight)));
+      if (typeof entry.url === "string") safe.url = transform(entry.url);
+      const token = typeof entry.token === "string" ? entry.token : entry.auth;
+      if (typeof token === "string") safe.token = transform(token);
       return safe;
     });
   }
