@@ -6,8 +6,8 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest CI-verified Phase 2 code HEAD: `8e45a4a2977c109e292981557b3336f9aed52038` (run `41386143754`, #268).
-> **Latest implementation verification: code head `8e45a4a2977c109e292981557b3336f9aed52038` passed run `41386143754` (#268): **331 unit/protocol tests passed, 0 failed** across 30 files (784 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed (17 cipher suites, 12 extensions). The v5 migration regression verifies removal of only the obsolete JSON-import ledger while canonical SQLite provider data is preserved. The optional live upstream drill was skipped by design.
+> **Latest CI-verified Phase 2 code HEAD: `3e0621d96714aa703d30c5bf43a837ea347fadd4` (run `41394994247`, #345).
+> **Latest implementation verification: code head `3e0621d96714aa703d30c5bf43a837ea347fadd4` passed run `41394994247` (#345): **346 unit/protocol tests passed, 0 failed** across 32 files (841 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint passed (17 cipher suites, 12 extensions). CodeQL run `41394989743` passed both JavaScript/TypeScript and Actions analysis jobs; the prior double-unescaping review thread in `src/core/storage-paths.ts` is resolved. The optional live upstream drill was skipped by design.
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -15,7 +15,7 @@
 
 ## 1. Current Status
 
-**Phase 0 and Phase 1 are complete and merged into `main`. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4.** Do not begin Phase 3 or merge PR #4 until the remaining security review is complete.
+**Phase 0 and Phase 1 are complete and merged into `main`. Phase 2 is active on `feat/phase-2-auth-admin-security` in draft PR #4.** The latest required CI and CodeQL analysis pass; do not begin Phase 3 or merge PR #4 until the independent security review is complete.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
@@ -42,6 +42,7 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - Migration v5 removes the obsolete `legacy_imports` bookkeeping table. Historical migrations v1–v4 remain unchanged; provider, API-key, usage, and settings rows in SQLite are preserved.
 - Custom providers, usage analytics, TokenSaver, proxy settings, API keys, and admin sessions use canonical SQLite persistence. Existing SQLite analytics/TokenSaver/proxy values are normalized through explicit allowlists before use.
 - The pre-SQLite standalone JSON importer and JSON rollback restore CLI have been removed. SQLite schema v5 drops the obsolete import ledger; existing standalone JSON files are ignored and left untouched.
+- Persistent storage configuration follows the 9router-go contract: `DATA_DIR` and `DB_PATH`, default `$DATA_DIR/db/data.sqlite`, directory-layout fallback (`db/data.sqlite`, `data.sqlite`, `9router.db`, then legacy `alphaway.sqlite`), and compatibility aliases for existing AlphaWay installations. Double-quoted `.env` escapes are decoded in one pass.
 - Proxy pool health is a credential-free best-effort cache: restore reads are no-follow and capped at 1 MiB with file identity/metadata checks; the in-memory cache is capped at 512 egress records. Oversized/corrupt cache data is ignored without affecting proxy configuration.
 - All JSON request bodies across admin settings/configuration routes and the three gateway protocols are capped at 10 MiB using Content-Length validation plus streaming byte limits; oversized requests return 413 before JSON parsing or provider dispatch. Public administrator bootstrap/login use a stricter 16 KiB cap before parsing or KDF work.
 - Master encryption-key files are read as exactly 32 bytes plus a one-byte sentinel, and bootstrap token files are capped at 64 bytes with strict 43-character base64url validation; both verify descriptor identity/metadata stability.
@@ -54,8 +55,9 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 
 - PR #4 is the only open PR, targets `main`, and remains **draft**. It is mergeable but must not be merged or used to start Phase 3 until the independent security review is complete.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
-- The latest verified Phase 2 code head `bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d` passed GitHub Actions [run `41384043687`](https://github.com/Yoganataa/alphaway/actions/runs/41384043687) (#250): **340 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; build, TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. The installer smoke verified encryption master-key preservation through upgrade. The suite includes streaming SQLite backups (24 MiB), v1 backup restore compatibility, oversized proxy health-cache handling, and default 10 MiB request-body enforcement. Optional live upstream gate drill was skipped by design.
-- Live PR review check: no submitted reviews, inline review comments/threads, or requested reviewers were present. Independent security review remains outstanding.
+- Latest Phase 2 branch head `3e0621d96714aa703d30c5bf43a837ea347fadd4) passed GitHub Actions [run `41394994247`](https://github.com/Yoganataa/alphaway/actions/runs/41394994247) (#345): **346 unit/protocol tests passed, 0 failed** across 32 files (841 assertions); **8 dashboard E2E passed, 0 failed** (52 assertions); UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions) passed. Optional live upstream gate drill was skipped by design.
+- CodeQL run [`41394989743`](https://github.com/Yoganataa/alphaway/actions/runs/41394989743) passed JavaScript/TypeScript and Actions analysis. The prior CodeQL double-unescaping thread on `src/core/storage-paths.ts` was automatically resolved after replacing chained escape substitutions with a single-pass decoder and adding regression coverage.
+- No independent human security review has been submitted. The CodeQL review entry is automated and does not substitute for the independent security review required before merge.
 - Repository Ruleset [`Protect main`](https://github.com/Yoganataa/alphaway/rules/26337025) is **active**, targets only `refs/heads/main`, and has an empty bypass list. It requires a PR, conversation resolution, up-to-date successful runs for the four required CI jobs (`Unit and protocol tests`, `Installer and embedded dashboard smoke test`, `UI and standalone binary build`, `Dashboard browser tests`), blocks branch deletion and force pushes, and requires zero approvals to support the solo-developer workflow. `current_user_can_bypass` is `never`.
 - The classic branch-protection endpoint is not readable by the GitHub integration (403); the active repository ruleset detail above is the source used to verify protection.
 - Windows ACL behavior for bootstrap/encryption-key files and SQLite backups is not verified. Keep it in Phase 7 hardening; POSIX `0600`/`0700` permissions are covered.
