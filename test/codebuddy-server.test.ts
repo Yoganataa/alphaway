@@ -228,7 +228,8 @@ describe("codebuddy server integration tests", () => {
     } finally {
       mockResponseStatus = previousStatus;
       mockResponseBody = previousBody;
-      mockIsSSE = previousSse;\n      if (previousUrl === undefined) delete process.env.CODEBUDDY_INTL_URL; else process.env.CODEBUDDY_INTL_URL = previousUrl;
+      mockIsSSE = previousSse;
+      if (previousUrl === undefined) delete process.env.CODEBUDDY_INTL_URL; else process.env.CODEBUDDY_INTL_URL = previousUrl;
     }
   });
 
