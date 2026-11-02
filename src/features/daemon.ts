@@ -2,17 +2,12 @@
 
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 const { spawn } = require("child_process");
+const { resolveDataDir, ensurePrivateDirectory } = require("../core/storage-paths");
 
 function getStateDir() {
-  const dir =
-    process.env.ALPHAWAY_STATE_DIR ||
-    process.env.OPENCODE_BRIDGE_STATE_DIR ||
-    path.join(os.homedir(), ".alphaway");
-  if (!fs.existsSync(dir)) {
-    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-  }
+  const dir = resolveDataDir();
+  ensurePrivateDirectory(dir);
   return dir;
 }
 
