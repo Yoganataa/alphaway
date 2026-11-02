@@ -64,7 +64,8 @@ describe("AlphaWay SQLite Database Engine", () => {
     const db = getDatabase();
     db.exec("DELETE FROM custom_providers;");
     db.exec("DELETE FROM request_logs;");
-    db.exec("DELETE FROM app_settings;");
+    // Preserve the startup scrub marker; this is a security invariant, not test data.
+    db.exec("DELETE FROM app_settings WHERE key <> 'alpha_security_secret_scrub';");
     db.exec("DELETE FROM api_keys;");
   });
 
@@ -88,6 +89,9 @@ describe("AlphaWay SQLite Database Engine", () => {
 
     const secureDelete = db.prepare("PRAGMA secure_delete").get();
     expect(Number(secureDelete?.secure_delete)).toBe(1);
+
+    const scrubMarker = db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub");
+    expect(scrubMarker?.value).toBe(JSON.stringify("complete"));
   });
 
   it("performs CRUD operations on custom providers", () => {
