@@ -711,6 +711,16 @@ describe("egress pool: health survives a restart", () => {
     assert.equal(fs.existsSync(proxy.healthFile()), false);
   });
 
+  it("skips an oversized health cache without reading it into memory or losing the pool", () => {
+    proxy.setPool({ entries: ["http://a:1"] });
+    proxy.markFailure("http://a:1", { cooldownMs: 60000 });
+    fs.writeFileSync(proxy.healthFile(), Buffer.alloc(1024 * 1024 + 1, 0x61));
+
+    assert.doesNotThrow(() => proxy.__restart());
+    assert.equal(proxy.describe().mode, "pool");
+    assert.equal(proxy.describe().pool.entries[0].state, "ready");
+  });
+
   it("drops health for an entry that leaves the pool", () => {
     proxy.setPool({ entries: ["http://a:1", "http://b:2"] });
     proxy.markFailure("http://a:1", { cooldownMs: 60000 });
