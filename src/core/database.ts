@@ -8,11 +8,15 @@
 import { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { runMigrations } from "./migrations";
 import { createMigrationBackup, encryptExistingMigrationBackups } from "./migrations/backup";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "./secrets";
 import { hasEmbeddedProviderUrlSecrets } from "./provider-url-secrets";
+import {
+  ensurePrivateDirectory,
+  resolveDataDir,
+  resolveDatabasePath,
+} from "./storage-paths";
 
 export interface CustomProviderRow {
   id: string;
@@ -40,31 +44,13 @@ export interface RequestLogRow {
   stream: boolean;
 }
 
+/** @deprecated Use resolveDataDir; retained for existing internal callers. */
 export function resolveDbDir(): string {
-  const customState =
-    process.env.ALPHAWAY_STATE_DIR ||
-    process.env.OPENCODE_BRIDGE_STATE_DIR;
-  if (customState && customState.trim()) {
-    return customState.trim();
-  }
-  const homeDir = process.platform === "win32"
-    ? process.env.USERPROFILE || process.env.HOME || os.homedir()
-    : process.env.HOME || process.env.USERPROFILE || os.homedir();
-  const dir = path.join(homeDir, ".alphaway");
-  try {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    }
-    if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
-  } catch {}
-  return dir;
+  return resolveDataDir();
 }
 
 export function getDbFilePath(): string {
-  if (process.env.ALPHAWAY_DB_PATH) {
-    return process.env.ALPHAWAY_DB_PATH;
-  }
-  return path.join(resolveDbDir(), "alphaway.sqlite");
+  return resolveDatabasePath();
 }
 
 let dbInstance: any = null;
@@ -98,6 +84,57 @@ function scrubLegacySecretResidue(db: any): void {
   checkpoint();
 }
 
+
+export interface DatabaseStorageStats {
+  path: string;
+  databaseSizeBytes: number;
+  reclaimableBytes: number;
+  walSizeBytes: number;
+  pageCount: number;
+  pageSize: number;
+  freelistCount: number;
+  requestLogsCount: number;
+  customProvidersCount: number;
+}
+
+export function getDatabaseStorageStats(): DatabaseStorageStats {
+  const db = getDatabase();
+  const pageCount = Number(db.query("PRAGMA page_count;").get()?.page_count || 0);
+  const pageSize = Number(db.query("PRAGMA page_size;").get()?.page_size || 0);
+  const freelistCount = Number(db.query("PRAGMA freelist_count;").get()?.freelist_count || 0);
+  const requestLogsCount = Number(db.query("SELECT COUNT(*) AS count FROM request_logs;").get()?.count || 0);
+  const customProvidersCount = Number(db.query("SELECT COUNT(*) AS count FROM custom_providers;").get()?.count || 0);
+  const dbPath = getDbFilePath();
+  let walSizeBytes = 0;
+  try { walSizeBytes = fs.statSync(dbPath + "-wal").size; } catch {}
+  return {
+    path: dbPath,
+    databaseSizeBytes: pageCount * pageSize,
+    reclaimableBytes: freelistCount * pageSize,
+    walSizeBytes,
+    pageCount,
+    pageSize,
+    freelistCount,
+    requestLogsCount,
+    customProvidersCount,
+  };
+}
+
+/** Compact the live WAL-backed database and release free pages to the OS. */
+export function vacuumDatabase(): DatabaseStorageStats {
+  const db = getDatabase();
+  const before = db.query("PRAGMA wal_checkpoint(TRUNCATE);").get() as { busy?: number };
+  if (Number(before?.busy || 0) !== 0) {
+    throw new Error("SQLite WAL checkpoint is busy; stop other database readers/writers and retry");
+  }
+  db.exec("VACUUM;");
+  const after = db.query("PRAGMA wal_checkpoint(TRUNCATE);").get() as { busy?: number };
+  if (Number(after?.busy || 0) !== 0) {
+    throw new Error("SQLite WAL checkpoint remained busy after VACUUM");
+  }
+  return getDatabaseStorageStats();
+}
+
 export function getDatabase(): any {
   if (dbInstance) return dbInstance;
 
@@ -107,14 +144,13 @@ export function getDatabase(): any {
   if (!isMemory) {
     const dir = path.dirname(dbPath);
     try {
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-      if (process.platform !== "win32") fs.chmodSync(dir, 0o700);
-      // Convert legacy pre-Phase-2 plaintext SQLite migration/restore snapshots
+      ensurePrivateDirectory(dir);
+      // Convert historical plaintext SQLite migration/pre-restore snapshots
       // before the application serves requests or exposes backup diagnostics.
       encryptExistingMigrationBackups(path.join(dir, "backups"));
       encryptExistingMigrationBackups(dir, path.basename(dbPath));
     } catch (error) {
-      throw new Error("Could not secure existing SQLite migration backups: " + (error instanceof Error ? error.message : String(error)));
+      throw new Error("Could not secure the SQLite data directory or its backups: " + (error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -125,15 +161,32 @@ export function getDatabase(): any {
 
   dbInstance = new Database(dbPath);
   if (!isMemory && process.platform !== "win32") {
-    try { fs.chmodSync(dbPath, 0o600); } catch {}
+    try {
+      fs.chmodSync(dbPath, 0o600);
+    } catch (error) {
+      try { dbInstance.close(); } catch {}
+      dbInstance = null;
+      throw new Error("Could not restrict SQLite database permissions to 0600: " + (error instanceof Error ? error.message : String(error)));
+    }
   }
 
-  // 2. Enable WAL mode for concurrency and optimal I/O throughput
+  // Match 9router-go's SQLite connection contract. Bun owns one synchronous
+  // connection per Database instance; the same per-connection PRAGMAs still
+  // apply to every operation performed by this process.
+  dbInstance.exec("PRAGMA busy_timeout = 5000;");
+  dbInstance.exec("PRAGMA foreign_keys = ON;");
+  dbInstance.exec("PRAGMA synchronous = NORMAL;");
+  dbInstance.exec("PRAGMA temp_store = MEMORY;");
+  dbInstance.exec("PRAGMA cache_size = -8000;");
   if (!isMemory) {
-    try {
-      dbInstance.exec("PRAGMA journal_mode = WAL;");
-      dbInstance.exec("PRAGMA synchronous = NORMAL;");
-    } catch {}
+    dbInstance.exec("PRAGMA mmap_size = 30000000;");
+    dbInstance.exec("PRAGMA journal_mode = WAL;");
+    const journalMode = dbInstance.query("PRAGMA journal_mode;").get() as { journal_mode?: string };
+    if (String(journalMode?.journal_mode || "").toLowerCase() !== "wal") {
+      dbInstance.close();
+      dbInstance = null;
+      throw new Error("SQLite could not enable WAL journal mode");
+    }
   }
 
   // 3. Apply versioned, transactional schema migrations. Existing tables are
