@@ -114,7 +114,7 @@ describe("SQLite migration runner", () => {
       .prepare("SELECT id, name, api_key FROM custom_providers WHERE id = ?")
       .get("legacy-provider");
 
-    expect(result.currentVersion).toBe(2);
+    expect(result.currentVersion).toBe(3);
     expect(row.id).toBe("legacy-provider");
     expect(row.name).toBe("Legacy");
     expect(row.api_key).toMatch(/^awenc:v1:/);
@@ -190,7 +190,7 @@ describe("SQLite migration runner", () => {
     expect(second.applied).toHaveLength(0);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(4);
+    ).toBe(3);
   });
 
   it("rolls back migration DDL and history when a migration fails", () => {
@@ -240,7 +240,7 @@ describe("SQLite migration runner", () => {
     ]);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(3);
+    ).toBe(4);
   });
 
   it("refuses destructive migrations unless a backup callback is provided", () => {
@@ -269,7 +269,7 @@ describe("SQLite migration runner", () => {
     });
 
     expect(backupWasCreated).toBe(true);
-    expect(result.currentVersion).toBe(3);
+    expect(result.currentVersion).toBe(4);
   });
 
   it("rejects a database created by a newer application schema", () => {
