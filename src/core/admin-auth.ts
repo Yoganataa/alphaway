@@ -259,14 +259,44 @@ function pruneFailedLogins(now: number): void {
 function rememberFailedLogin(
   key: string,
   attempt: { count: number; firstAt: number; lockedUntil: number }
-): void {
-  // Refresh insertion order and bound memory when clients submit many unique usernames.
-  failedLogins.delete(key);
-  if (failedLogins.size >= MAX_TRACKED_FAILED_LOGINS) {
-    const oldest = failedLogins.keys().next().value;
-    if (oldest) failedLogins.delete(oldest);
+): boolean {
+  const alreadyTracked = failedLogins.has(key);
+  if (alreadyTracked) failedLogins.delete(key);
+
+  // Never evict an active throttle record to make room for attacker-chosen
+  // usernames. Once the bounded map is full, new usernames fail closed until
+  // expired records are pruned; otherwise spraying usernames could erase a
+  // target account's lockout and enable parallel brute-force attempts.
+  if (!alreadyTracked && failedLogins.size >= MAX_TRACKED_FAILED_LOGINS) {
+    return false;
   }
+
   failedLogins.set(key, attempt);
+  return true;
+}
+
+/** Test-only access to verify that capacity pressure cannot erase lockouts. */
+export function __seedFailedLoginForTests(
+  username: string,
+  attempt: { count: number; firstAt: number; lockedUntil: number }
+): boolean {
+  return rememberFailedLogin(loginThrottleKey(username), attempt);
+}
+
+export function __getFailedLoginStateForTests(username: string): {
+  size: number;
+  max: number;
+  attempt: { count: number; firstAt: number; lockedUntil: number } | null;
+} {
+  return {
+    size: failedLogins.size,
+    max: MAX_TRACKED_FAILED_LOGINS,
+    attempt: failedLogins.get(loginThrottleKey(username)) || null,
+  };
+}
+
+export function __clearFailedLoginsForTests(): void {
+  failedLogins.clear();
 }
 
 export async function loginAdmin(
@@ -320,12 +350,12 @@ export async function loginAdmin(
       const withinWindow = Boolean(previous && failedAt - previous.firstAt < LOGIN_WINDOW_MS);
       const firstAt = withinWindow ? previous!.firstAt : failedAt;
       const count = withinWindow ? previous!.count + 1 : 1;
-      rememberFailedLogin(key, {
+      const remembered = rememberFailedLogin(key, {
         count,
         firstAt,
         lockedUntil: count >= 5 ? firstAt + LOGIN_WINDOW_MS : 0,
       });
-      return { error: count >= 5 ? "rate_limited" : "invalid" };
+      return { error: !remembered || count >= 5 ? "rate_limited" : "invalid" };
     }
 
     failedLogins.delete(key);
