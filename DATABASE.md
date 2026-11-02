@@ -50,6 +50,9 @@ A default installation uses this structure:
 │   ├── data.sqlite-shm        # SQLite shared-memory coordination (when present)
 │   └── backups/
 │       └── alphaway-before-*.sqlite.awenc
+├── cache/
+│   ├── catalog.json            # OpenCode model/provider catalog cache
+│   └── source-recipe.json      # OpenCode identity/source recipe cache
 ├── secret-encryption.key      # 32-byte AES-256-GCM master key
 ├── alphaway.pid               # daemon metadata, when daemon mode is used
 ├── alphaway.log               # daemon log, when daemon mode is used
@@ -57,7 +60,7 @@ A default installation uses this structure:
 └── SOUL.md                    # optional global personality file
 \`\`\`
 
-The JSON-named proxy file is a runtime cache, not a second application-state store. Provider settings, proxy intent, TokenSaver configuration, usage events, API keys, users, and sessions are stored in SQLite. Old standalone configuration files are ignored and are not imported, rewritten, or deleted.
+The OpenCode catalog/source cache also follows `DATA_DIR` at `cache/` by default; `OPENCODE_CACHE_DIR` can override the location or disable it. The cache directory is restricted to POSIX mode `0700`. The JSON-named proxy file is a runtime cache, not a second application-state store. Provider settings, proxy intent, TokenSaver configuration, usage events, API keys, users, and sessions are stored in SQLite. Old standalone configuration files are ignored and are not imported, rewritten, or deleted.
 
 ## SQLite connection and permissions
 
