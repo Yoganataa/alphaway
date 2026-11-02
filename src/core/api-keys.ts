@@ -16,6 +16,7 @@ export interface APIKeyRecord {
   rateLimitRpm: number | null;
   rateLimitTpm: number | null;
   concurrencyLimit: number | null;
+  tokenQuota: number | null;
   allowedModels: string[] | null;
   totalTokensUsed: number;
 }
@@ -69,6 +70,7 @@ function toRecord(row: any): APIKeyRecord {
     rateLimitRpm: row.rate_limit_rpm == null ? null : Number(row.rate_limit_rpm),
     rateLimitTpm: row.rate_limit_tpm == null ? null : Number(row.rate_limit_tpm),
     concurrencyLimit: row.concurrency_limit == null ? null : Number(row.concurrency_limit),
+    tokenQuota: row.token_quota == null ? null : Number(row.token_quota),
     allowedModels: row.allowed_models == null ? null : (() => { try { const value = JSON.parse(row.allowed_models); return normalizeAllowedModels(value); } catch { return []; } })(),
     totalTokensUsed: Number(row.total_tokens_used || 0),
   };
@@ -144,6 +146,7 @@ export interface APIKeyPolicyPatch {
   rateLimitRpm?: number | null;
   rateLimitTpm?: number | null;
   concurrencyLimit?: number | null;
+  tokenQuota?: number | null;
   allowedModels?: string[] | null;
 }
 
@@ -182,6 +185,9 @@ export function setAPIKeyPolicy(id: string, patch: APIKeyPolicyPatch): APIKeyRec
   const concurrency = Object.prototype.hasOwnProperty.call(patch, "concurrencyLimit")
     ? normalizeOverride(patch.concurrencyLimit, "concurrencyLimit")
     : current.concurrency_limit == null ? null : Number(current.concurrency_limit);
+  const tokenQuota = Object.prototype.hasOwnProperty.call(patch, "tokenQuota")
+    ? normalizeOverride(patch.tokenQuota, "tokenQuota")
+    : current.token_quota == null ? null : Number(current.token_quota);
 
   let allowedModels: string | null = current.allowed_models == null ? null : String(current.allowed_models);
   if (Object.prototype.hasOwnProperty.call(patch, "allowedModels")) {
@@ -189,8 +195,8 @@ export function setAPIKeyPolicy(id: string, patch: APIKeyPolicyPatch): APIKeyRec
     else allowedModels = JSON.stringify(normalizeAllowedModels(patch.allowedModels));
   }
 
-  db.prepare("UPDATE api_keys SET plan_id = ?, rate_limit_rpm = ?, rate_limit_tpm = ?, concurrency_limit = ?, allowed_models = ? WHERE id = ? AND status = 'active'")
-    .run(planId, rpm, tpm, concurrency, allowedModels, id);
+  db.prepare("UPDATE api_keys SET plan_id = ?, rate_limit_rpm = ?, rate_limit_tpm = ?, concurrency_limit = ?, token_quota = ?, allowed_models = ? WHERE id = ? AND status = 'active'")
+    .run(planId, rpm, tpm, concurrency, tokenQuota, allowedModels, id);
 
   const row = db.prepare("SELECT k.*, p.name AS plan_name FROM api_keys k LEFT JOIN plans p ON p.id = k.plan_id WHERE k.id = ?").get(id);
   return row ? toRecord(row) : null;
