@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Core implementation and in-repository hardening are complete on `feat/phase-2-auth-admin-security`. Implementation head `96c1445144966689450bb9732f89ef2295c4bbbc` passed CI run `41372300525` on Bun 1.4.4. That run covers bounded login KDF work, SQLite residue cleanup, migration v4 for legacy CodeBuddy credentials, bounded legacy JSON reads, build, installer smoke, TLS fingerprint, and dashboard E2E. The current checkpoint/roadmap sync adds documentation-only commits; verify CI on the final live PR head. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and independent security review.
+**Status:** Core implementation and in-repository hardening are implemented on `feat/phase-2-auth-admin-security`. The last completed CI run before the newest hardening commits was run `41375651424` (#212) on `a64bbe2311465db98f0b7da531c3d1ffa4167f80`: 332 unit/protocol tests and 8 dashboard E2E passed, along with build, installer smoke, and TLS fingerprint. Later commits add bounded re-reads for legacy backup/restore files, a 16 KiB streaming cap for public bootstrap/login JSON bodies, and bounded master-key/bootstrap-token file reads. CI on the final live head must be verified before merge. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and the independent security review decision.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -18,10 +18,12 @@
 - [x] Isolate Bun unit-test SQLite state using a preload before application modules are imported.
 - [x] Bound administrator login inputs and failed-login tracking memory; reject control characters in API-key labels.
 - [x] Bound administrator password KDF concurrency globally (4 active, 16 queued), reject queue overflow, and serialize KDF checks per username to prevent parallel throttle bypass.
+- [x] Cap public administrator bootstrap/login JSON bodies at 16 KiB using Content-Length validation and a streaming byte limit; reject oversized requests with 413 before JSON parsing/KDF work.
+- [x] Bound master encryption-key reads to exactly 32 bytes plus a sentinel and bootstrap-token file reads to 64 bytes; validate file identity/metadata and strict token format.
 - [x] Make `/health` recognize an encrypted CodeBuddy credential without exposing its value.
 - [x] Add AES-GCM tests for nonce uniqueness, authenticated decryption/tamper rejection, symlink refusal, and POSIX owner-only key-file permissions.
 - [x] Refuse symlinked legacy JSON sources; open through no-follow descriptors, verify file identity, and atomically replace processed sources with encrypted rollback envelopes. Provide `--restore-legacy-backup` for operator recovery.
-- [x] Bound legacy JSON reads to 50 MiB plus one sentinel byte, even when a source grows after `fstat`; skip without parsing/replacing a changed or oversized source, and verify the file metadata remained stable during a successful read.
+- [x] Bound legacy JSON import, backup verification, and encrypted restore reads; use no-follow descriptors, metadata-stability checks, and a maximum-size sentinel so source growth cannot trigger unbounded allocation.
 - [x] Whitelist fields imported from legacy usage analytics, TokenSaver, and proxy configuration; discard unknown credential-bearing properties rather than persisting arbitrary JSON.
 - [x] Normalize and rewrite older SQLite analytics, TokenSaver, and proxy settings through allowlisted schemas before exposing them to application/dashboard code.
 - [x] Encrypt destructive-migration SQLite snapshots as AES-256-GCM `.sqlite.awenc` envelopes and migrate historical plaintext migration/pre-restore snapshots before they are used.
@@ -31,7 +33,7 @@
 - [x] Preserve installer upgrade behavior and verify `.env`, SQLite state, and `secret-encryption.key` remain intact through the Linux installer smoke test.
 - [x] Document the proposed **preserve-and-skip** recovery policy for legacy JSON sources above 50 MiB or files that cannot be safely atomically replaced: do not parse, partially import, truncate, or delete the source automatically; preserve it and report the skip. POSIX mode is restricted to `0600`. The operator must create and verify an encrypted archive before moving the source out of configured import directories. This intentionally keeps a bounded plaintext residual rather than risking data loss or unbounded parsing; project-owner acceptance remains required.
 - [ ] Complete independent security review of PR #4 and resolve any findings before merge.
-- [ ] Configure branch protection for `main` with required successful CI checks and prevent direct pushes/bypass, then verify the rule is active. At the latest live check, `main` was unprotected and the available GitHub integration did not expose a branch-protection mutation action.
+- [x] Configure and verify repository Ruleset `Protect main`: active for `refs/heads/main`, no bypass actors, PR required, 0 approvals for the solo-developer workflow, conversation resolution required, four successful CI jobs required with strict up-to-date checks, deletion blocked, and non-fast-forward updates (force-push) blocked.
 
 **Implementation notes**
 
@@ -46,9 +48,9 @@
 **Verification state**
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
-- Implementation head `96c1445144966689450bb9732f89ef2295c4bbbc`, CI run [`41372300525`](https://github.com/Yoganataa/alphaway/actions/runs/41372300525): **331 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Installer smoke verified the encryption master-key file survived upgrade unchanged. Optional live upstream gate drill was skipped by design.
-- This checkpoint/roadmap update adds documentation-only commits after the verified implementation head above. Re-fetch the final PR head and verify its CI before merge; do not treat run #208 as evidence for a later SHA.
-- Do not merge PR #4 or begin Phase 3 until the preserve-and-skip exception is accepted by the project owner, independent security review is complete, and CI is green on the final PR head.
+- Last completed code+test verification before the subsequent body/key-file hardening commits: [`a64bbe2311465db98f0b7da531c3d1ffa4167f80`](https://github.com/Yoganataa/alphaway/commit/a64bbe2311465db98f0b7da531c3d1ffa4167f80), CI run [`41375651424`](https://github.com/Yoganataa/alphaway/actions/runs/41375651424) (#212): **332 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint, and installer/embedded-dashboard smoke passed. Subsequent commits added bounded public auth request bodies and bounded sensitive-file reads; verify CI on the latest branch head before merge.
+- Repository Ruleset `Protect main` is active and enforces the four required jobs with strict up-to-date checks. Its required approval count is 0 for the solo developer; no bypass actors are configured.
+- Do not merge PR #4 or begin Phase 3 until the preserve-and-skip exception is accepted by the project owner, the independent security review decision/findings are resolved, and CI is green on the final PR head.
 
 **Acceptance criteria**
 
