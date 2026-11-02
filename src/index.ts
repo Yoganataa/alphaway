@@ -15,11 +15,9 @@ if (typeof (globalThis as any).Bun === "undefined") {
   }
 }
 
-import { app } from "./app";
 import { getAdminBootstrapTokenForCli } from "./core/admin-auth";
 import { handleDaemonCli } from "./features/daemon";
 import { startTunnel } from "./features/tunnel";
-import { opencode } from "./providers";
 
 const PORT = parseInt(process.env.PORT || "20129", 10);
 const HOST = process.env.HOST || "127.0.0.1";
@@ -68,6 +66,11 @@ Environment Variables:
 
 // 1. Handle Daemon CLI commands (--stop, --status, --daemon, -d)
 handleDaemonCli(PORT, HOST);
+
+// Acquire the process/data-directory lock before importing application modules,
+// which may initialize SQLite as part of route/provider setup.
+const { app } = await import("./app");
+const { opencode } = await import("./providers");
 
 // 2. Handle Cloudflare Tunnel (--tunnel)
 if (process.argv.includes("--tunnel") || process.env.TUNNEL === "1") {
