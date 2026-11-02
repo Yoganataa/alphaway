@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import fs from "fs";
 import { getDatabase, getDbFilePath, dbGetSetting, dbSetSetting } from "../core/database";
 import { getConsoleLogs, clearConsoleLogs, pushLog } from "../core/console-buffer";
-import { adminRequestError } from "../core/admin-guard";
+import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
 import { listAPIKeys, issueAPIKey, renameAPIKey, revokeAPIKey, rotateAPIKey } from "../core/api-keys";
 
 export const settingsRoute = new Hono();
@@ -109,7 +109,12 @@ settingsRoute.put("/api/security/rules", async (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
 
-  const body = await c.req.json().catch(() => null);
+  let body: any = null;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    if (error?.statusCode === 413) return c.json({ error: "Request body exceeds the 10 MiB limit" }, 413);
+  }
   const rules = validateSecurityRules(body?.rules);
   if (!rules) {
     return c.json(
@@ -134,7 +139,12 @@ settingsRoute.get("/api/keys", (c) => {
 settingsRoute.post("/api/keys", async (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
-  const body = await c.req.json().catch(() => null);
+  let body: any = null;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    if (error?.statusCode === 413) return c.json({ error: "Request body exceeds the 10 MiB limit" }, 413);
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return c.json({ error: "A JSON object is required" }, 400);
   }
@@ -151,7 +161,12 @@ settingsRoute.post("/api/keys", async (c) => {
 settingsRoute.patch("/api/keys/:id", async (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
-  const body = await c.req.json().catch(() => null);
+  let body: any = null;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    if (error?.statusCode === 413) return c.json({ error: "Request body exceeds the 10 MiB limit" }, 413);
+  }
   if (!body || typeof body.name !== "string") return c.json({ error: "A key name is required" }, 400);
   try {
     const key = renameAPIKey(c.req.param("id"), body.name);
