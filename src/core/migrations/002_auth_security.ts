@@ -10,6 +10,7 @@ function hashLegacyKey(secret: string, salt: string): string {
 export const authSecurityMigration: Migration = {
   version: 2,
   name: "auth-security",
+  destructive: true,
   up(db) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS api_keys (
