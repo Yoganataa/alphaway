@@ -36,7 +36,6 @@ describe("SQLite migration runner", () => {
         { version: 3, name: "secret-residue-cleanup" },
         { version: 4, name: "encrypt-legacy-codebuddy-credential" },
         { version: 5, name: "remove-legacy-json-import-ledger" },
-      { version: 6, name: "plans-and-request-policy" },
         { version: 6, name: "plans-and-request-policy" },
       ],
     });
@@ -137,7 +136,7 @@ describe("SQLite migration runner", () => {
       .update(legacySecret, "utf8")
       .digest("hex");
 
-    expect(result.currentVersion).toBe(7);
+    expect(result.currentVersion).toBe(6);
     expect(stored.name).toBe("Legacy Integration");
     expect(stored.key_prefix).toBe(legacySecret.slice(0, 16));
     expect(stored.secret_hash).toBe(expectedHash);
@@ -173,7 +172,7 @@ describe("SQLite migration runner", () => {
       .prepare("SELECT id, name, api_key FROM custom_providers WHERE id = ?")
       .get("legacy-provider");
 
-    expect(result.currentVersion).toBe(7);
+    expect(result.currentVersion).toBe(6);
     expect(row.id).toBe("legacy-provider");
     expect(row.name).toBe("Legacy");
     expect(row.api_key).toMatch(/^awenc:v1:/);
@@ -255,7 +254,7 @@ describe("SQLite migration runner", () => {
     const marker = JSON.parse(db.prepare("SELECT value FROM app_settings WHERE key = ?")
       .get("alpha_security_secret_scrub").value);
 
-    expect(result.currentVersion).toBe(7);
+    expect(result.currentVersion).toBe(6);
     expect(stored).toMatch(/^awenc:v1:/);
     expect(stored).not.toContain(legacyCredential);
     expect(decryptSecret(stored)).toBe(legacyCredential);
