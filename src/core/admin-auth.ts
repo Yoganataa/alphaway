@@ -16,6 +16,42 @@ const SCRYPT_OPTIONS = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const failedLogins = new Map<string, { count: number; firstAt: number; lockedUntil: number }>();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_TRACKED_FAILED_LOGINS = 4096;
+const MAX_CONCURRENT_LOGIN_KDFS = 4;
+const MAX_QUEUED_LOGIN_KDFS = 16;
+let activeLoginKdfs = 0;
+const loginKdfWaiters: Array<() => void> = [];
+
+function releaseLoginKdfSlot(): void {
+  activeLoginKdfs = Math.max(0, activeLoginKdfs - 1);
+  const next = loginKdfWaiters.shift();
+  if (next) {
+    activeLoginKdfs += 1;
+    next();
+  }
+}
+
+function acquireLoginKdfSlot(): Promise<(() => void) | null> {
+  if (activeLoginKdfs < MAX_CONCURRENT_LOGIN_KDFS) {
+    activeLoginKdfs += 1;
+    return Promise.resolve(releaseLoginKdfSlot);
+  }
+  if (loginKdfWaiters.length >= MAX_QUEUED_LOGIN_KDFS) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    loginKdfWaiters.push(() => resolve(releaseLoginKdfSlot));
+  });
+}
+
+/** Test-only visibility for the bounded login KDF queue; never exposed over HTTP. */
+export function __getLoginKdfStateForTests(): { active: number; queued: number; maxConcurrent: number; maxQueued: number } {
+  return {
+    active: activeLoginKdfs,
+    queued: loginKdfWaiters.length,
+    maxConcurrent: MAX_CONCURRENT_LOGIN_KDFS,
+    maxQueued: MAX_QUEUED_LOGIN_KDFS,
+  };
+}
 
 export interface AdminIdentity {
   id: string;
@@ -207,52 +243,67 @@ export async function loginAdmin(
   }
 
   const key = loginThrottleKey(username);
-  const now = Date.now();
-  pruneFailedLogins(now);
-  const attempt = failedLogins.get(key);
-  if (attempt && attempt.lockedUntil > now) return { error: "rate_limited" };
+  const initialNow = Date.now();
+  pruneFailedLogins(initialNow);
+  const initialAttempt = failedLogins.get(key);
+  if (initialAttempt && initialAttempt.lockedUntil > initialNow) return { error: "rate_limited" };
 
-  const db = getDatabase();
-  const row = db.prepare(
-    "SELECT id, username, password_salt, password_hash FROM admin_users WHERE username = ? COLLATE NOCASE"
-  ).get(username) as any;
+  // Scrypt uses substantial memory per operation. Bound active work and queued
+  // requests globally, then re-check this username after acquiring a slot so
+  // concurrent guesses cannot bypass the per-user throttle.
+  const releaseSlot = await acquireLoginKdfSlot();
+  if (!releaseSlot) return { error: "rate_limited" };
 
-  // Run the same KDF for unknown usernames to avoid a cheap account-enumeration oracle.
-  const salt = row?.password_salt || "00000000000000000000000000000000";
-  const derived = await scrypt(inputPassword, salt);
-  const expected = Buffer.from(row?.password_hash || "0".repeat(PASSWORD_BYTES * 2), "hex");
-  const valid = Boolean(row) && derived.length === expected.length && timingSafeEqual(derived, expected);
-  if (!valid) {
-    const previous = failedLogins.get(key);
-    const withinWindow = Boolean(previous && now - previous.firstAt < LOGIN_WINDOW_MS);
-    const firstAt = withinWindow ? previous!.firstAt : now;
-    const count = withinWindow ? previous!.count + 1 : 1;
-    rememberFailedLogin(key, {
-      count,
-      firstAt,
-      lockedUntil: count >= 5 ? firstAt + LOGIN_WINDOW_MS : 0,
+  try {
+    const now = Date.now();
+    pruneFailedLogins(now);
+    const currentAttempt = failedLogins.get(key);
+    if (currentAttempt && currentAttempt.lockedUntil > now) return { error: "rate_limited" };
+
+    const db = getDatabase();
+    const row = db.prepare(
+      "SELECT id, username, password_salt, password_hash FROM admin_users WHERE username = ? COLLATE NOCASE"
+    ).get(username) as any;
+
+    // Run the same KDF for unknown usernames to avoid a cheap account-enumeration oracle.
+    const salt = row?.password_salt || "00000000000000000000000000000000";
+    const derived = await scrypt(inputPassword, salt);
+    const expected = Buffer.from(row?.password_hash || "0".repeat(PASSWORD_BYTES * 2), "hex");
+    const valid = Boolean(row) && derived.length === expected.length && timingSafeEqual(derived, expected);
+    if (!valid) {
+      const failedAt = Date.now();
+      const previous = failedLogins.get(key);
+      const withinWindow = Boolean(previous && failedAt - previous.firstAt < LOGIN_WINDOW_MS);
+      const firstAt = withinWindow ? previous!.firstAt : failedAt;
+      const count = withinWindow ? previous!.count + 1 : 1;
+      rememberFailedLogin(key, {
+        count,
+        firstAt,
+        lockedUntil: count >= 5 ? firstAt + LOGIN_WINDOW_MS : 0,
+      });
+      return { error: count >= 5 ? "rate_limited" : "invalid" };
+    }
+
+    failedLogins.delete(key);
+    const sessionToken = randomBytes(32).toString("base64url");
+    const createdAt = Date.now();
+    const expiresAt = createdAt + SESSION_TTL_MS;
+    const persist = db.transaction(() => {
+      db.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").run(createdAt);
+      db.prepare(
+        "INSERT INTO admin_sessions (id, user_id, token_hash, created_at, expires_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(randomUUID(), row.id, sha256(sessionToken), createdAt, expiresAt, createdAt);
     });
-    return { error: count >= 5 ? "rate_limited" : "invalid" };
+    persist();
+
+    return {
+      identity: { id: String(row.id), username: String(row.username) },
+      sessionToken,
+    };
+  } finally {
+    releaseSlot();
   }
-
-  failedLogins.delete(key);
-  const sessionToken = randomBytes(32).toString("base64url");
-  const createdAt = Date.now();
-  const expiresAt = createdAt + SESSION_TTL_MS;
-  const persist = db.transaction(() => {
-    db.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").run(createdAt);
-    db.prepare(
-      "INSERT INTO admin_sessions (id, user_id, token_hash, created_at, expires_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(randomUUID(), row.id, sha256(sessionToken), createdAt, expiresAt, createdAt);
-  });
-  persist();
-
-  return {
-    identity: { id: String(row.id), username: String(row.username) },
-    sessionToken,
-  };
 }
-
 export function resolveAdminSession(sessionToken: string | null | undefined): AdminIdentity | null {
   const token = String(sessionToken || "");
   if (token.length < 32 || token.length > 256) return null;
