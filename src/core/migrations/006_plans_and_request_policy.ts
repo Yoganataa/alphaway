@@ -19,6 +19,7 @@ export const plansAndRequestPolicyMigration: Migration = {
         rpm_limit INTEGER NOT NULL DEFAULT 0 CHECK (rpm_limit >= 0),
         tpm_limit INTEGER NOT NULL DEFAULT 0 CHECK (tpm_limit >= 0),
         concurrency_limit INTEGER NOT NULL DEFAULT 0 CHECK (concurrency_limit >= 0),
+        token_quota INTEGER NOT NULL DEFAULT 0 CHECK (token_quota >= 0),
         allowed_models TEXT NOT NULL DEFAULT '[]',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -29,6 +30,7 @@ export const plansAndRequestPolicyMigration: Migration = {
       ALTER TABLE api_keys ADD COLUMN rate_limit_rpm INTEGER CHECK (rate_limit_rpm IS NULL OR rate_limit_rpm >= 0);
       ALTER TABLE api_keys ADD COLUMN rate_limit_tpm INTEGER CHECK (rate_limit_tpm IS NULL OR rate_limit_tpm >= 0);
       ALTER TABLE api_keys ADD COLUMN concurrency_limit INTEGER CHECK (concurrency_limit IS NULL OR concurrency_limit >= 0);
+      ALTER TABLE api_keys ADD COLUMN token_quota INTEGER CHECK (token_quota IS NULL OR token_quota >= 0);
       ALTER TABLE api_keys ADD COLUMN allowed_models TEXT;
 
       ALTER TABLE request_logs ADD COLUMN client_api_key_id TEXT REFERENCES api_keys(id) ON DELETE SET NULL;
