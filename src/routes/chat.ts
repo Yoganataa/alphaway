@@ -14,6 +14,7 @@
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { readJsonRequestBody } from "../core/admin-guard";
 
 import type { ChatCompletionRequest } from "../types";
 import { codebuddy, opencode } from "../providers";
@@ -353,12 +354,19 @@ async function dispatchToUpstream(
 const handleOpenAIChat = async (c: any) => {
   let body: ChatCompletionRequest;
   try {
-    body = await c.req.json();
+    body = await readJsonRequestBody(c.req);
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new Error("Request body must be a JSON object");
     }
   } catch (err: any) {
-    return c.json({ error: { message: `Invalid JSON body: ${err.message}`, type: "invalid_request_error", code: "invalid_json" } }, 400);
+    const oversized = err?.statusCode === 413;
+    return c.json({
+      error: {
+        message: oversized ? "Request body exceeds the 10 MiB limit" : `Invalid JSON body: ${err.message}`,
+        type: "invalid_request_error",
+        code: oversized ? "request_too_large" : "invalid_json",
+      },
+    }, oversized ? 413 : 400);
   }
 
   if (!body.model || typeof body.model !== "string") {
@@ -476,12 +484,20 @@ const handleOpenAIChat = async (c: any) => {
 const handleAnthropicMessages = async (c: any) => {
   let body: AnthropicRequest;
   try {
-    body = await c.req.json();
+    body = await readJsonRequestBody(c.req);
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new Error("Request body must be a JSON object");
     }
   } catch (err: any) {
-    return c.json({ type: "error", error: { type: "invalid_request_error", message: `Invalid JSON body: ${err.message}` } }, 400);
+    const oversized = err?.statusCode === 413;
+    return c.json({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: oversized ? "Request body exceeds the 10 MiB limit" : `Invalid JSON body: ${err.message}`,
+        code: oversized ? "request_too_large" : "invalid_json",
+      },
+    }, oversized ? 413 : 400);
   }
 
   if (!body.model || typeof body.model !== "string") {
@@ -623,7 +639,7 @@ const handleAnthropicMessages = async (c: any) => {
 const handleResponses = async (c: any) => {
   let body: ResponsesRequest;
   try {
-    body = await c.req.json();
+    body = await readJsonRequestBody(c.req);
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new Error("Request body must be a JSON object");
     }
