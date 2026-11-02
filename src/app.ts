@@ -21,6 +21,7 @@ import { settingsRoute } from "./routes/settings";
 import soulRoute from "./routes/soul";
 import { adminRequestError } from "./core/admin-guard";
 import { findActiveAPIKey, recordAPIKeyUse, verifyEnvironmentAPIKey } from "./core/api-keys";
+import { resolveEffectivePolicy } from "./core/policy";
 import { readAdminSessionCookie, resolveAdminSession } from "./core/admin-auth";
 
 export const app = new Hono();
@@ -151,7 +152,16 @@ const authMiddleware = async (c: any, next: any) => {
         },
       }, 403);
     }
+    const effectivePolicy = resolveEffectivePolicy(managedCredential.id);
+    if (!effectivePolicy) {
+      return c.json({ error: { message: "API key policy could not be resolved", type: "server_error", code: "policy_unavailable" } }, 503);
+    }
+    c.set("managedApiKeyId", managedCredential.id);
+    c.set("effectivePolicy", effectivePolicy);
     recordAPIKeyUse(managedCredential.id);
+  } else {
+    c.set("managedApiKeyId", null);
+    c.set("effectivePolicy", null);
   }
 
   return next();
