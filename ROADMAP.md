@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Phase 2 implementation and hardening remain active on `feat/phase-2-auth-admin-security`. Existing code head `bef49d18f0225b67dfe91cc2ffeefccbb79cdb3d` passed CI #250; the current SQLite-only persistence cleanup (schema v5, importer/CLI removal and tests) is awaiting CI. Draft PR #4 remains open pending independent security review. SQLite is the only persistent application-state backend.
+**Status:** Phase 2 implementation and hardening remain active on `feat/phase-2-auth-admin-security`. SQLite-only storage cleanup at code head `8e45a4a2977c109e292981557b3336f9aed52038` passed CI #268 (`41386143754`): 331 unit/protocol tests across 30 files, 8 dashboard E2E, UI/standalone build, installer/embedded-dashboard smoke, and Bun 1.4.4 TLS fingerprint. Draft PR #4 remains open pending independent security review. SQLite is the only persistent application-state backend.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
