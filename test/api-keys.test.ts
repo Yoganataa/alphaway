@@ -85,21 +85,36 @@ describe("administrator authentication and managed gateway API keys", () => {
     expect(await loginAdmin("alphaway-throttle-check", "another-wrong-password")).toEqual({ error: "rate_limited" });
   });
 
-  it("bounds concurrent password KDF work and rechecks throttling after queueing", async () => {
-    const username = `alphaway-parallel-${randomUUID()}`;
-    const attempts = Array.from({ length: 24 }, () => loginAdmin(username, "wrong-password"));
+  it("bounds global password KDF concurrency and queue size", async () => {
+    const usernames = Array.from({ length: 24 }, () => `alphaway-parallel-${randomUUID()}`);
+    const attempts = usernames.map((username) => loginAdmin(username, "wrong-password"));
     // loginAdmin awaits the slot-acquisition promise before starting KDF work.
     await Promise.resolve();
 
     const queued = __getLoginKdfStateForTests();
     expect(queued.active).toBe(queued.maxConcurrent);
-    expect(queued.queued).toBe(16);
+    expect(queued.queued).toBe(queued.maxQueued);
     expect(queued.active).toBeLessThanOrEqual(queued.maxConcurrent);
     expect(queued.queued).toBeLessThanOrEqual(queued.maxQueued);
 
     const results = await Promise.all(attempts);
+    expect(results.filter((result) => result.error === "invalid")).toHaveLength(20);
+    expect(results.filter((result) => result.error === "rate_limited")).toHaveLength(4);
+    expect(__getLoginKdfStateForTests()).toMatchObject({ active: 0, queued: 0 });
+  });
+
+  it("serializes concurrent password checks for the same username", async () => {
+    const username = `alphaway-same-account-${randomUUID()}`;
+    const attempts = Array.from({ length: 8 }, () => loginAdmin(username, "wrong-password"));
+    await Promise.resolve();
+
+    const queued = __getLoginKdfStateForTests();
+    expect(queued.active).toBe(queued.maxConcurrent);
+    expect(queued.queued).toBe(4);
+
+    const results = await Promise.all(attempts);
     expect(results.filter((result) => result.error === "invalid")).toHaveLength(1);
-    expect(results.filter((result) => result.error === "rate_limited")).toHaveLength(23);
+    expect(results.filter((result) => result.error === "rate_limited")).toHaveLength(7);
     expect(__getLoginKdfStateForTests()).toMatchObject({ active: 0, queued: 0 });
   });
 
