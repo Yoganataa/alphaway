@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
+import { resolveDataDir } from "../core/storage-paths";
 
 // ============================================================================
 // Built-in Soul Presets (SoulSpec Standard)
@@ -78,9 +78,9 @@ export function getCandidatePaths(customPath?: string | null): string[] {
   candidates.push(path.join(cwd, "soul.md"));
 
   // 3. Global configuration directories
-  const home = os.homedir();
-  candidates.push(path.join(home, ".alphaway", "SOUL.md"));
-  candidates.push(path.join(home, ".alphaway", "soul.md"));
+  const dataDir = resolveDataDir();
+  candidates.push(path.join(dataDir, "SOUL.md"));
+  candidates.push(path.join(dataDir, "soul.md"));
 
   return candidates;
 }
