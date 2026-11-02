@@ -180,15 +180,11 @@ Custom-provider, persisted proxy/relay, and CodeBuddy OAuth credentials are encr
 
 Destructive SQLite migration snapshots are stored as AES-256-GCM envelopes (`*.sqlite.awenc`) under the state directory's `backups/` folder. Older plaintext migration snapshots and pre-restore copies are converted to encrypted envelopes during startup; a legacy plaintext snapshot passed to the restore helper is converted before use. Keep the encryption key with the database and backup set. Windows ACL behavior for these files is not yet verified.
 
-The one-time legacy JSON importer refuses symlink sources and replaces each processed source (including malformed or structurally invalid JSON) with an AES-256-GCM rollback envelope after handling it. The original filenames remain in place, but their contents are no longer plaintext. Usage analytics, TokenSaver, and proxy settings are imported through explicit field allowlists; unknown credential-bearing fields are discarded. Sources larger than 50 MiB or files that cannot be safely replaced are not imported/encrypted; on POSIX they remain owner-only (`0600`) and are reported. Windows ACL behavior is not yet verified.
+AlphaWay uses SQLite as its sole persistent application-state store. Custom providers, API keys, authentication sessions, usage history, TokenSaver settings, and proxy configuration are stored in `alphaway.sqlite`; sensitive credentials are encrypted or hashed according to their role.
 
-To restore an encrypted legacy source to a new, non-existing JSON file:
+Standalone JSON configuration-file import and recovery are not supported. AlphaWay does not scan for, import, modify, or delete old files such as `custom_providers.json`, `usage_stats.json`, `tokensaver.json`, or `proxy.json`. Such files from older installations remain untouched but are ignored. Export or recreate any required settings before moving to this SQLite-only version.
 
-```bash
-bun src/index.ts --restore-legacy-backup ~/.alphaway/custom_providers.json ~/.alphaway/custom_providers.restored.json
-```
-
-The command requires the same `ALPHAWAY_ENCRYPTION_KEY` (or local master-key file) that encrypted the backup. It never overwrites an existing destination and writes the restored JSON as `0600` on POSIX. For a skipped/invalid source, edit the restored copy and replace the original source file while AlphaWay is stopped; the changed checksum lets the importer retry. Already-imported SQLite data remains authoritative, so use the dashboard to modify providers/settings after a successful import.
+Back up the SQLite database using a SQLite-aware procedure that accounts for WAL state. Keep `secret-encryption.key` together with the database and encrypted migration snapshots; losing the key makes encrypted credentials and snapshots unrecoverable.
 
 ---
 ## 🔌 Client Integration Guide (Tri-Protocol)
