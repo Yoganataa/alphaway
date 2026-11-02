@@ -22,6 +22,16 @@ describe("authenticated secret storage", () => {
     }
   });
 
+  it("rejects an oversized master-key file without reading its full contents", () => {
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(keyPath, Buffer.alloc(1024 * 1024, 7));
+    try {
+      expect(() => encryptSecret("must-not-load-oversized-master-key")).toThrow(/invalid length/);
+    } finally {
+      try { fs.unlinkSync(keyPath); } catch {}
+    }
+  });
+
   it("encrypts secrets with unique nonces and decrypts only the authenticated value", () => {
     const first = encryptSecret("provider-token-for-round-trip");
     const second = encryptSecret("provider-token-for-round-trip");
