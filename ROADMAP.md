@@ -1,6 +1,6 @@
 ### Phase 2 — Authentication, API Keys, and Administrative Access
 
-**Status:** Core implementation and in-repository hardening are complete on `feat/phase-2-auth-admin-security`. Code head `d4ef382c328ad3a26e2fa30f524bc3ade85c7828` passed CI run `41371688949`; documentation-synchronized PR head `b82ff797a35f9fcd933a700c945cf62284ed33a5` passed CI run `41372003675` on Bun 1.4.4. Both runs cover bounded login KDF work, SQLite residue cleanup, migration v4 for legacy CodeBuddy credentials, and bounded legacy JSON reads. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and independent security review.
+**Status:** Core implementation and in-repository hardening are complete on `feat/phase-2-auth-admin-security`. Code head `d4ef382c328ad3a26e2fa30f524bc3ade85c7828` passed CI run `41371688949`; documentation-synchronized PR head `9fdba247c1779885978e8357636358c2244c8649` passed CI run `41372136690` on Bun 1.4.4. Both runs cover bounded login KDF work, SQLite residue cleanup, migration v4 for legacy CodeBuddy credentials, and bounded legacy JSON reads. Draft PR #4 remains blocked on project-owner acceptance of the preserve-and-skip exception and independent security review.
 **Priority:** P1 — security-critical
 
 - [x] Separate gateway caller authentication from dashboard/admin authentication.
@@ -46,7 +46,7 @@
 
 - Draft PR #4: [Phase 2 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4).
 - Code head `d4ef382c328ad3a26e2fa30f524bc3ade85c7828`, CI run [`41371688949`](https://github.com/Yoganataa/alphaway/actions/runs/41371688949): **331 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Installer smoke verified the encryption master-key file survived upgrade unchanged. Optional live upstream gate drill was skipped by design.
-- Documentation-synchronized PR head `b82ff797a35f9fcd933a700c945cf62284ed33a5`, CI run [`41372003675`](https://github.com/Yoganataa/alphaway/actions/runs/41372003675), passed with the same 331 unit/protocol and 8 dashboard E2E results plus build, fingerprint, and installer smoke.
+- Documentation-synchronized PR head `9fdba247c1779885978e8357636358c2244c8649`, CI run [`41372136690`](https://github.com/Yoganataa/alphaway/actions/runs/41372136690), passed with 331 unit/protocol and 8 dashboard E2E results plus build, fingerprint, and installer smoke. The current checkpoint/roadmap synchronization follows this docs head; verify the live PR head before merge.
 - Do not merge PR #4 or begin Phase 3 until the preserve-and-skip exception is accepted by the project owner, independent security review is complete, and CI is green on the final PR head.
 
 **Acceptance criteria**
