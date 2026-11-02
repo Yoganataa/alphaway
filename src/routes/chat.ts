@@ -34,6 +34,8 @@ const identity = require("../core/identity");
 import * as tokensaver from "../features/tokensaver";
 import { recordRequestUsage, estimateTokensFromText } from "../core/usage-tracker";
 import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
+import { isModelAllowedByPolicy, type EffectivePolicy } from "../core/policy";
+import { acquireManagedKeyRequest, type PolicyGateResult } from "../core/rate-limiter";
 
 function computePromptChars(messages: any[]): number {
   if (!Array.isArray(messages)) return 0;
@@ -47,6 +49,99 @@ function computePromptChars(messages: any[]): number {
 }
 
 export const chatRoute = new Hono();
+
+type GatewayProtocol = "openai" | "anthropic" | "responses";
+
+function policyRejection(c: any, protocol: GatewayProtocol, status: number, code: string, message: string, retryAfter?: number): Response {
+  if (retryAfter !== undefined) c.header("Retry-After", String(retryAfter));
+  if (protocol === "anthropic") {
+    return c.json({ type: "error", error: { type: status === 403 ? "permission_error" : "rate_limit_error", code, message } }, status);
+  }
+  return c.json({ error: { message, type: status === 403 ? "permission_error" : status === 503 ? "server_error" : "rate_limit_error", param: status === 403 ? "model" : null, code } }, status);
+}
+
+function releaseWhenBodyConsumed(response: Response, release: () => void): Response {
+  const source = response.body;
+  if (!source) {
+    release();
+    return response;
+  }
+  const reader = source.getReader();
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    release();
+    try { reader.releaseLock(); } catch {}
+  };
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const result = await reader.read();
+        if (result.done) {
+          controller.close();
+          finish();
+        } else {
+          controller.enqueue(result.value);
+        }
+      } catch (error) {
+        controller.error(error);
+        finish();
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        finish();
+      }
+    },
+  });
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
+/** Apply managed-key model/rate/concurrency policy before the upstream request. */
+async function dispatchWithPolicy(
+  c: any,
+  rawReq: Request,
+  body: ChatCompletionRequest,
+  targetModel: string,
+  isStream: boolean,
+  promptTokens: number,
+  protocol: GatewayProtocol,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const policy = c.get("effectivePolicy") as EffectivePolicy | null;
+  if (!policy) return dispatchToUpstream(rawReq, body, targetModel, isStream, signal);
+
+  if (!isModelAllowedByPolicy(policy, targetModel)) {
+    return policyRejection(c, protocol, 403, "model_not_allowed", "The requested model is not allowed by this API key's effective policy.");
+  }
+
+  const gate: PolicyGateResult = acquireManagedKeyRequest(policy.keyId, policy, promptTokens);
+  if (!gate.allowed) {
+    const status = gate.status || 429;
+    const axis = gate.axis || "rpm";
+    const code = axis === "capacity" ? "policy_capacity_exceeded" : "rate_limit_exceeded";
+    const message = axis === "capacity"
+      ? "The gateway policy limiter is at capacity. Retry this request shortly."
+      : axis === "concurrency"
+      ? "The API key concurrency limit has been reached."
+      : axis === "tpm"
+      ? "The API key prompt tokens-per-minute limit has been reached."
+      : "The API key requests-per-minute limit has been reached.";
+    return policyRejection(c, protocol, status, code, message, gate.retryAfterSeconds);
+  }
+
+  try {
+    const response = await dispatchToUpstream(rawReq, body, targetModel, isStream, signal);
+    return releaseWhenBodyConsumed(response, gate.release);
+  } catch (error) {
+    gate.release();
+    throw error;
+  }
+}
+
 
 /**
  * Core Dispatcher: Executes chat completions across OpenCode, CodeBuddy, or Custom Providers.
@@ -426,7 +521,7 @@ const handleOpenAIChat = async (c: any) => {
   }
 
   const isStream = Boolean(body.stream);
-  const res = await dispatchToUpstream(c.req.raw, body, targetModel, isStream, c.req.raw.signal);
+  const res = await dispatchWithPolicy(c, c.req.raw, body, targetModel, isStream, promptTokens, "openai", c.req.raw.signal);
 
   // Record Usage Telemetry
   if (!res.ok) {
@@ -536,7 +631,7 @@ const handleAnthropicMessages = async (c: any) => {
     : "opencode";
 
   const isStream = Boolean(body.stream);
-  const upstreamRes = await dispatchToUpstream(c.req.raw, openAIBody as any, targetModel, isStream, c.req.raw.signal);
+  const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "anthropic", c.req.raw.signal);
 
   if (!upstreamRes.ok) {
     recordRequestUsage({
@@ -686,7 +781,7 @@ const handleResponses = async (c: any) => {
     : "opencode";
 
   const isStream = Boolean(body.stream);
-  const upstreamRes = await dispatchToUpstream(c.req.raw, openAIBody as any, targetModel, isStream, c.req.raw.signal);
+  const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "responses", c.req.raw.signal);
 
   if (!upstreamRes.ok) {
     recordRequestUsage({
