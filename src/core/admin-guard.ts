@@ -117,9 +117,10 @@ export function adminRequestError(c: any): string | null {
 }
 
 export const MAX_ADMIN_AUTH_BODY_BYTES = 16 * 1024;
+export const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
-/** Parse a small JSON request body without allowing an unbounded stream allocation. */
-export async function readJsonRequestBody(req: any, maxBytes: number = MAX_ADMIN_AUTH_BODY_BYTES): Promise<any | null> {
+/** Parse a JSON request body without allowing an unbounded stream allocation. */
+export async function readJsonRequestBody(req: any, maxBytes: number = MAX_BODY_BYTES): Promise<any | null> {
   const raw = req?.raw || req;
   const contentLength = typeof req?.header === "function"
     ? req.header("content-length")
@@ -177,8 +178,6 @@ export async function readJsonRequestBody(req: any, maxBytes: number = MAX_ADMIN
     return null;
   }
 }
-
-export const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 export function readRequestBody(req: any, maxBytes: number = MAX_BODY_BYTES): Promise<string> {
   const declared = parseInt(req?.headers?.["content-length"] || "", 10);
