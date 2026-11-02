@@ -122,6 +122,13 @@ async function dispatchWithPolicy(
     return policyRejection(c, protocol, 403, "model_not_allowed", "The requested model is not allowed by this API key's effective policy.");
   }
 
+  if (policy.tokenQuota > 0) {
+    const remaining = Math.max(0, policy.tokenQuota - policy.totalTokensUsed);
+    if (remaining <= 0 || promptTokens > remaining) {
+      return policyRejection(c, protocol, 429, "token_quota_exceeded", "The API key token quota has been exhausted or cannot cover this prompt.");
+    }
+  }
+
   const gate: PolicyGateResult = acquireManagedKeyRequest(policy.keyId, policy, promptTokens);
   if (!gate.allowed) {
     const status = gate.status || 429;
