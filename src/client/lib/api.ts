@@ -502,6 +502,27 @@ export async function fetchDatabaseStats(): Promise<DatabaseStats> {
   return res.json();
 }
 
+export async function downloadDatabaseBackup(): Promise<string> {
+  const res = await fetch(`${BASE_URL}/api/settings/database/backup`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || `Failed to create database backup: ${res.statusText}`);
+  }
+
+  const disposition = res.headers.get("content-disposition") || "";
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || "alphaway-database.sqlite.awenc";
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
 export async function vacuumDatabase(): Promise<DatabaseStats & { ok: boolean; message: string }> {
   const res = await fetch(`${BASE_URL}/api/settings/database/vacuum`, {
     method: "POST",
