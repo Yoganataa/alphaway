@@ -4,7 +4,9 @@
 # Installs a complete, verified application snapshot under:
 #   ~/.alphaway/app       application source + embedded-asset binary
 #   ~/.alphaway/.env      persistent configuration
-#   ~/.alphaway/*.sqlite  persistent application data
+#   ~/.alphaway/db/data.sqlite  persistent SQLite database
+#   ~/.alphaway/db/backups/      encrypted SQLite snapshots
+#   ~/.alphaway/secret-encryption.key  SQLite credential/backup key
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/Yoganataa/alphaway/main/install.sh | bash
@@ -102,7 +104,7 @@ STAGE="$(mktemp -d "$BINDIR/.stage.XXXXXX")"
 STAGED_APP="$STAGE/app"
 BACKUP=""
 SERVICE_SCOPE="none"
-mkdir -p "$STAGED_APP"
+mkdir -p "$STAGED_APP" "$BINDIR/db"
 
 cleanup() {
   rm -rf "$STAGE"
@@ -321,7 +323,7 @@ User=$(id -un)
 WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
-Environment="ALPHAWAY_STATE_DIR=$BINDIR"
+Environment="DATA_DIR=$BINDIR"
 ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
@@ -391,7 +393,7 @@ install_launchd_service() {
   <dict>
     <key>PORT</key><string>$PORT</string>
     <key>HOST</key><string>$HOST</string>
-    <key>ALPHAWAY_STATE_DIR</key><string>$BINDIR</string>
+    <key>DATA_DIR</key><string>$BINDIR</string>
   </dict>
   <key>StandardOutPath</key><string>$HOME/Library/Logs/alphaway.log</string>
   <key>StandardErrorPath</key><string>$HOME/Library/Logs/alphaway.log</string>
@@ -414,7 +416,7 @@ start_background() {
   # subshell, which can keep a piped installer alive until the child exits.
   pushd "$BINDIR" >/dev/null
   if command -v setsid >/dev/null 2>&1; then
-    setsid env PORT="$PORT" HOST="$HOST" ALPHAWAY_STATE_DIR="$BINDIR" \
+    setsid env PORT="$PORT" HOST="$HOST" DATA_DIR="$BINDIR" \
       "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
   else
     nohup env PORT="$PORT" HOST="$HOST" ALPHAWAY_STATE_DIR="$BINDIR" \
