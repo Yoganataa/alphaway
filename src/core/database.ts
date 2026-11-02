@@ -42,6 +42,7 @@ export interface RequestLogRow {
   totalTokens: number;
   savedTokens: number;
   stream: boolean;
+  clientApiKeyId?: string | null;
 }
 
 /** @deprecated Use resolveDataDir; retained for existing internal callers. */
@@ -335,7 +336,8 @@ export function dbInsertRequestLog(entry: RequestLogRow): void {
     entry.completionTokens,
     entry.totalTokens,
     entry.savedTokens,
-    entry.stream ? 1 : 0
+    entry.stream ? 1 : 0,
+    entry.clientApiKeyId ?? null
   );
 }
 
@@ -605,8 +607,13 @@ export function dbInsertRequestLogWithSnapshot(entry: RequestLogRow, snapshot: u
       entry.completionTokens,
       entry.totalTokens,
       entry.savedTokens,
-      entry.stream ? 1 : 0
+      entry.stream ? 1 : 0,
+      entry.clientApiKeyId ?? null
     );
+    if (entry.clientApiKeyId) {
+      db.prepare("UPDATE api_keys SET total_tokens_used = total_tokens_used + ? WHERE id = ? AND status = ?")
+        .run(Math.max(0, Number(entry.totalTokens) || 0), entry.clientApiKeyId, "active");
+    }
     upsert.run(JSON.stringify(snapshot), Date.now());
   });
   persist();
@@ -646,6 +653,7 @@ function mapRequestRow(r: any): RequestLogRow {
     totalTokens: r.total_tokens,
     savedTokens: r.saved_tokens,
     stream: Boolean(r.stream),
+    clientApiKeyId: r.client_api_key_id == null ? null : String(r.client_api_key_id),
   };
 }
 
