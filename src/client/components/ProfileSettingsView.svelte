@@ -35,7 +35,7 @@
       dbStats = {
         engine: "Bun SQLite (native)",
         mode: "WAL (Write-Ahead Logging)",
-        path: "~/.alphaway/alphaway.sqlite",
+        path: "~/.alphaway/db/data.sqlite",
         sizeKb: 128,
         requestLogsCount: 42,
         customProvidersCount: 3,
@@ -181,7 +181,9 @@
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border">
         <div class="text-[11px] text-text-muted font-medium mb-1">Storage Size</div>
         <div class="text-sm font-bold text-text-main font-mono">{dbStats?.sizeKb || 0} KB</div>
-        <div class="text-[11px] text-text-muted font-mono mt-0.5">Compact indexed tables</div>
+        <div class="text-[11px] text-text-muted font-mono mt-0.5">
+          {(Math.round((dbStats?.reclaimableBytes || 0) / 1024))} KB reclaimable
+        </div>
       </div>
 
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border">
@@ -197,7 +199,7 @@
 
     <!-- DB File Path -->
     <div class="p-3 rounded-[8px] bg-surface-1 border border-border flex items-center justify-between text-xs font-mono">
-      <span class="text-text-muted truncate select-all">{dbStats?.path || "~/.alphaway/alphaway.sqlite"}</span>
+      <span class="text-text-muted truncate select-all">{dbStats?.path || "~/.alphaway/db/data.sqlite"}</span>
       <Badge tone="neutral" size="xs">Local File</Badge>
     </div>
   </Card>
