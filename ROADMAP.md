@@ -105,8 +105,8 @@
 - No implicit default Plan assignment for existing or newly created keys. Unassigned means no Plan restrictions.
 - A Plan is a reusable template. Per-key overrides apply only when explicitly set; unset fields inherit from the Plan. Use bounded integer validation and explicit semantics for zero/unset.
 - Resolve the effective policy once per request after model alias normalization and before upstream dispatch. Enforce consistently across OpenAI Chat, Anthropic Messages, Codex Responses, and all legacy aliases.
-- Key request accounting must be attributable by stable managed key ID, not raw secret, prefix alone, or the upstream provider credential. Historical request rows remain unattributed; do not backfill guessed ownership.
-- In-flight concurrency slots must be released on success, error, stream completion, cancellation, and body cancellation. State maps must be bounded and avoid memory growth from arbitrary callers.
+- Key request accounting must be attributable by stable managed key ID, not raw secret, prefix alone, or the upstream provider credential. Historical request rows remain unattributed; do not backfill guessed ownership. A request authenticated before key revocation still records its eventual usage against that key ID.
+- In-flight concurrency slots must be released on success, error, stream completion, cancellation, and body cancellation. RPM/TPM windows and concurrency state are process-local and reset on process restart; the lifetime token quota is persisted in SQLite. State maps must be bounded and avoid memory growth from arbitrary callers.
 - Never display synthetic/random RPM or TPM values. Quota Tracker must use real AlphaWay gateway policy/usage data or explicitly show that an upstream provider quota is unavailable.
 - Do not implement USD spend caps with hardcoded model prices. AlphaWay currently lacks a trustworthy pricing ledger. Token quotas may be enforced only after streaming and non-streaming token accounting is made deterministic and covered; never use the current fixed streaming completion estimate.
 
