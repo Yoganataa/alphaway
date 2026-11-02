@@ -6,7 +6,8 @@
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
 > **Active branch:** `feat/phase-2-auth-admin-security`  
 > **Current `main` HEAD:** `e2492fb3a995677d24f3078b7925a2c48c877ca7`  
-> **Latest CI-verified Phase 2 code HEAD:** `d4ef382c328ad3a26e2fa30f524bc3ade85c7828` (run `41371688949`; documentation sync follows)  
+> **Latest CI-verified Phase 2 code HEAD:** `d4ef382c328ad3a26e2fa30f524bc3ade85c7828` (run `41371688949`)  
+> **Latest CI-verified documentation-synchronized PR head:** `d205897b435706e63cd0f8f3441da8a356f6f9f2` (run `41371818735`)  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (open, draft; do not merge yet)  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
@@ -50,7 +51,7 @@ Phase 0 PR #1 and Phase 1 PR #3 are merged. PR #2 is closed without merging beca
 - PR #4 is the only open PR, targets `main`, and remains **draft**. Do not merge it or start Phase 3 in this checkpoint.
 - `main` HEAD: `e2492fb3a995677d24f3078b7925a2c48c877ca7`.
 - Phase 2 code head `d4ef382c328ad3a26e2fa30f524bc3ade85c7828` passed GitHub Actions run [`41371688949`](https://github.com/Yoganataa/alphaway/actions/runs/41371688949): **331 unit/protocol tests passed, 0 failed** across 31 files; **8 dashboard E2E passed, 0 failed**; standalone build, Bun 1.4.4 TLS fingerprint (17 ciphers/12 extensions), and installer/embedded-dashboard smoke passed. Installer smoke verified the encryption master-key file survived upgrade unchanged. Optional live upstream gate drill was skipped by design.
-- `CHECKPOINT.md`, `ROADMAP.md`, and PR #4 description are being synchronized after this verified code head; require green CI on the final docs head before merge.
+- Documentation-synchronized PR head `d205897b435706e63cd0f8f3441da8a356f6f9f2` passed run [`41371818735`](https://github.com/Yoganataa/alphaway/actions/runs/41371818735) with the same 331 unit/protocol and 8 E2E tests plus build, TLS fingerprint, and installer smoke. This is the current documented PR head; re-fetch live state before making further changes.
 - An earlier CI failure on commit `117b51a...` was caused by an invalid escaped regex. It was corrected; the subsequent functional head run above passed.
 - Windows ACL behavior is not verified. Keep it in Phase 7 hardening; POSIX `0600`/`0700` permissions are covered.
 
@@ -234,11 +235,10 @@ Continue only Phase 2 on `feat/phase-2-auth-admin-security` and draft PR #4. Lat
 The only open PR is [#4](https://github.com/Yoganataa/alphaway/pull/4). It targets `main`, remains draft, and must not be merged yet. Do not create another PR or start Phase 3.
 
 Next exact actions:
-1. Synchronize the current bounded legacy-import read hardening into this checkpoint/roadmap and PR description, then verify CI on the documentation-synchronized head.
-2. Obtain project-owner acceptance of the documented preserve-and-skip/manual-archive exception for oversized or unsafe-to-replace legacy JSON sources.
-3. Obtain independent security review for PR #4 and resolve all findings. Keep the PR draft until that review is complete.
-4. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
-5. Do not merge PR #4 or start Phase 3 until the residual legacy-source exception is accepted, Phase 2 acceptance criteria are met, and review findings are resolved.
+1. Obtain project-owner acceptance of the documented preserve-and-skip/manual-archive exception for oversized or unsafe-to-replace legacy JSON sources.
+2. Obtain independent security review for PR #4 and resolve all findings. Keep the PR draft until that review is complete.
+3. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
+4. Do not merge PR #4 or start Phase 3 until the residual legacy-source exception is accepted, Phase 2 acceptance criteria are met, and review findings are resolved.
 
 Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
 ## 6. Working Rules for the Next Session
@@ -258,9 +258,9 @@ Lanjutkan AlphaWay dari repository https://github.com/Yoganataa/alphaway.
 
 Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Setelah itu periksa live main, branch feat/phase-2-auth-admin-security, PR #4, dan GitHub Actions. Jangan mengulang Phase 0 atau Phase 1 yang sudah merged. Main saat checkpoint: e2492fb3a995677d24f3078b7925a2c48c877ca7. PR #4 adalah satu-satunya PR aktif, open dan draft, target main.
 
-Phase 2 mencakup admin bootstrap/login/session, default-deny admin API gate, managed inference keys hashed dan lifecycle/scopes, AES-256-GCM persistence untuk provider/proxy/relay/CodeBuddy OAuth secrets, pemisahan gateway dan CodeBuddy upstream credentials, OAuth state/authUrl flow, health/error redaction, isolated Bun test state, login KDF concurrency cap (4 active/16 queued), SQLite v3 residue cleanup, dan v4 legacy CodeBuddy credential encryption. Importer legacy menolak symlink, menggunakan no-follow descriptor, membatasi read ke 50 MiB plus sentinel byte, dan mempertahankan sumber yang oversized/berubah tanpa parsing atau penggantian otomatis.
+Phase 2 mencakup admin bootstrap/login/session, default-deny admin API gate, managed inference keys hashed dan lifecycle/scopes, AES-256-GCM persistence untuk provider/proxy/relay/CodeBuddy OAuth secrets, pemisahan gateway dan CodeBuddy upstream credentials, OAuth state/authUrl flow, health/error redaction, isolated Bun test state, login KDF concurrency cap (4 active/16 queued), SQLite v3 residue cleanup, v4 legacy CodeBuddy credential encryption, dan bounded legacy JSON read (50 MiB plus sentinel byte) dengan no-follow descriptor serta pemeriksaan perubahan metadata.
 
-CI run `41371688949` lulus pada head `d4ef382c328ad3a26e2fa30f524bc3ade85c7828`: 331 unit/protocol tests pass, 8 dashboard E2E pass, TLS fingerprint (17 ciphers/12 extensions), standalone build, dan installer/embedded-dashboard smoke lulus. Optional live upstream drill sengaja skipped.
+Code head d4ef382c328ad3a26e2fa30f524bc3ade85c7828 passed CI run 41371688949: 331 unit/protocol tests, 8 dashboard E2E, TLS fingerprint (17 ciphers/12 extensions), build, installer smoke. Documentation-synchronized PR head d205897b435706e63cd0f8f3441da8a356f6f9f2 passed CI run 41371818735 dengan hasil yang sama. Optional live upstream drill sengaja skipped.
 
 Gap tersisa: persetujuan project owner untuk preserve-and-skip/manual-archive exception, independent security review PR #4, dan Windows ACL verification (Phase 7). Assignment Plan ke key dilakukan pada Phase 3 bersama model Plan. Jangan merge PR #4 atau mulai Phase 3 sampai syarat Phase 2 dipenuhi.
 
