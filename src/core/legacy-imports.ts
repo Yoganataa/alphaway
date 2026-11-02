@@ -105,6 +105,102 @@ function importCustomProviders(db: any, payload: any): ImportOutcome {
   };
 }
 
+const USAGE_TOTAL_FIELDS = [
+  "totalRequests", "successfulRequests", "failedRequests", "totalPromptTokens",
+  "totalCompletionTokens", "totalTokens", "savedTokens", "estimatedSavingsUsd",
+] as const;
+
+function safeUsageNumber(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(number, Number.MAX_SAFE_INTEGER)) : 0;
+}
+
+function safeUsageText(value: unknown, maxLength = 160): string {
+  return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, maxLength) : "";
+}
+
+function sanitizeUsageSummary(value: any, fields: string[]): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, any> = {};
+  for (const [key, item] of Object.entries(value).slice(0, 1000)) {
+    const safeKey = safeUsageText(key, 128);
+    if (!safeKey || !item || typeof item !== "object" || Array.isArray(item)) continue;
+    const summary: Record<string, any> = {};
+    for (const field of fields) {
+      if (field === "lastUsed") summary.lastUsed = safeUsageText((item as any).lastUsed, 64);
+      else summary[field] = safeUsageNumber((item as any)[field]);
+    }
+    result[safeKey] = summary;
+  }
+  return result;
+}
+
+function sanitizeUsageHistoryMap(value: any, kind: "daily" | "hourly"): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, any> = {};
+  for (const [key, item] of Object.entries(value).slice(0, 1000)) {
+    const safeKey = safeUsageText(key, 32);
+    const validKey = kind === "daily"
+      ? /^\d{4}-\d{2}-\d{2}$/.test(safeKey)
+      : /^\d{4}-\d{2}-\d{2}T\d{2}:00$/.test(safeKey);
+    if (!validKey || !item || typeof item !== "object" || Array.isArray(item)) continue;
+    if (kind === "daily") {
+      result[safeKey] = { requests: safeUsageNumber((item as any).requests), tokens: safeUsageNumber((item as any).tokens) };
+    } else {
+      const byModel: Record<string, number> = {};
+      if ((item as any).byModel && typeof (item as any).byModel === "object" && !Array.isArray((item as any).byModel)) {
+        for (const [model, tokens] of Object.entries((item as any).byModel).slice(0, 500)) {
+          const safeModel = safeUsageText(model, 128);
+          if (safeModel) byModel[safeModel] = safeUsageNumber(tokens);
+        }
+      }
+      result[safeKey] = { tokens: safeUsageNumber((item as any).tokens), cost: safeUsageNumber((item as any).cost), byModel };
+    }
+  }
+  return result;
+}
+
+function sanitizeUsageStats(payload: any): Record<string, any> {
+  const safe: Record<string, any> = {};
+  for (const field of USAGE_TOTAL_FIELDS) safe[field] = safeUsageNumber(payload[field]);
+  safe.byModel = sanitizeUsageSummary(payload.byModel, ["requests", "promptTokens", "completionTokens", "totalTokens", "lastUsed"]);
+  safe.byProtocol = {};
+  for (const protocol of ["openai", "anthropic", "responses"]) {
+    const source = payload.byProtocol?.[protocol];
+    safe.byProtocol[protocol] = source && typeof source === "object" && !Array.isArray(source)
+      ? { requests: safeUsageNumber(source.requests), tokens: safeUsageNumber(source.tokens), promptTokens: safeUsageNumber(source.promptTokens), completionTokens: safeUsageNumber(source.completionTokens), lastUsed: safeUsageText(source.lastUsed, 64) }
+      : { requests: 0, tokens: 0, promptTokens: 0, completionTokens: 0, lastUsed: "" };
+  }
+  safe.byProvider = {};
+  for (const provider of ["opencode", "codebuddy", "custom"]) {
+    const source = payload.byProvider?.[provider];
+    safe.byProvider[provider] = source && typeof source === "object" && !Array.isArray(source)
+      ? { requests: safeUsageNumber(source.requests), tokens: safeUsageNumber(source.tokens), promptTokens: safeUsageNumber(source.promptTokens), completionTokens: safeUsageNumber(source.completionTokens), lastUsed: safeUsageText(source.lastUsed, 64) }
+      : { requests: 0, tokens: 0, promptTokens: 0, completionTokens: 0, lastUsed: "" };
+  }
+  safe.dailyHistory = sanitizeUsageHistoryMap(payload.dailyHistory, "daily");
+  safe.hourlyHistory = sanitizeUsageHistoryMap(payload.hourlyHistory, "hourly");
+  safe.recentLogs = Array.isArray(payload.recentLogs) ? payload.recentLogs.slice(0, 100).flatMap((log: any) => {
+    if (!log || typeof log !== "object" || Array.isArray(log) || typeof log.timestamp !== "string" || !Number.isFinite(Date.parse(log.timestamp))) return [];
+    const promptTokens = safeUsageNumber(log.promptTokens);
+    const completionTokens = safeUsageNumber(log.completionTokens);
+    return [{
+      id: safeUsageText(log.id, 128) || "legacy_usage_" + sha256(JSON.stringify(log)).slice(0, 24),
+      timestamp: new Date(log.timestamp).toISOString(),
+      protocol: ["openai", "anthropic", "responses"].includes(log.protocol) ? log.protocol : "openai",
+      model: safeUsageText(log.model, 160) || "unknown",
+      provider: ["opencode", "codebuddy", "custom"].includes(log.provider) ? log.provider : "opencode",
+      status: Math.min(599, Math.max(100, Math.round(safeUsageNumber(log.status) || 200))),
+      latencyMs: safeUsageNumber(log.latencyMs),
+      promptTokens,
+      completionTokens,
+      totalTokens: safeUsageNumber(log.totalTokens) || promptTokens + completionTokens,
+      savedTokens: safeUsageNumber(log.savedTokens),
+      stream: Boolean(log.stream),
+    }];
+  }) : [];
+  return safe;
+}
 function importUsageStats(db: any, payload: any): ImportOutcome {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { status: "skipped", rowCount: 0, details: "Expected a usage statistics object." };
@@ -121,9 +217,10 @@ function importUsageStats(db: any, payload: any): ImportOutcome {
     };
   }
 
-  let rowCount = insertAppSettingIfMissing(db, "usage_stats_snapshot", payload);
+  const safeSnapshot = sanitizeUsageStats(payload);
+  let rowCount = insertAppSettingIfMissing(db, "usage_stats_snapshot", safeSnapshot);
 
-  if (Array.isArray(payload.recentLogs)) {
+  if (Array.isArray(safeSnapshot.recentLogs)) {
     const insert = db.prepare(`
       INSERT OR IGNORE INTO request_logs (
         id, timestamp, protocol, model, provider, status,
@@ -132,14 +229,14 @@ function importUsageStats(db: any, payload: any): ImportOutcome {
     `);
 
     let invalid = 0;
-    for (const log of payload.recentLogs) {
+    for (const log of safeSnapshot.recentLogs) {
       if (!log || typeof log !== "object" || typeof log.timestamp !== "string") {
         invalid += 1;
         continue;
       }
 
-      const promptTokens = Math.max(0, Number(log.promptTokens) || 0);
-      const completionTokens = Math.max(0, Number(log.completionTokens) || 0);
+      const promptTokens = log.promptTokens;
+      const completionTokens = log.completionTokens;
       const id = typeof log.id === "string" && log.id.trim()
         ? log.id
         : `legacy_usage_${sha256(JSON.stringify(log)).slice(0, 24)}`;
@@ -177,41 +274,55 @@ function importProxyConfig(db: any, payload: any): ImportOutcome {
     return { status: "skipped", rowCount: 0, details: "Expected a proxy configuration object." };
   }
 
-  const config = { ...payload };
-  if (typeof config.url === "string") config.url = encryptSecret(config.url);
-  if (Array.isArray(config.pool)) {
-    config.pool = config.pool.map((entry: any) => {
-      if (typeof entry === "string") return encryptSecret(entry);
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
-      const safe = { ...entry };
-      for (const field of ["url", "token", "auth"]) {
-        if (typeof safe[field] === "string") safe[field] = encryptSecret(safe[field]);
-      }
-      return safe;
+  const config: Record<string, any> = {};
+  if (typeof payload.url === "string") config.url = encryptSecret(payload.url);
+  if (["round-robin", "random", "failover"].includes(payload.strategy)) config.strategy = payload.strategy;
+  for (const field of ["cooldownMs", "maxCooldownMs"]) {
+    if (Number.isFinite(Number(payload[field]))) config[field] = Math.min(7200000, Math.max(1000, Number(payload[field])));
+  }
+  if (Array.isArray(payload.pool)) {
+    config.pool = payload.pool.slice(0, 100).flatMap((entry: any) => {
+      if (typeof entry === "string") return [encryptSecret(entry)];
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const safe: Record<string, any> = {};
+      for (const field of ["id", "label"]) if (typeof entry[field] === "string") safe[field] = entry[field].slice(0, 64);
+      for (const field of ["direct", "relay", "enabled"]) if (typeof entry[field] === "boolean") safe[field] = entry[field];
+      if (Number.isFinite(Number(entry.weight))) safe.weight = Math.min(100, Math.max(1, Number(entry.weight)));
+      if (typeof entry.url === "string") safe.url = encryptSecret(entry.url);
+      const token = typeof entry.token === "string" ? entry.token : entry.auth;
+      if (typeof token === "string") safe.token = encryptSecret(token);
+      return [safe];
     });
   }
 
   const inserted = insertAppSettingIfMissing(db, "proxy_config", config);
-  return {
-    status: "imported",
-    rowCount: inserted,
-    details: inserted === 0 ? "Existing SQLite setting was retained." : undefined,
-  };
-}
-function importSetting(key: string): ImportHandler {
-  return (database, payload) => {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      return { status: "skipped", rowCount: 0, details: "Expected a JSON object." };
-    }
-    const inserted = insertAppSettingIfMissing(database, key, payload);
-    return {
-      status: "imported",
-      rowCount: inserted,
-      details: inserted === 0 ? "Existing SQLite setting was retained." : undefined,
-    };
-  };
+  return { status: "imported", rowCount: inserted, details: inserted === 0 ? "Existing SQLite setting was retained." : undefined };
 }
 
+function importTokenSaverConfig(db: any, payload: any): ImportOutcome {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { status: "skipped", rowCount: 0, details: "Expected a TokenSaver configuration object." };
+  }
+  const booleanFields = [
+    "rtkEnabled", "rtkDeduplicate", "cavemanEnabled", "cavemanAutoClarity",
+    "cavemanInputMode", "adhdEnabled", "soulEnabled", "dlpEnabled",
+    "maskSecrets", "maskPaths", "sanitizeMarkdownImages", "blockDangerousCommands",
+  ];
+  const stringLimits: Record<string, number> = {
+    cavemanLevel: 16, cavemanLang: 16, adhdLevel: 16, soulMode: 16, soulPreset: 128, soulFilePath: 1024, soulCustomContent: 100000,
+  };
+  const safe: Record<string, unknown> = {};
+  for (const field of booleanFields) if (typeof payload[field] === "boolean") safe[field] = payload[field];
+  if (Number.isFinite(Number(payload.rtkMaxLines))) safe.rtkMaxLines = Math.min(5000, Math.max(1, Math.floor(Number(payload.rtkMaxLines))));
+  for (const [field, limit] of Object.entries(stringLimits)) {
+    if (typeof payload[field] === "string") safe[field] = payload[field].slice(0, limit);
+  }
+  if (safe.cavemanLevel && !["lite", "full", "ultra"].includes(String(safe.cavemanLevel))) delete safe.cavemanLevel;
+  if (safe.cavemanLang && !["auto", "en", "id"].includes(String(safe.cavemanLang))) delete safe.cavemanLang;
+  if (safe.adhdLevel && !["lite", "full"].includes(String(safe.adhdLevel))) delete safe.adhdLevel;
+  if (safe.soulMode && !["auto", "preset", "custom"].includes(String(safe.soulMode))) delete safe.soulMode;
+  return { status: "imported", rowCount: insertAppSettingIfMissing(db, "tokensaver_config", safe) };
+}
 function secureLegacyBackup(filePath: string, plaintext: string, expectedChecksum: string, expectedStat?: fs.Stats): boolean {
   const noFollow = process.platform === "win32" ? 0 : (fs.constants.O_NOFOLLOW || 0);
   try {
@@ -477,7 +588,7 @@ export function importLegacyJson(
   const sources: Array<{ file: string; name: string; handler: ImportHandler }> = [
     { file: "custom_providers.json", name: "custom_providers", handler: importCustomProviders },
     { file: "usage_stats.json", name: "usage_stats", handler: importUsageStats },
-    { file: "tokensaver.json", name: "tokensaver", handler: importSetting("tokensaver_config") },
+    { file: "tokensaver.json", name: "tokensaver", handler: importTokenSaverConfig },
     { file: "proxy.json", name: "proxy", handler: importProxyConfig },
   ];
 
