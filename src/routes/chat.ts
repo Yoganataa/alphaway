@@ -526,6 +526,7 @@ const handleOpenAIChat = async (c: any) => {
   // Record Usage Telemetry
   if (!res.ok) {
     recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "openai",
       model: targetModel,
       provider: providerType,
@@ -538,6 +539,7 @@ const handleOpenAIChat = async (c: any) => {
     });
   } else if (isStream) {
     recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "openai",
       model: targetModel,
       provider: providerType,
@@ -555,6 +557,7 @@ const handleOpenAIChat = async (c: any) => {
         const compTokens = json?.usage?.completion_tokens || estimateTokensFromText(json?.choices?.[0]?.message?.content || "");
         const actualPromptTokens = json?.usage?.prompt_tokens || promptTokens;
         recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
           protocol: "openai",
           model: targetModel,
           provider: providerType,
@@ -635,6 +638,7 @@ const handleAnthropicMessages = async (c: any) => {
 
   if (!upstreamRes.ok) {
     recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "anthropic",
       model: targetModel,
       provider: providerType,
@@ -653,6 +657,7 @@ const handleAnthropicMessages = async (c: any) => {
     const openAIJson = await upstreamRes.json();
     const anthropicJson = openAIToAnthropicResponse(openAIJson, targetModel);
     recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "anthropic",
       model: targetModel,
       provider: providerType,
@@ -666,6 +671,7 @@ const handleAnthropicMessages = async (c: any) => {
     return c.json(anthropicJson);
   } else {
     recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "anthropic",
       model: targetModel,
       provider: providerType,
@@ -785,6 +791,7 @@ const handleResponses = async (c: any) => {
 
   if (!upstreamRes.ok) {
     recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "responses",
       model: targetModel,
       provider: providerType,
@@ -803,6 +810,7 @@ const handleResponses = async (c: any) => {
     const openAIJson = await upstreamRes.json();
     const responsesJson = openAIToResponsesResponse(openAIJson, targetModel);
     recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "responses",
       model: targetModel,
       provider: providerType,
@@ -816,6 +824,7 @@ const handleResponses = async (c: any) => {
     return c.json(responsesJson);
   } else {
     recordRequestUsage({
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "responses",
       model: targetModel,
       provider: providerType,
