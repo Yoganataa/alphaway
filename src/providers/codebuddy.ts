@@ -3,6 +3,7 @@
 const crypto = require("crypto");
 const { getCodeBuddyApiKey, setCodeBuddyApiKey } = require("../core/codebuddy-credentials");
 const { embeddedProviderUrlSecrets, redactCredentialEchoes } = require("../core/provider-url-secrets");
+const { resolveEnvFilePath } = require("../core/storage-paths");
 
 /**
  * CodeBuddy International (WorkBuddy AI) upstream integration for AlphaWay.
