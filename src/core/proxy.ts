@@ -30,10 +30,10 @@
 
 const crypto = require("crypto");
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { dbGetSetting, dbSetSetting, dbDeleteSetting } = require("./database");
 const { encryptSecret, decryptSecret } = require("./secrets");
+const { resolveDataDir, ensurePrivateDirectory } = require("./storage-paths");
 
 const CONFIG_SETTING_KEY = "proxy_config";
 const CONFIG_SETTING_LABEL = `SQLite app_settings.${CONFIG_SETTING_KEY}`;
@@ -51,9 +51,9 @@ const DEFAULT_COOLDOWN_MS = 120000;
 const DEFAULT_MAX_COOLDOWN_MS = 1800000;
 
 function stateDir() {
-  const raw = process.env.ALPHAWAY_STATE_DIR || process.env.OPENCODE_BRIDGE_STATE_DIR;
-  if (raw !== undefined && String(raw).trim()) return String(raw).trim();
-  return path.join(os.homedir(), ".alphaway");
+  const directory = resolveDataDir();
+  ensurePrivateDirectory(directory);
+  return directory;
 }
 
 /**
