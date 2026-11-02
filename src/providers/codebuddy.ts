@@ -739,10 +739,6 @@ async function loginCodebuddyCli() {
 
       if (pollRes.status === "authorized" && pollRes.accessToken) {
         console.log("\n\n✅ Authorization SUCCESSFUL!");
-        const sub = extractJwtSub(pollRes.accessToken);
-        if (sub) {
-          console.log(`👤 User ID (sub): ${sub}`);
-        }
 
         // Keep the OAuth-issued provider credential encrypted in canonical SQLite state.
         setCodeBuddyApiKey(pollRes.accessToken);
