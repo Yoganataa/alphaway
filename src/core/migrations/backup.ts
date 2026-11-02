@@ -345,6 +345,33 @@ export function encryptExistingMigrationBackups(backupDir: string, legacyDatabas
   return encrypted;
 }
 
+const MAX_RETAINED_DATABASE_BACKUPS = 3;
+
+/** Retain the newest three AlphaWay full-database snapshots, like 9router-go. */
+function pruneDatabaseBackupRetention(backupDir: string): void {
+  let candidates: Array<{ path: string; modifiedAt: number }> = [];
+  try {
+    candidates = fs.readdirSync(backupDir).flatMap((name) => {
+      if (!name.startsWith("alphaway-before-") || !name.endsWith(".sqlite.awenc")) return [];
+      const filePath = path.join(backupDir, name);
+      try {
+        const stat = fs.lstatSync(filePath);
+        if (!stat.isFile() || stat.isSymbolicLink()) return [];
+        return [{ path: filePath, modifiedAt: stat.mtimeMs }];
+      } catch {
+        return [];
+      }
+    });
+  } catch {
+    return;
+  }
+
+  candidates.sort((left, right) => right.modifiedAt - left.modifiedAt);
+  for (const candidate of candidates.slice(MAX_RETAINED_DATABASE_BACKUPS)) {
+    try { fs.unlinkSync(candidate.path); } catch {}
+  }
+}
+
 /** Create an AES-256-GCM encrypted SQLite snapshot before a destructive migration. */
 export function createMigrationBackup(db: any, databasePath: string, migrationName: string): string {
   if (databasePath === ":memory:") {
@@ -376,6 +403,7 @@ export function createMigrationBackup(db: any, databasePath: string, migrationNa
     // Publish without replacing any pre-existing path, even under a race.
     fs.linkSync(encryptedTempPath, backupPath);
     fs.unlinkSync(encryptedTempPath);
+    pruneDatabaseBackupRetention(backupDir);
     return backupPath;
   } finally {
     try { fs.unlinkSync(plainPath); } catch {}
