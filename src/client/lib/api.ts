@@ -417,13 +417,6 @@ export interface APIKeyRecord {
   concurrencyLimit: number | null;
   allowedModels: string[] | null;
   status: "active" | "revoked";
-  planId: string | null;
-  planName: string | null;
-  rateLimitRpm: number | null;
-  rateLimitTpm: number | null;
-  concurrencyLimit: number | null;
-  allowedModels: string[] | null;
-  totalTokensUsed: number;
 }
 
 export interface IssuedAPIKey extends APIKeyRecord {
