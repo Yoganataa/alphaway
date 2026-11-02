@@ -37,6 +37,19 @@ import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
 import { isModelAllowedByPolicy, type EffectivePolicy } from "../core/policy";
 import { acquireManagedKeyRequest, type PolicyGateResult } from "../core/rate-limiter";
 
+function recordGatewayUsage(c: any, entry: Parameters<typeof recordRequestUsage>[0]) {
+  const policyRejected = Boolean(c.get("policyRejected"));
+  const recorded = recordRequestUsage({
+    ...entry,
+    clientApiKeyId: c.get("managedApiKeyId") ?? null,
+    ...(policyRejected ? { promptTokens: 0, completionTokens: 0, savedTokens: 0 } : {}),
+  });
+  const settleQuota = c.get("settlePolicyQuota") as ((actualTokens: number, authoritative?: boolean) => void) | undefined;
+  settleQuota?.(recorded.totalTokens, true);
+  return recorded;
+}
+
+
 function estimateTokensFromCharacterCount(characters: number): number {
   return characters > 0 ? Math.max(1, Math.ceil(characters / 3.8)) : 0;
 }
@@ -57,6 +70,7 @@ export const chatRoute = new Hono();
 type GatewayProtocol = "openai" | "anthropic" | "responses";
 
 function policyRejection(c: any, protocol: GatewayProtocol, status: number, code: string, message: string, retryAfter?: number): Response {
+  c.set("policyRejected", true);
   if (retryAfter !== undefined) c.header("Retry-After", String(retryAfter));
   if (protocol === "anthropic") {
     return c.json({ type: "error", error: { type: status === 403 ? "permission_error" : "rate_limit_error", code, message } }, status);
@@ -64,10 +78,11 @@ function policyRejection(c: any, protocol: GatewayProtocol, status: number, code
   return c.json({ error: { message, type: status === 403 ? "permission_error" : status === 503 ? "server_error" : "rate_limit_error", param: status === 403 ? "model" : null, code } }, status);
 }
 
-function releaseWhenBodyConsumed(response: Response, release: () => void): Response {
+function releaseWhenBodyConsumed(response: Response, release: () => void, afterRelease: () => void = () => {}): Response {
   const source = response.body;
   if (!source) {
     release();
+    afterRelease();
     return response;
   }
   const reader = source.getReader();
@@ -76,6 +91,7 @@ function releaseWhenBodyConsumed(response: Response, release: () => void): Respo
     if (finished) return;
     finished = true;
     release();
+    afterRelease();
     try { reader.releaseLock(); } catch {}
   };
   const body = new ReadableStream<Uint8Array>({
@@ -123,6 +139,7 @@ async function dispatchWithPolicy(
   }
 
   let dispatchBody = body;
+  let quotaReservationTokens = promptTokens;
   if (policy.tokenQuota > 0) {
     const remaining = Math.max(0, policy.tokenQuota - policy.totalTokensUsed);
     const completionBudget = remaining - promptTokens;
@@ -134,28 +151,33 @@ async function dispatchWithPolicy(
       ? Math.min(requestedOutput, completionBudget)
       : completionBudget;
     dispatchBody = { ...body, max_tokens: boundedOutput };
+    quotaReservationTokens = promptTokens + boundedOutput;
   }
 
-  const gate: PolicyGateResult = acquireManagedKeyRequest(policy.keyId, policy, promptTokens);
+  const gate: PolicyGateResult = acquireManagedKeyRequest(policy.keyId, policy, promptTokens, Date.now(), quotaReservationTokens);
   if (!gate.allowed) {
     const status = gate.status || 429;
     const axis = gate.axis || "rpm";
-    const code = axis === "capacity" ? "policy_capacity_exceeded" : "rate_limit_exceeded";
+    const code = axis === "capacity" ? "policy_capacity_exceeded" : axis === "token_quota" ? "token_quota_exceeded" : "rate_limit_exceeded";
     const message = axis === "capacity"
       ? "The gateway policy limiter is at capacity. Retry this request shortly."
       : axis === "concurrency"
       ? "The API key concurrency limit has been reached."
       : axis === "tpm"
       ? "The API key prompt tokens-per-minute limit has been reached."
+      : axis === "token_quota"
+      ? "The API key token quota is reserved by other in-flight requests."
       : "The API key requests-per-minute limit has been reached.";
     return policyRejection(c, protocol, status, code, message, gate.retryAfterSeconds);
   }
 
+  c.set("settlePolicyQuota", gate.settleQuota);
   try {
     const response = await dispatchToUpstream(rawReq, dispatchBody, targetModel, isStream, signal);
-    return releaseWhenBodyConsumed(response, gate.release);
+    return releaseWhenBodyConsumed(response, gate.release, () => gate.settleQuota(promptTokens, false));
   } catch (error) {
     gate.release();
+    gate.settleQuota(0, true);
     throw error;
   }
 }
@@ -470,6 +492,7 @@ function trackOpenAIStreamingUsage(
     startedAt: number;
     promptTokens: number;
     savedTokens: number;
+    settleQuota?: (actualTokens: number, authoritative?: boolean) => void;
   },
 ): Response {
   const source = response.body;
@@ -496,7 +519,7 @@ function trackOpenAIStreamingUsage(
   const finalize = () => {
     if (finalized) return;
     finalized = true;
-    recordRequestUsage({
+    const recorded = recordRequestUsage({
       clientApiKeyId: usage.clientApiKeyId,
       protocol: "openai",
       model: usage.model,
@@ -508,6 +531,7 @@ function trackOpenAIStreamingUsage(
       savedTokens: usage.savedTokens,
       stream: true,
     });
+    usage.settleQuota?.(recorded.totalTokens, true);
   };
 
   if (!source) {
@@ -633,7 +657,7 @@ const handleOpenAIChat = async (c: any) => {
 
   // Record Usage Telemetry
   if (!res.ok) {
-    recordRequestUsage({
+    recordGatewayUsage(c, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "openai",
       model: targetModel,
@@ -653,6 +677,7 @@ const handleOpenAIChat = async (c: any) => {
       startedAt: startTime,
       promptTokens,
       savedTokens,
+      settleQuota: c.get("settlePolicyQuota"),
     });
   } else {
     try {
@@ -660,7 +685,7 @@ const handleOpenAIChat = async (c: any) => {
       clone.json().then((json: any) => {
         const compTokens = json?.usage?.completion_tokens || estimateTokensFromText(json?.choices?.[0]?.message?.content || "");
         const actualPromptTokens = json?.usage?.prompt_tokens || promptTokens;
-        recordRequestUsage({
+        recordGatewayUsage(c, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
           protocol: "openai",
           model: targetModel,
@@ -741,7 +766,7 @@ const handleAnthropicMessages = async (c: any) => {
   const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "anthropic", c.req.raw.signal);
 
   if (!upstreamRes.ok) {
-    recordRequestUsage({
+    recordGatewayUsage(c, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "anthropic",
       model: targetModel,
@@ -760,7 +785,7 @@ const handleAnthropicMessages = async (c: any) => {
   if (!isStream) {
     const openAIJson = await upstreamRes.json();
     const anthropicJson = openAIToAnthropicResponse(openAIJson, targetModel);
-    recordRequestUsage({
+    recordGatewayUsage(c, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "anthropic",
       model: targetModel,
@@ -777,7 +802,7 @@ const handleAnthropicMessages = async (c: any) => {
     // Convert OpenAI SSE stream to Anthropic SSE stream and meter the actual text.
     const reader = upstreamRes.body?.getReader();
     if (!reader) {
-      recordRequestUsage({
+      recordGatewayUsage(c, {
         clientApiKeyId: c.get("managedApiKeyId") ?? null,
         protocol: "anthropic",
         model: targetModel,
@@ -833,7 +858,7 @@ const handleAnthropicMessages = async (c: any) => {
         }
         await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
-        recordRequestUsage({
+        recordGatewayUsage(c, {
           clientApiKeyId: c.get("managedApiKeyId") ?? null,
           protocol: "anthropic",
           model: targetModel,
@@ -908,7 +933,7 @@ const handleResponses = async (c: any) => {
   const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "responses", c.req.raw.signal);
 
   if (!upstreamRes.ok) {
-    recordRequestUsage({
+    recordGatewayUsage(c, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "responses",
       model: targetModel,
@@ -927,7 +952,7 @@ const handleResponses = async (c: any) => {
   if (!isStream) {
     const openAIJson = await upstreamRes.json();
     const responsesJson = openAIToResponsesResponse(openAIJson, targetModel);
-    recordRequestUsage({
+    recordGatewayUsage(c, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "responses",
       model: targetModel,
@@ -944,7 +969,7 @@ const handleResponses = async (c: any) => {
     // Translate Responses SSE and meter actual emitted text.
     const reader = upstreamRes.body?.getReader();
     if (!reader) {
-      recordRequestUsage({
+      recordGatewayUsage(c, {
         clientApiKeyId: c.get("managedApiKeyId") ?? null,
         protocol: "responses",
         model: targetModel,
@@ -991,7 +1016,7 @@ const handleResponses = async (c: any) => {
         }
         await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
-        recordRequestUsage({
+        recordGatewayUsage(c, {
           clientApiKeyId: c.get("managedApiKeyId") ?? null,
           protocol: "responses",
           model: targetModel,
