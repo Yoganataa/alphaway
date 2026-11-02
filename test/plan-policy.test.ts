@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { app } from "../src/app";
 import { adminHeaders, adminRequest } from "./helpers/admin";
-import { issueAPIKey, setAPIKeyPolicy } from "../src/core/api-keys";
+import { issueAPIKey, listAPIKeys, setAPIKeyPolicy } from "../src/core/api-keys";
+import { recordRequestUsage } from "../src/core/usage-tracker";
 import { createPlan, deletePlan, listPlans, updatePlan } from "../src/core/plans";
 import { resolveEffectivePolicy, isModelAllowedByPolicy } from "../src/core/policy";
 import { getDatabase } from "../src/core/database";
@@ -132,6 +133,45 @@ describe("Plan management and effective managed-key policy", () => {
     const inheritedAgain = resolveEffectivePolicy(key.record.id)!;
     expect(inheritedAgain.rpmLimit).toBe(20);
     expect(inheritedAgain.allowedModels).toContain("gpt-4.1-*");
+  });
+
+
+  it("attributes usage to the managed key and returns effective inherited policy metadata", () => {
+    const plan = createPlan({
+      name: "Metered",
+      description: "",
+      rpmLimit: 15,
+      tpmLimit: 4000,
+      concurrencyLimit: 3,
+      tokenQuota: 25000,
+      allowedModels: ["metered-*"],
+    });
+    const key = issueAPIKey("Metered key");
+    setAPIKeyPolicy(key.record.id, { planId: plan.id });
+
+    recordRequestUsage({
+      protocol: "openai",
+      model: "metered-model",
+      provider: "opencode",
+      status: 200,
+      latencyMs: 4,
+      promptTokens: 40,
+      completionTokens: 10,
+      clientApiKeyId: key.record.id,
+    });
+
+    const log = getDatabase().prepare("SELECT client_api_key_id, total_tokens FROM request_logs ORDER BY timestamp DESC LIMIT 1").get();
+    expect(log.client_api_key_id).toBe(key.record.id);
+    expect(log.total_tokens).toBe(50);
+
+    const listed = listAPIKeys().find((item) => item.id === key.record.id)!;
+    expect(listed.totalTokensUsed).toBe(50);
+    expect(listed.planName).toBe("Metered");
+    expect(listed.effectiveRpmLimit).toBe(15);
+    expect(listed.effectiveTpmLimit).toBe(4000);
+    expect(listed.effectiveConcurrencyLimit).toBe(3);
+    expect(listed.effectiveTokenQuota).toBe(25000);
+    expect(listed.effectiveAllowedModels).toEqual(["metered-*"]);
   });
 
   it("keeps unassigned managed keys unrestricted and does not assign a default Plan", () => {
