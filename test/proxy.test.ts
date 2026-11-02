@@ -116,6 +116,32 @@ describe("egress proxy", () => {
     assert.equal(proxy.describe().source, "database");
   });
 
+  it("removes unknown credential-bearing fields from legacy persisted proxy settings", () => {
+    dbSetSetting("proxy_config", {
+      strategy: "round-robin",
+      apiKey: "proxy-config-api-key-must-not-persist",
+      headers: { authorization: "Bearer proxy-header-must-not-persist" },
+      pool: [{
+        id: "direct-cleanup",
+        label: "Direct",
+        direct: true,
+        enabled: true,
+        password: "pool-password-must-not-persist",
+        headers: { cookie: "pool-cookie-must-not-persist" },
+      }],
+    });
+
+    proxy.__restart();
+    const sanitized = dbGetSetting("proxy_config", null);
+    assert.equal(sanitized.apiKey, undefined);
+    assert.equal(sanitized.headers, undefined);
+    assert.equal(sanitized.pool[0].password, undefined);
+    assert.equal(sanitized.pool[0].headers, undefined);
+    assert.equal(JSON.stringify(sanitized).includes("proxy-config-api-key-must-not-persist"), false);
+    assert.equal(JSON.stringify(sanitized).includes("proxy-header-must-not-persist"), false);
+    assert.equal(JSON.stringify(sanitized).includes("pool-password-must-not-persist"), false);
+    assert.equal(JSON.stringify(sanitized).includes("pool-cookie-must-not-persist"), false);
+  });
   it("clearing the URL returns to direct egress and deletes the SQLite setting", () => {
     proxy.setProxyUrl("http://127.0.0.1:8080");
     const cleared = proxy.setProxyUrl("");
