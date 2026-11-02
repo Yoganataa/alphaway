@@ -6,6 +6,14 @@ import { MIGRATIONS, MigrationError, runMigrations } from "../src/core/migration
 import type { Migration } from "../src/core/migrations";
 
 const openDatabase = () => new Database(":memory:");
+const runTestMigrations = (
+  database: Database,
+  registry: readonly Migration[] = MIGRATIONS,
+  options: Parameters<typeof runMigrations>[2] = {}
+) => runMigrations(database, registry, {
+  beforeDestructiveMigration: () => {},
+  ...options,
+});
 
 describe("SQLite migration runner", () => {
   let db: Database | undefined;
@@ -18,7 +26,7 @@ describe("SQLite migration runner", () => {
   it("initializes a fresh database and records the applied schema version", () => {
     db = openDatabase();
 
-    const result = runMigrations(db);
+    const result = runTestMigrations(db);
 
     expect(result).toEqual({
       currentVersion: 5,
@@ -60,7 +68,7 @@ describe("SQLite migration runner", () => {
 
   it("removes the obsolete JSON import ledger when upgrading an existing v4 SQLite database", () => {
     db = openDatabase();
-    runMigrations(db, MIGRATIONS.slice(0, 4));
+    runTestMigrations(db, MIGRATIONS.slice(0, 4));
     db.prepare(`
       INSERT INTO legacy_imports (source_key, checksum, status, imported_at, row_count, details)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -71,7 +79,7 @@ describe("SQLite migration runner", () => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run("sqlite-provider", "SQLite Provider", "https://provider.example", "encrypted-key", "openai", "[]", 1, Date.now());
 
-    const result = runMigrations(db);
+    const result = runTestMigrations(db);
     const ledger = db.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
     ).get("legacy_imports");
@@ -89,7 +97,7 @@ describe("SQLite migration runner", () => {
 
   it("hashes legacy plaintext API keys and removes the legacy setting atomically", () => {
     db = openDatabase();
-    runMigrations(db, [MIGRATIONS[0]]);
+    runTestMigrations(db, [MIGRATIONS[0]]);
 
     const legacySecret = "sk-legacy-key-that-must-not-remain";
     db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)")
@@ -102,7 +110,7 @@ describe("SQLite migration runner", () => {
         requestsCount: 7,
       }]), Date.now());
 
-    const result = runMigrations(db);
+    const result = runTestMigrations(db);
     const stored = db.prepare(
       "SELECT id, name, key_prefix, secret_salt, secret_hash, status, requests_count FROM api_keys WHERE id = ?"
     ).get("legacy-key-1") as any;
@@ -142,7 +150,7 @@ describe("SQLite migration runner", () => {
       );
     `);
 
-    const result = runMigrations(db);
+    const result = runTestMigrations(db);
     const row = db
       .prepare("SELECT id, name, api_key FROM custom_providers WHERE id = ?")
       .get("legacy-provider");
@@ -159,7 +167,7 @@ describe("SQLite migration runner", () => {
 
   it("encrypts existing provider credentials and removes masked placeholders during migration", () => {
     db = openDatabase();
-    runMigrations(db, [MIGRATIONS[0]]);
+    runTestMigrations(db, [MIGRATIONS[0]]);
     const insert = db.prepare(`
       INSERT INTO custom_providers (id, name, base_url, api_key, protocol, models, enabled, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -169,7 +177,7 @@ describe("SQLite migration runner", () => {
     const legacyBaseUrl = "https://url-user:url-password@provider.example/v1?api_key=url-query-secret&tenant=team-a";
     insert.run("legacy-url-secret", "Legacy URL Secret", legacyBaseUrl, "", "openai", "[]", 1, Date.now());
 
-    runMigrations(db);
+    runTestMigrations(db);
     const encrypted = db.prepare("SELECT api_key FROM custom_providers WHERE id = ?").get("legacy-secret").api_key;
     const placeholder = db.prepare("SELECT api_key FROM custom_providers WHERE id = ?").get("legacy-placeholder").api_key;
     const encryptedBaseUrl = db.prepare("SELECT base_url FROM custom_providers WHERE id = ?").get("legacy-url-secret").base_url;
@@ -186,7 +194,7 @@ describe("SQLite migration runner", () => {
 
   it("encrypts legacy single-proxy URLs, pool URLs, and relay tokens during migration", () => {
     db = openDatabase();
-    runMigrations(db, [MIGRATIONS[0]]);
+    runTestMigrations(db, [MIGRATIONS[0]]);
     const config = {
       url: "http://legacy-user:legacy-pass@proxy.example:8080",
       strategy: "failover",
@@ -198,7 +206,7 @@ describe("SQLite migration runner", () => {
     db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)")
       .run("proxy_config", JSON.stringify(config), Date.now());
 
-    runMigrations(db);
+    runTestMigrations(db);
     const stored = JSON.parse(db.prepare("SELECT value FROM app_settings WHERE key = ?")
       .get("proxy_config").value);
     expect(stored.url).toMatch(/^awenc:v1:/);
@@ -215,7 +223,7 @@ describe("SQLite migration runner", () => {
   });
   it("encrypts a legacy CodeBuddy credential on databases already at migration v3 and rearms residue cleanup", () => {
     db = openDatabase();
-    runMigrations(db, MIGRATIONS.slice(0, 3));
+    runTestMigrations(db, MIGRATIONS.slice(0, 3));
 
     const legacyCredential = "codebuddy-legacy-access-token";
     db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)")
@@ -223,7 +231,7 @@ describe("SQLite migration runner", () => {
     db.prepare("UPDATE app_settings SET value = ? WHERE key = ?")
       .run(JSON.stringify("complete"), "alpha_security_secret_scrub");
 
-    const result = runMigrations(db);
+    const result = runTestMigrations(db);
     const stored = JSON.parse(db.prepare("SELECT value FROM app_settings WHERE key = ?")
       .get("codebuddy_api_key").value) as string;
     const marker = JSON.parse(db.prepare("SELECT value FROM app_settings WHERE key = ?")
@@ -239,8 +247,8 @@ describe("SQLite migration runner", () => {
   it("does not reapply already-recorded migrations on repeated startup", () => {
     db = openDatabase();
 
-    const first = runMigrations(db);
-    const second = runMigrations(db);
+    const first = runTestMigrations(db);
+    const second = runTestMigrations(db);
 
     expect(first.applied).toHaveLength(5);
     expect(second.applied).toHaveLength(0);
@@ -251,7 +259,7 @@ describe("SQLite migration runner", () => {
 
   it("rolls back migration DDL and history when a migration fails", () => {
     db = openDatabase();
-    runMigrations(db);
+    runTestMigrations(db);
 
     const failingMigration: Migration = {
       version: 6,
@@ -262,7 +270,7 @@ describe("SQLite migration runner", () => {
       },
     };
 
-    expect(() => runMigrations(db, [...MIGRATIONS, failingMigration])).toThrow(
+    expect(() => runTestMigrations(db, [...MIGRATIONS, failingMigration])).toThrow(
       /Migration 6 .* simulated interruption/
     );
 
@@ -279,7 +287,7 @@ describe("SQLite migration runner", () => {
 
   it("can retry a migration after its failed attempt was rolled back", () => {
     db = openDatabase();
-    runMigrations(db);
+    runTestMigrations(db);
 
     const recoveredMigration: Migration = {
       version: 6,
@@ -289,7 +297,7 @@ describe("SQLite migration runner", () => {
       },
     };
 
-    const result = runMigrations(db, [...MIGRATIONS, recoveredMigration]);
+    const result = runTestMigrations(db, [...MIGRATIONS, recoveredMigration]);
     expect(result.currentVersion).toBe(6);
     expect(result.applied).toEqual([
       { version: 6, name: "recovered-test-migration" },
@@ -301,7 +309,7 @@ describe("SQLite migration runner", () => {
 
   it("refuses destructive migrations unless a backup callback is provided", () => {
     db = openDatabase();
-    runMigrations(db);
+    runTestMigrations(db);
 
     const destructiveMigration: Migration = {
       version: 6,
@@ -317,7 +325,7 @@ describe("SQLite migration runner", () => {
     );
 
     let backupWasCreated = false;
-    const result = runMigrations(db, [...MIGRATIONS, destructiveMigration], {
+    const result = runTestMigrations(db, [...MIGRATIONS, destructiveMigration], {
       beforeDestructiveMigration(migration) {
         expect(migration.name).toBe("destructive-test-migration");
         backupWasCreated = true;
@@ -340,7 +348,7 @@ describe("SQLite migration runner", () => {
       VALUES (2, 'future-schema', '2026-11-01T00:00:00.000Z');
     `);
 
-    expect(() => runMigrations(db)).toThrow(/not contiguous/);
+    expect(() => runTestMigrations(db)).toThrow(/not contiguous/);
   });
 
   it("rejects gaps and duplicate versions in the migration registry", () => {
@@ -351,14 +359,14 @@ describe("SQLite migration runner", () => {
       name: "missing-version-one",
       up() {},
     };
-    expect(() => runMigrations(db, [gap])).toThrow(/contiguous/);
+    expect(() => runTestMigrations(db, [gap])).toThrow(/contiguous/);
 
     const duplicate: Migration = {
       version: 1,
       name: "duplicate",
       up() {},
     };
-    expect(() => runMigrations(db, [MIGRATIONS[0], duplicate])).toThrow(
+    expect(() => runTestMigrations(db, [MIGRATIONS[0], duplicate])).toThrow(
       /Duplicate migration version/
     );
   });
