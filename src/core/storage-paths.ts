@@ -119,9 +119,11 @@ export function resolveStoragePaths(options: StoragePathOptions = {}): ResolvedS
     nonEmpty(envFile.DB_PATH) ??
     nonEmpty(envFile.ALPHAWAY_DB_PATH);
   const explicitDatabasePath = Boolean(dbSetting);
-  const databasePath = dbSetting
-    ? path.resolve(cwd, dbSetting)
-    : path.join(dataDir, "db", "data.sqlite");
+  const databasePath = dbSetting === ":memory:"
+    ? ":memory:"
+    : dbSetting
+      ? path.resolve(cwd, dbSetting)
+      : path.join(dataDir, "db", "data.sqlite");
 
   return { dataDir, databasePath, explicitDatabasePath };
 }
