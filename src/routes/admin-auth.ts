@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { deleteCookie, setCookie } from "hono/cookie";
-import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
+import { adminRequestError, readJsonRequestBody, MAX_ADMIN_AUTH_BODY_BYTES } from "../core/admin-guard";
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_TTL_SECONDS,
@@ -43,7 +43,7 @@ adminAuthRoute.post("/api/admin/auth/bootstrap", async (c) => {
   if (denied) return denied;
   let body: any;
   try {
-    body = await readJsonRequestBody(c.req);
+    body = await readJsonRequestBody(c.req, MAX_ADMIN_AUTH_BODY_BYTES);
   } catch (error: any) {
     const status = error?.statusCode === 413 ? 413 : 400;
     return c.json({ error: status === 413 ? "Administrator auth request body is too large" : "A valid JSON object is required" }, status);
@@ -72,7 +72,7 @@ adminAuthRoute.post("/api/admin/auth/login", async (c) => {
   if (denied) return denied;
   let body: any;
   try {
-    body = await readJsonRequestBody(c.req);
+    body = await readJsonRequestBody(c.req, MAX_ADMIN_AUTH_BODY_BYTES);
   } catch (error: any) {
     const status = error?.statusCode === 413 ? 413 : 400;
     return c.json({ error: status === 413 ? "Administrator auth request body is too large" : "A valid JSON object is required" }, status);
