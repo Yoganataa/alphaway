@@ -101,13 +101,15 @@ function spawnDaemon(port = 20129, host = "127.0.0.1", publicUrl = "") {
   if (fs.existsSync(pidFile)) {
     const existingPid = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
     if (existingPid && isPidAlive(existingPid)) {
-      console.log(`[AlphaWay] Daemon is already running (PID: ${existingPid}).`);
+      console.log(`[AlphaWay] AlphaWay is already running (PID: ${existingPid}).`);
       console.log(`[AlphaWay] Local:  http://${host}:${port}/v1`);
       if (publicUrl) console.log(`[AlphaWay] Public: ${publicUrl}/v1`);
       console.log(`[AlphaWay] Logs:   ${getLogFilePath()}`);
       console.log(`[AlphaWay] To stop: bun src/index.ts --stop`);
       process.exit(0);
     }
+    console.error("[AlphaWay] A stale or invalid PID lock exists. Run --status to clear it after confirming no service is running.");
+    process.exit(1);
   }
 
   const logFile = getLogFilePath();
