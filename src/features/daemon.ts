@@ -98,6 +98,12 @@ function stopDaemon() {
 
 function spawnDaemon(port = 20129, host = "127.0.0.1", publicUrl = "") {
   const pidFile = getPidFilePath();
+  const instanceLock = path.join(getStateDir(), "alphaway.lock");
+  if (fs.existsSync(instanceLock)) {
+    console.error("[AlphaWay] An AlphaWay instance or stale data-directory lock already exists. Stop the active service or inspect alphaway.lock before starting another instance.");
+    process.exit(1);
+  }
+
   if (fs.existsSync(pidFile)) {
     const existingPid = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
     if (existingPid && isPidAlive(existingPid)) {
@@ -171,6 +177,27 @@ function handleDaemonCli(port, host, publicUrl) {
   // Every foreground, systemd/launchd, and daemon process holds the same
   // exclusive data-directory lock. Database restore acquires this lock too.
   acquireAlphaWayProcessLock();
+
+  // Preserve the legacy daemon PID file for --status/--stop. Foreground and
+  // service-manager processes use only alphaway.lock and remain under their
+  // respective process supervisor.
+  if (process.env.__OC_DAEMON === "1") {
+    const pidFile = getPidFilePath();
+    const fd = fs.openSync(pidFile, "wx", 0o600);
+    try {
+      fs.writeFileSync(fd, String(process.pid), "utf8");
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    process.once("exit", () => {
+      try {
+        if (fs.existsSync(pidFile) && Number(fs.readFileSync(pidFile, "utf8").trim()) === process.pid) {
+          fs.unlinkSync(pidFile);
+        }
+      } catch {}
+    });
+  }
 }
 
 module.exports = {
