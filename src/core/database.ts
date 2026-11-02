@@ -587,7 +587,7 @@ export function dbInsertRequestLogWithSnapshot(entry: RequestLogRow, snapshot: u
     INSERT INTO request_logs (
       id, timestamp, protocol, model, provider, status,
       latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream, client_api_key_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const upsert = db.prepare(`
     INSERT INTO app_settings (key, value, updated_at)
