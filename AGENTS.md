@@ -64,7 +64,7 @@ bun run db:backup
 bun run db:restore -- /absolute/path/to/backup.sqlite.awenc
 ```
 
-The encryption key at `$DATA_DIR/secret-encryption.key` must be backed up with the encrypted snapshot. Never copy a live WAL database by copying only its main `.sqlite` file. Run one AlphaWay writer per database file; AlphaWay's schema is not interchangeable with 9router-go's schema even though both use SQLite.
+The encryption key at `$DATA_DIR/secret-encryption.key` must be backed up with the encrypted snapshot. Never copy a live WAL database by copying only its main `.sqlite` file. AlphaWay holds a compatibility lock at `$DATA_DIR/alphaway.lock` and a second lock beside the canonical `DB_PATH` file (`<database-path>.alphaway.lock`). Every server mode and every restore must acquire both; the restore lock is keyed to the actual destination path, including an optional CLI override. This prevents separate `DATA_DIR` roots from opening concurrent writers to the same SQLite file. Run one AlphaWay writer per database file; AlphaWay's schema is not interchangeable with 9router-go's schema even though both use SQLite.
 
 ### Compiling Standalone Executable
 ```bash
