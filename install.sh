@@ -216,17 +216,7 @@ fi
 if [ -z "$configured_data_dir" ]; then
   configured_data_dir="$BINDIR"
 fi
-case "$configured_data_dir" in *$'\n'*|*$'\r'*) die "DATA_DIR cannot contain a newline" ;; esac
-
-# Persist an absolute path. Relative .env values are rooted at BINDIR so the
-# system service WorkingDirectory and an arbitrary manual launch resolve the
-# exact same persistent directory.
-case "$configured_data_dir" in
-  /*) ;;
-  *) configured_data_dir="$BINDIR/$configured_data_dir" ;;
-esac
-mkdir -p "$configured_data_dir"
-configured_data_dir="$(cd "$configured_data_dir" && pwd -P)"
+case "$configured_data_dir" in *
 
 # Persist the resolved location so a later manual launch without the installer
 # environment still uses the same data root. This also canonicalizes old aliases.
