@@ -1350,7 +1350,7 @@ function writeCachedSource(ref, extracted) {
     const file = getSourceCacheFile();
     if (!dir || !file) return;
     const fs = require("fs");
-    fs.mkdirSync(dir, { recursive: true });
+    ensureCatalogCacheDirectory(dir);
     const tmp = `${file}.tmp.${process.pid}`;
     fs.writeFileSync(tmp, JSON.stringify({ ref, extracted, savedAt: Date.now() }));
     fs.renameSync(tmp, file);
