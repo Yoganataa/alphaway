@@ -98,13 +98,10 @@ function stopDaemon() {
 
 function spawnDaemon(port = 20129, host = "127.0.0.1", publicUrl = "") {
   const pidFile = getPidFilePath();
-  const instanceLock = path.join(getStateDir(), "alphaway.lock");
-  const databaseLock = getAlphaWayDatabaseLockPath();
-  if (fs.existsSync(instanceLock) || (databaseLock && fs.existsSync(databaseLock))) {
-    console.error("[AlphaWay] An AlphaWay instance or stale process/database lock already exists. Stop the active service or inspect the matching alphaway.lock file before starting another instance.");
-    process.exit(1);
-  }
 
+  // A daemon has its own PID file; check it before the shared process/database
+  // locks so a repeated -d invocation reports "already running" rather than
+  // a generic lock conflict.
   if (fs.existsSync(pidFile)) {
     const existingPid = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
     if (existingPid && isPidAlive(existingPid)) {
@@ -116,6 +113,13 @@ function spawnDaemon(port = 20129, host = "127.0.0.1", publicUrl = "") {
       process.exit(0);
     }
     console.error("[AlphaWay] A stale or invalid PID lock exists. Run --status to clear it after confirming no service is running.");
+    process.exit(1);
+  }
+
+  const instanceLock = path.join(getStateDir(), "alphaway.lock");
+  const databaseLock = getAlphaWayDatabaseLockPath();
+  if (fs.existsSync(instanceLock) || (databaseLock && fs.existsSync(databaseLock))) {
+    console.error("[AlphaWay] An AlphaWay instance or stale process/database lock already exists. Stop the active service or inspect the matching alphaway.lock file before starting another instance.");
     process.exit(1);
   }
 
