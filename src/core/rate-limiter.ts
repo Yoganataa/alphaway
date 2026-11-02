@@ -3,14 +3,14 @@ import type { EffectivePolicy } from "./policy";
 const WINDOW_MS = 60_000;
 const MAX_KEY_STATES = 10_000;
 
-interface TokenEvent {
-  at: number;
-  tokens: number;
+interface WindowBucket {
+  second: number;
+  requests: number;
+  promptTokens: number;
 }
 
 interface KeyWindowState {
-  requests: number[];
-  promptTokens: TokenEvent[];
+  windows: WindowBucket[];
   inFlight: number;
   quotaReservedTokens: number;
   quotaCommittedTokens: number;
@@ -29,29 +29,56 @@ export interface PolicyGateResult {
 }
 
 const noRelease = () => {};
-const noSettle = (_actualTokens: number) => {};
+const noSettle = (_actualTokens: number, _authoritative?: boolean) => {};
 
-function safePromptReservation(promptTokens: number): number {
-  return Number.isSafeInteger(promptTokens) ? Math.max(0, promptTokens) : 0;
+function safeInteger(value: number): number {
+  return Number.isSafeInteger(value) ? Math.max(0, value) : 0;
 }
 
 function prune(state: KeyWindowState, now: number): void {
-  const cutoff = now - WINDOW_MS;
-  while (state.requests.length && state.requests[0] <= cutoff) state.requests.shift();
-  while (state.promptTokens.length && state.promptTokens[0].at <= cutoff) state.promptTokens.shift();
+  const cutoffSecond = Math.floor(now / 1000) - 60;
+  while (state.windows.length && state.windows[0].second < cutoffSecond) {
+    state.windows.shift();
+  }
 }
 
-function oldestRequestRetry(state: KeyWindowState, now: number): number {
-  if (!state.requests.length) return 1;
-  return Math.max(1, Math.ceil((state.requests[0] + WINDOW_MS - now) / 1000));
+function totals(state: KeyWindowState): { requests: number; promptTokens: number } {
+  let requests = 0;
+  let promptTokens = 0;
+  for (const bucket of state.windows) {
+    requests += bucket.requests;
+    promptTokens += bucket.promptTokens;
+  }
+  return { requests, promptTokens };
 }
 
-function tokenRetry(state: KeyWindowState, requested: number, limit: number, now: number): number {
+function retryAfterOldestBucket(state: KeyWindowState, now: number): number {
+  const first = state.windows[0];
+  if (!first) return 1;
+  // Buckets are second-granularity and deliberately retain the boundary
+  // bucket until it is certainly older than 60 seconds.
+  return Math.max(1, Math.ceil(((first.second + 61) * 1000 - now) / 1000));
+}
+
+function addToCurrentBucket(state: KeyWindowState, now: number, requests: number, promptTokens: number): void {
+  const second = Math.floor(now / 1000);
+  const last = state.windows[state.windows.length - 1];
+  if (last?.second === second) {
+    last.requests += requests;
+    last.promptTokens += promptTokens;
+    return;
+  }
+  state.windows.push({ second, requests, promptTokens });
+}
+
+function promptTokenRetry(state: KeyWindowState, requested: number, limit: number, now: number): number {
   if (requested > limit) return 60;
-  let remaining = state.promptTokens.reduce((sum, event) => sum + event.tokens, 0) + requested - limit;
-  for (const event of state.promptTokens) {
-    remaining -= event.tokens;
-    if (remaining <= 0) return Math.max(1, Math.ceil((event.at + WINDOW_MS - now) / 1000));
+  let excess = totals(state).promptTokens + requested - limit;
+  for (const bucket of state.windows) {
+    excess -= bucket.promptTokens;
+    if (excess <= 0) {
+      return Math.max(1, Math.ceil(((bucket.second + 61) * 1000 - now) / 1000));
+    }
   }
   return 60;
 }
@@ -60,12 +87,20 @@ class ManagedKeyRateLimiter {
   private readonly states = new Map<string, KeyWindowState>();
   private admittedSinceSweep = 0;
 
-  acquire(keyId: string, policy: EffectivePolicy, promptTokens: number, now = Date.now(), quotaReservationTokens = promptTokens): PolicyGateResult {
+  acquire(
+    keyId: string,
+    policy: EffectivePolicy,
+    promptTokens: number,
+    now = Date.now(),
+    quotaReservationTokens = promptTokens,
+  ): PolicyGateResult {
     const rpm = Math.max(0, Math.trunc(policy.rpmLimit || 0));
     const tpm = Math.max(0, Math.trunc(policy.tpmLimit || 0));
     const concurrency = Math.max(0, Math.trunc(policy.concurrencyLimit || 0));
     const tokenQuota = Math.max(0, Math.trunc(policy.tokenQuota || 0));
-    if (!rpm && !tpm && !concurrency && !tokenQuota) return { allowed: true, release: noRelease, settleQuota: noSettle };
+    if (!rpm && !tpm && !concurrency && !tokenQuota) {
+      return { allowed: true, release: noRelease, settleQuota: noSettle };
+    }
 
     let state = this.states.get(keyId);
     if (!state) {
@@ -73,29 +108,44 @@ class ManagedKeyRateLimiter {
       if (this.states.size >= MAX_KEY_STATES) {
         return { allowed: false, axis: "capacity", status: 503, retryAfterSeconds: 1, release: noRelease, settleQuota: noSettle };
       }
-      state = { requests: [], promptTokens: [], inFlight: 0, quotaReservedTokens: 0, quotaCommittedTokens: 0, lastSeen: now };
+      state = { windows: [], inFlight: 0, quotaReservedTokens: 0, quotaCommittedTokens: 0, lastSeen: now };
       this.states.set(keyId, state);
     }
+
     prune(state, now);
     state.lastSeen = now;
-    state.quotaCommittedTokens = Math.max(state.quotaCommittedTokens, Math.max(0, policy.totalTokensUsed || 0));
-    const safeQuotaReservation = Number.isSafeInteger(quotaReservationTokens)
-      ? Math.max(0, quotaReservationTokens)
-      : safePromptReservation(promptTokens);
-    if (tokenQuota > 0 && state.quotaCommittedTokens + state.quotaReservedTokens + safeQuotaReservation > tokenQuota) {
+    state.quotaCommittedTokens = Math.max(state.quotaCommittedTokens, safeInteger(policy.totalTokensUsed));
+    const windowTotals = totals(state);
+    const safePromptTokens = safeInteger(promptTokens);
+    const safeQuotaReservation = safeInteger(quotaReservationTokens);
+
+    if (
+      tokenQuota > 0 &&
+      state.quotaCommittedTokens + state.quotaReservedTokens + safeQuotaReservation > tokenQuota
+    ) {
       return { allowed: false, axis: "token_quota", status: 429, release: noRelease, settleQuota: noSettle };
     }
 
-    if (rpm > 0 && state.requests.length >= rpm) {
-      return { allowed: false, axis: "rpm", status: 429, retryAfterSeconds: oldestRequestRetry(state, now), release: noRelease, settleQuota: noSettle };
+    if (rpm > 0 && windowTotals.requests >= rpm) {
+      return {
+        allowed: false,
+        axis: "rpm",
+        status: 429,
+        retryAfterSeconds: retryAfterOldestBucket(state, now),
+        release: noRelease,
+        settleQuota: noSettle,
+      };
     }
 
-    const safePromptTokens = Number.isSafeInteger(promptTokens) ? Math.max(0, promptTokens) : 0;
-    if (tpm > 0) {
-      const used = state.promptTokens.reduce((sum, event) => sum + event.tokens, 0);
-      if (used + safePromptTokens > tpm) {
-        return { allowed: false, axis: "tpm", status: 429, retryAfterSeconds: tokenRetry(state, safePromptTokens, tpm, now), release: noRelease, settleQuota: noSettle };
-      }
+    if (tpm > 0 && windowTotals.promptTokens + safePromptTokens > tpm) {
+      return {
+        allowed: false,
+        axis: "tpm",
+        status: 429,
+        retryAfterSeconds: promptTokenRetry(state, safePromptTokens, tpm, now),
+        release: noRelease,
+        settleQuota: noSettle,
+      };
     }
 
     if (concurrency > 0 && state.inFlight >= concurrency) {
@@ -103,19 +153,20 @@ class ManagedKeyRateLimiter {
     }
 
     if (tokenQuota > 0) state.quotaReservedTokens += safeQuotaReservation;
-    if (rpm > 0) state.requests.push(now);
-    if (tpm > 0 && safePromptTokens > 0) state.promptTokens.push({ at: now, tokens: safePromptTokens });
+    if (rpm > 0 || (tpm > 0 && safePromptTokens > 0)) {
+      addToCurrentBucket(state, now, rpm > 0 ? 1 : 0, tpm > 0 ? safePromptTokens : 0);
+    }
     if (concurrency > 0) state.inFlight += 1;
 
     let released = false;
     let quotaSettledTokens = 0;
     let quotaReservationSettled = false;
     let quotaSettledAuthoritatively = false;
+
     const settleQuota = (actualTokens: number, authoritative = false) => {
       if (tokenQuota <= 0) return;
-      const safeActual = Number.isSafeInteger(actualTokens) ? Math.max(0, actualTokens) : 0;
       if (quotaSettledAuthoritatively && !authoritative) return;
-      const nextActual = safeActual;
+      const nextActual = safeInteger(actualTokens);
       if (!quotaReservationSettled) {
         state!.quotaReservedTokens = Math.max(0, state!.quotaReservedTokens - safeQuotaReservation);
         quotaReservationSettled = true;
@@ -125,6 +176,7 @@ class ManagedKeyRateLimiter {
       quotaSettledAuthoritatively = quotaSettledAuthoritatively || authoritative;
       state!.lastSeen = Date.now();
     };
+
     const release = () => {
       if (released) return;
       released = true;
@@ -143,13 +195,13 @@ class ManagedKeyRateLimiter {
   private sweepExpired(now: number): void {
     for (const [keyId, state] of this.states) {
       prune(state, now);
-      if (state.inFlight === 0 && state.requests.length === 0 && state.promptTokens.length === 0 && state.quotaReservedTokens === 0) {
+      if (state.inFlight === 0 && state.windows.length === 0 && state.quotaReservedTokens === 0) {
         this.states.delete(keyId);
       }
     }
   }
 
-  /** Test-only reset; production state is process-local and bounded. */
+  /** Test-only reset; production state remains bounded by key and window caps. */
   clearForTests(): void {
     this.states.clear();
     this.admittedSinceSweep = 0;
@@ -168,7 +220,7 @@ export function acquireManagedKeyRequest(
   policy: EffectivePolicy,
   promptTokens: number,
   now?: number,
-  quotaReservationTokens?: number
+  quotaReservationTokens?: number,
 ): PolicyGateResult {
   return limiter.acquire(keyId, policy, promptTokens, now, quotaReservationTokens);
 }
