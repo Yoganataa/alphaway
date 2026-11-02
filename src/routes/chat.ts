@@ -442,6 +442,96 @@ async function dispatchToUpstream(
   return opencode.handleOpenCodeChat(rawReq, body, targetModel, isStream, signal);
 }
 
+
+function trackOpenAIStreamingUsage(
+  response: Response,
+  usage: {
+    clientApiKeyId: string | null;
+    model: string;
+    provider: "opencode" | "codebuddy" | "custom";
+    startedAt: number;
+    promptTokens: number;
+    savedTokens: number;
+  },
+): Response {
+  const source = response.body;
+  let completionText = "";
+  let buffer = "";
+  let finalized = false;
+  const decoder = new TextDecoder();
+
+  const consumeLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) return;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === "[DONE]") return;
+    try {
+      const event = JSON.parse(payload);
+      const content = event?.choices?.[0]?.delta?.content;
+      if (typeof content === "string") completionText += content;
+      else if (Array.isArray(content)) {
+        for (const part of content) if (typeof part?.text === "string") completionText += part.text;
+      }
+    } catch {}
+  };
+
+  const finalize = () => {
+    if (finalized) return;
+    finalized = true;
+    recordRequestUsage({
+      clientApiKeyId: usage.clientApiKeyId,
+      protocol: "openai",
+      model: usage.model,
+      provider: usage.provider,
+      status: response.status,
+      latencyMs: Date.now() - usage.startedAt,
+      promptTokens: usage.promptTokens,
+      completionTokens: estimateTokensFromText(completionText),
+      savedTokens: usage.savedTokens,
+      stream: true,
+    });
+  };
+
+  if (!source) {
+    finalize();
+    return response;
+  }
+  const reader = source.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const result = await reader.read();
+        if (result.done) {
+          const tail = buffer + decoder.decode();
+          if (tail) consumeLine(tail);
+          controller.close();
+          finalize();
+          try { reader.releaseLock(); } catch {}
+          return;
+        }
+        buffer += decoder.decode(result.value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) consumeLine(line);
+        controller.enqueue(result.value);
+      } catch (error) {
+        controller.error(error);
+        finalize();
+        try { reader.releaseLock(); } catch {}
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        finalize();
+        try { reader.releaseLock(); } catch {}
+      }
+    },
+  });
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
 // ============================================================================
 // 1. OpenAI Chat Completions Handler (/v1/chat/completions)
 // ============================================================================
@@ -538,17 +628,13 @@ const handleOpenAIChat = async (c: any) => {
       stream: isStream,
     });
   } else if (isStream) {
-    recordRequestUsage({
+    return trackOpenAIStreamingUsage(res, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
-      protocol: "openai",
       model: targetModel,
       provider: providerType,
-      status: res.status,
-      latencyMs: Date.now() - startTime,
+      startedAt: startTime,
       promptTokens,
-      completionTokens: 25,
       savedTokens,
-      stream: true,
     });
   } else {
     try {
@@ -664,33 +750,36 @@ const handleAnthropicMessages = async (c: any) => {
       status: 200,
       latencyMs: Date.now() - startTime,
       promptTokens: anthropicJson.usage?.input_tokens || promptTokens,
-      completionTokens: anthropicJson.usage?.output_tokens || 20,
+      completionTokens: anthropicJson.usage?.output_tokens ?? estimateTokensFromText(typeof openAIJson?.choices?.[0]?.message?.content === "string" ? openAIJson.choices[0].message.content : ""),
       savedTokens,
       stream: false,
     });
     return c.json(anthropicJson);
   } else {
-    recordRequestUsage({
-      clientApiKeyId: c.get("managedApiKeyId") ?? null,
-      protocol: "anthropic",
-      model: targetModel,
-      provider: providerType,
-      status: 200,
-      latencyMs: Date.now() - startTime,
-      promptTokens,
-      completionTokens: 25,
-      savedTokens,
-      stream: true,
-    });
-    // Convert OpenAI SSE stream to Anthropic SSE stream
+    // Convert OpenAI SSE stream to Anthropic SSE stream and meter the actual text.
     const reader = upstreamRes.body?.getReader();
-    if (!reader) return upstreamRes;
+    if (!reader) {
+      recordRequestUsage({
+        clientApiKeyId: c.get("managedApiKeyId") ?? null,
+        protocol: "anthropic",
+        model: targetModel,
+        provider: providerType,
+        status: 200,
+        latencyMs: Date.now() - startTime,
+        promptTokens,
+        completionTokens: 0,
+        savedTokens,
+        stream: true,
+      });
+      return upstreamRes;
+    }
     const decoder = new TextDecoder();
     const frames = anthropicStreamFrames(targetModel);
 
     return streamSSE(c, async (stream) => {
       let started = false;
       let buffer = "";
+      let completionText = "";
       let tokenCount = 0;
 
       try {
@@ -714,7 +803,8 @@ const handleAnthropicMessages = async (c: any) => {
                     await stream.write(frames.start());
                     started = true;
                   }
-                  tokenCount++;
+                  completionText += deltaContent;
+                  tokenCount = estimateTokensFromText(completionText);
                   await stream.write(frames.delta(deltaContent));
                 }
               } catch {}
@@ -725,8 +815,20 @@ const handleAnthropicMessages = async (c: any) => {
         if (!started) {
           await stream.write(frames.start());
         }
-        await stream.write(frames.end(Math.max(tokenCount, 1)));
+        await stream.write(frames.end(tokenCount));
       } finally {
+        recordRequestUsage({
+          clientApiKeyId: c.get("managedApiKeyId") ?? null,
+          protocol: "anthropic",
+          model: targetModel,
+          provider: providerType,
+          status: 200,
+          latencyMs: Date.now() - startTime,
+          promptTokens,
+          completionTokens: estimateTokensFromText(completionText),
+          savedTokens,
+          stream: true,
+        });
         reader.releaseLock();
       }
     });
@@ -816,33 +918,36 @@ const handleResponses = async (c: any) => {
       provider: providerType,
       status: 200,
       latencyMs: Date.now() - startTime,
-      promptTokens: responsesJson.usage?.total_tokens ? Math.floor(responsesJson.usage.total_tokens / 2) : promptTokens,
-      completionTokens: 25,
+      promptTokens: responsesJson.usage?.input_tokens ?? openAIJson?.usage?.prompt_tokens ?? promptTokens,
+      completionTokens: responsesJson.usage?.output_tokens ?? openAIJson?.usage?.completion_tokens ?? estimateTokensFromText(typeof openAIJson?.choices?.[0]?.message?.content === "string" ? openAIJson.choices[0].message.content : ""),
       savedTokens,
       stream: false,
     });
     return c.json(responsesJson);
   } else {
-    recordRequestUsage({
-      clientApiKeyId: c.get("managedApiKeyId") ?? null,
-      protocol: "responses",
-      model: targetModel,
-      provider: providerType,
-      status: 200,
-      latencyMs: Date.now() - startTime,
-      promptTokens,
-      completionTokens: 25,
-      savedTokens,
-      stream: true,
-    });
-    // Stream Responses format
+    // Translate Responses SSE and meter actual emitted text.
     const reader = upstreamRes.body?.getReader();
-    if (!reader) return upstreamRes;
+    if (!reader) {
+      recordRequestUsage({
+        clientApiKeyId: c.get("managedApiKeyId") ?? null,
+        protocol: "responses",
+        model: targetModel,
+        provider: providerType,
+        status: 200,
+        latencyMs: Date.now() - startTime,
+        promptTokens,
+        completionTokens: 0,
+        savedTokens,
+        stream: true,
+      });
+      return upstreamRes;
+    }
     const decoder = new TextDecoder();
     const frames = responsesStreamFrames(targetModel);
 
     return streamSSE(c, async (stream) => {
       let buffer = "";
+      let completionText = "";
       let tokenCount = 0;
 
       try {
@@ -862,15 +967,28 @@ const handleResponses = async (c: any) => {
                 const parsed = JSON.parse(dataStr);
                 const deltaContent = parsed.choices?.[0]?.delta?.content;
                 if (deltaContent) {
-                  tokenCount++;
+                  completionText += deltaContent;
+                  tokenCount = estimateTokensFromText(completionText);
                   await stream.write(frames.delta(deltaContent));
                 }
               } catch {}
             }
           }
         }
-        await stream.write(frames.end(Math.max(tokenCount, 1)));
+        await stream.write(frames.end(tokenCount));
       } finally {
+        recordRequestUsage({
+          clientApiKeyId: c.get("managedApiKeyId") ?? null,
+          protocol: "responses",
+          model: targetModel,
+          provider: providerType,
+          status: 200,
+          latencyMs: Date.now() - startTime,
+          promptTokens,
+          completionTokens: estimateTokensFromText(completionText),
+          savedTokens,
+          stream: true,
+        });
         reader.releaseLock();
       }
     });
