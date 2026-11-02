@@ -138,23 +138,46 @@ const DEFAULT_CONFIG = {
 
 let currentConfig = { ...DEFAULT_CONFIG };
 
+function sanitizeConfig(input) {
+  const safe = { ...DEFAULT_CONFIG };
+  if (!input || typeof input !== "object" || Array.isArray(input)) return safe;
+  for (const [key, fallback] of Object.entries(DEFAULT_CONFIG)) {
+    const value = input[key];
+    if (typeof fallback === "boolean" && typeof value === "boolean") safe[key] = value;
+    else if (typeof fallback === "string" && typeof value === "string") {
+      const limit = key === "soulCustomContent" ? 100000 : key === "soulFilePath" ? 1024 : 256;
+      safe[key] = value.slice(0, limit);
+    } else if (typeof fallback === "number" && Number.isFinite(Number(value))) {
+      safe[key] = Math.min(5000, Math.max(1, Math.floor(Number(value))));
+    }
+  }
+  if (!["lite", "full", "ultra"].includes(safe.cavemanLevel)) safe.cavemanLevel = DEFAULT_CONFIG.cavemanLevel;
+  if (!["auto", "en", "id"].includes(safe.cavemanLang)) safe.cavemanLang = DEFAULT_CONFIG.cavemanLang;
+  if (!["lite", "full"].includes(safe.adhdLevel)) safe.adhdLevel = DEFAULT_CONFIG.adhdLevel;
+  if (!["auto", "preset", "custom"].includes(safe.soulMode)) safe.soulMode = DEFAULT_CONFIG.soulMode;
+  return safe;
+}
+
 function loadConfig() {
   const fromDb = dbGetSetting("tokensaver_config", null);
   if (fromDb && typeof fromDb === "object" && !Array.isArray(fromDb)) {
-    currentConfig = { ...DEFAULT_CONFIG, ...fromDb };
+    currentConfig = sanitizeConfig(fromDb);
+    if (JSON.stringify(currentConfig) !== JSON.stringify(fromDb)) {
+      dbSetSetting("tokensaver_config", currentConfig);
+    }
   }
   return currentConfig;
 }
 
 function saveConfig(updates) {
-  const nextConfig = { ...currentConfig, ...updates };
+  const patch = updates && typeof updates === "object" && !Array.isArray(updates) ? updates : {};
+  const nextConfig = sanitizeConfig({ ...currentConfig, ...patch });
   // SQLite is authoritative. Do not report a successful update when the
   // transaction failed to persist it.
   dbSetSetting("tokensaver_config", nextConfig);
   currentConfig = nextConfig;
   return currentConfig;
 }
-
 // Initialize on module load
 loadConfig();
 
