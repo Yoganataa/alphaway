@@ -20,6 +20,7 @@ const MAX_CONCURRENT_LOGIN_KDFS = 4;
 const MAX_QUEUED_LOGIN_KDFS = 16;
 let activeLoginKdfs = 0;
 const loginKdfWaiters: Array<() => void> = [];
+const inFlightLoginKeys = new Set<string>();
 
 function releaseLoginKdfSlot(): void {
   activeLoginKdfs = Math.max(0, activeLoginKdfs - 1);
@@ -254,11 +255,17 @@ export async function loginAdmin(
   const releaseSlot = await acquireLoginKdfSlot();
   if (!releaseSlot) return { error: "rate_limited" };
 
+  let ownsUsernameSlot = false;
   try {
     const now = Date.now();
     pruneFailedLogins(now);
     const currentAttempt = failedLogins.get(key);
     if (currentAttempt && currentAttempt.lockedUntil > now) return { error: "rate_limited" };
+    // Serialize password checks per username. Otherwise a burst of parallel
+    // guesses can all pass the throttle check before the first failure lands.
+    if (inFlightLoginKeys.has(key)) return { error: "rate_limited" };
+    inFlightLoginKeys.add(key);
+    ownsUsernameSlot = true;
 
     const db = getDatabase();
     const row = db.prepare(
@@ -301,6 +308,7 @@ export async function loginAdmin(
       sessionToken,
     };
   } finally {
+    if (ownsUsernameSlot) inFlightLoginKeys.delete(key);
     releaseSlot();
   }
 }
