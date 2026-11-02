@@ -256,6 +256,46 @@ describe("legacy JSON import", () => {
     expect(isEncryptedSecret(tokenSaverSource.trim())).toBe(true);
   }));
 
+  it("stops reading when a legacy JSON file grows beyond the import limit after fstat", () => withSandbox(false, ({ db, stateDir }) => {
+    const file = path.join(stateDir, "custom_providers.json");
+    writeJson(stateDir, "custom_providers.json", []);
+    const limit = 50 * 1024 * 1024;
+    const originalReadSync = (fs as any).readSync;
+    const mutableFs = fs as any;
+    let grew = false;
+
+    mutableFs.readSync = function (...args: any[]) {
+      if (!grew) {
+        grew = true;
+        fs.ftruncateSync(args[0], limit + 1);
+      }
+      return originalReadSync.apply(fs, args);
+    };
+
+    let reports;
+    try {
+      reports = importLegacyJson(db, stateDir, []);
+    } finally {
+      mutableFs.readSync = originalReadSync;
+    }
+
+    expect(grew).toBe(true);
+    expect(reports).toHaveLength(1);
+    expect(reports[0].status).toBe("skipped");
+    expect(reports[0].details).toContain("grew beyond");
+    expect(fs.statSync(file).size).toBe(limit + 1);
+
+    const fd = fs.openSync(file, "r");
+    const prefix = Buffer.alloc(2);
+    try {
+      expect(fs.readSync(fd, prefix, 0, prefix.length, 0)).toBe(2);
+    } finally {
+      fs.closeSync(fd);
+    }
+    expect(prefix.toString("utf8")).toBe("[]");
+    expect(db.prepare("SELECT COUNT(*) AS count FROM custom_providers").get().count).toBe(0);
+  }));
+
   it("refuses symlinked legacy JSON sources instead of reading through them", () => withSandbox(false, ({ db, stateDir }) => {
     const target = path.join(stateDir, "provider-data.json");
     const source = path.join(stateDir, "custom_providers.json");
