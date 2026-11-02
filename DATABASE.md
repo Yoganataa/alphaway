@@ -26,7 +26,9 @@ If \`DB_PATH\` names an existing directory, AlphaWay checks these layouts in ord
 3. \`9router.db\`
 4. AlphaWay compatibility file \`alphaway.sqlite\`
 
-Otherwise, \`DB_PATH\` is treated as the explicit database file path.
+Otherwise, \`DB_PATH\` is treated as the explicit database file path. The special value \`:memory:\` keeps Bun SQLite's in-memory database mode.
+
+When \`DB_PATH\` is overridden, AlphaWay stores encrypted migration and manual backups under \`backups/\` beside the configured database file; the encryption key remains under \`DATA_DIR/secret-encryption.key\`. Thus the default backup directory is \`$DATA_DIR/db/backups/\`, but an external \`DB_PATH\` relocates the backup directory with the database.
 
 ### Upgrade compatibility
 
@@ -90,7 +92,7 @@ Create a manual snapshot while AlphaWay is running:
 bun run db:backup
 \`\`\`
 
-The command prints the created path under \`$DATA_DIR/db/backups/\`. It uses the same \`ALPHAWAY_ENCRYPTION_KEY\` or \`$DATA_DIR/secret-encryption.key\` as encrypted credentials. Store the key and backup together in a protected backup location. Losing the key makes encrypted database backups and stored credentials unrecoverable.
+The command prints the created path under the configured database directory's \`backups/\` folder (default \`$DATA_DIR/db/backups/\`). It uses the same \`ALPHAWAY_ENCRYPTION_KEY\` or \`$DATA_DIR/secret-encryption.key\` as encrypted credentials. Store the key and backup together in a protected backup location. Losing the key makes encrypted database backups and stored credentials unrecoverable.
 
 Restore an encrypted snapshot only after stopping the AlphaWay service:
 
