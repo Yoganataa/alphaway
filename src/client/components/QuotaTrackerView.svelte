@@ -108,10 +108,10 @@
                 {/if}
               </td>
               <td class="py-3 pr-4 text-text-main tabular-nums">
-                {limitLabel(key.rateLimitRpm)} rpm
-                <p class="mt-0.5 text-text-muted">{limitLabel(key.rateLimitTpm)} prompt tpm</p>
+                {limitLabel(key.effectiveRpmLimit)} rpm
+                <p class="mt-0.5 text-text-muted">{limitLabel(key.effectiveTpmLimit)} prompt tpm</p>
               </td>
-              <td class="py-3 text-text-main tabular-nums">{limitLabel(key.concurrencyLimit)}</td>
+              <td class="py-3 text-text-main tabular-nums">{limitLabel(key.effectiveConcurrencyLimit)}</td>
             </tr>
           {/each}
           {#if loading}
