@@ -40,7 +40,7 @@ function readLockPid(lockPath: string): number {
 }
 
 /**
- * Hold the canonical AlphaWay PID file for the lifetime of the running server.
+ * Hold the canonical AlphaWay instance lock for the lifetime of the running server.
  * The same exclusive file creation is used by database restore, so service
  * startup and restore cannot pass their stopped/running checks concurrently.
  */
