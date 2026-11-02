@@ -45,6 +45,13 @@ jobs:
             echo "CodeQL alert API query failed; inspect the error artifact." > codeql-open-alerts-count.txt
           fi
 
+          if gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts" -f state=open -f ref=refs/heads/feat/phase-2-auth-admin-security -f per_page=100 > codeql-feature-open-alerts.json 2> codeql-feature-open-alerts-error.txt; then
+            jq '[.[] | select(.tool.name == "CodeQL")] | length' codeql-feature-open-alerts.json > codeql-feature-open-alerts-count.txt
+            jq -r '.[] | select(.tool.name == "CodeQL") | [.number, .rule.id, (.rule.security_severity_level // "none"), .most_recent_instance.location.path, .most_recent_instance.location.start_line, .html_url] | @tsv' codeql-feature-open-alerts.json > codeql-feature-open-alerts.tsv
+          else
+            echo "CodeQL feature branch alert API query failed; inspect the error artifact." > codeql-feature-open-alerts-count.txt
+          fi
+
       - name: Upload default-branch alert inventory
         uses: actions/upload-artifact@v4
         with:
@@ -54,6 +61,10 @@ jobs:
             codeql-open-alerts.tsv
             codeql-open-alerts-count.txt
             codeql-open-alerts-error.txt
+            codeql-feature-open-alerts.json
+            codeql-feature-open-alerts.tsv
+            codeql-feature-open-alerts-count.txt
+            codeql-feature-open-alerts-error.txt
           if-no-files-found: warn
           retention-days: 3
 
