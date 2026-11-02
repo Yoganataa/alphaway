@@ -35,12 +35,14 @@ describe("current AlphaWay installer and distribution contract", () => {
     expect(installer).toContain(".backup-app-");
   });
 
-  it("binds an empty .env DATA_DIR to BINDIR for manual starts", () => {
+  it("resolves and persists DATA_DIR for manual starts and managed services", () => {
     const installer = read("install.sh");
-    expect(installer).toContain('configured_data_dir=""');
-    expect(installer).toContain('DATA_DIR=*) configured_data_dir="${env_line#DATA_DIR=}" ;;');
-    expect(installer).toContain('printf \'DATA_DIR=%s\\n\' "$BINDIR"');
-    expect(installer).toContain('mv "$ENV_TMP" "$BINDIR/.env"');
+    expect(installer).toContain('configured_data_dir="${DATA_DIR:-}"');
+    expect(installer).toContain('DATA_DIR=*) env_file_data_dir="${env_line#DATA_DIR=}" ;;');
+    expect(installer).toContain('configured_data_dir="$BINDIR"');
+    expect(installer).toContain('printf \'\\nDATA_DIR=%s\\n\' "$configured_data_dir"');
+    expect(installer).toContain('export DATA_DIR');
+    expect(installer).toContain('chmod 700 "$DATA_DIR" "$DATA_DIR/db"');
   });
 
   it("validates TLS compatibility and the standalone binary before installation", () => {
