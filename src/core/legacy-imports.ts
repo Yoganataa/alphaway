@@ -471,7 +471,7 @@ function importSourceFile(
         sourceKey,
         status: "skipped",
         rowCount: 0,
-        details: `File exceeds the ${MAX_LEGACY_JSON_BYTES}-byte import limit.`,
+        details: `File exceeds the ${MAX_LEGACY_JSON_BYTES}-byte import limit. Import was skipped without parsing or replacing the source. Preserve it until a verified encrypted archive exists, then move it out of configured import directories; do not delete it before verifying the archive.`,
       };
     }
     raw = fs.readFileSync(sourceFd!, "utf8");
@@ -483,7 +483,7 @@ function importSourceFile(
       const secured = secureLegacyBackup(filePath, raw, sha256(raw), stat);
       const details = secured
         ? "Canonical SQLite data retained; legacy rollback copy encrypted in place."
-        : "Canonical SQLite data retained; legacy source changed during backup and remains owner-restricted plaintext."; 
+        : "Canonical SQLite data retained; legacy source changed during backup and remains owner-restricted plaintext. Preserve it until a verified encrypted archive exists, then move it out of configured import directories."; 
       db.prepare("UPDATE legacy_imports SET details = ? WHERE source_key = ?").run(details, sourceKey);
       return { sourceKey, status: "already-imported", rowCount: Number(prior.row_count || 0), details };
     }
