@@ -12,10 +12,12 @@ interface KeyWindowState {
   requests: number[];
   promptTokens: TokenEvent[];
   inFlight: number;
+  quotaReservedTokens: number;
+  quotaCommittedTokens: number;
   lastSeen: number;
 }
 
-export type PolicyLimitAxis = "rpm" | "tpm" | "concurrency" | "capacity";
+export type PolicyLimitAxis = "rpm" | "tpm" | "concurrency" | "token_quota" | "capacity";
 
 export interface PolicyGateResult {
   allowed: boolean;
@@ -23,9 +25,15 @@ export interface PolicyGateResult {
   retryAfterSeconds?: number;
   status?: 429 | 503;
   release: () => void;
+  settleQuota: (actualTokens: number) => void;
 }
 
 const noRelease = () => {};
+const noSettle = (_actualTokens: number) => {};
+
+function safePromptReservation(promptTokens: number): number {
+  return Number.isSafeInteger(promptTokens) ? Math.max(0, promptTokens) : 0;
+}
 
 function prune(state: KeyWindowState, now: number): void {
   const cutoff = now - WINDOW_MS;
@@ -52,11 +60,12 @@ class ManagedKeyRateLimiter {
   private readonly states = new Map<string, KeyWindowState>();
   private admittedSinceSweep = 0;
 
-  acquire(keyId: string, policy: EffectivePolicy, promptTokens: number, now = Date.now()): PolicyGateResult {
+  acquire(keyId: string, policy: EffectivePolicy, promptTokens: number, now = Date.now(), quotaReservationTokens = promptTokens): PolicyGateResult {
     const rpm = Math.max(0, Math.trunc(policy.rpmLimit || 0));
     const tpm = Math.max(0, Math.trunc(policy.tpmLimit || 0));
     const concurrency = Math.max(0, Math.trunc(policy.concurrencyLimit || 0));
-    if (!rpm && !tpm && !concurrency) return { allowed: true, release: noRelease };
+    const tokenQuota = Math.max(0, Math.trunc(policy.tokenQuota || 0));
+    if (!rpm && !tpm && !concurrency && !tokenQuota) return { allowed: true, release: noRelease, settleQuota: noSettle };
 
     let state = this.states.get(keyId);
     if (!state) {
@@ -64,11 +73,18 @@ class ManagedKeyRateLimiter {
       if (this.states.size >= MAX_KEY_STATES) {
         return { allowed: false, axis: "capacity", status: 503, retryAfterSeconds: 1, release: noRelease };
       }
-      state = { requests: [], promptTokens: [], inFlight: 0, lastSeen: now };
+      state = { requests: [], promptTokens: [], inFlight: 0, quotaReservedTokens: 0, quotaCommittedTokens: 0, lastSeen: now };
       this.states.set(keyId, state);
     }
     prune(state, now);
     state.lastSeen = now;
+    state.quotaCommittedTokens = Math.max(state.quotaCommittedTokens, Math.max(0, policy.totalTokensUsed || 0));
+    const safeQuotaReservation = Number.isSafeInteger(quotaReservationTokens)
+      ? Math.max(0, quotaReservationTokens)
+      : safePromptReservation(promptTokens);
+    if (tokenQuota > 0 && state.quotaCommittedTokens + state.quotaReservedTokens + safeQuotaReservation > tokenQuota) {
+      return { allowed: false, axis: "token_quota", status: 429, release: noRelease, settleQuota: noSettle };
+    }
 
     if (rpm > 0 && state.requests.length >= rpm) {
       return { allowed: false, axis: "rpm", status: 429, retryAfterSeconds: oldestRequestRetry(state, now), release: noRelease };
@@ -86,11 +102,26 @@ class ManagedKeyRateLimiter {
       return { allowed: false, axis: "concurrency", status: 429, retryAfterSeconds: 1, release: noRelease };
     }
 
+    if (tokenQuota > 0) state.quotaReservedTokens += safeQuotaReservation;
     if (rpm > 0) state.requests.push(now);
     if (tpm > 0 && safePromptTokens > 0) state.promptTokens.push({ at: now, tokens: safePromptTokens });
     if (concurrency > 0) state.inFlight += 1;
 
     let released = false;
+    let quotaSettledTokens = 0;
+    let quotaReservationSettled = false;
+    const settleQuota = (actualTokens: number) => {
+      if (tokenQuota <= 0) return;
+      const safeActual = Number.isSafeInteger(actualTokens) ? Math.max(0, actualTokens) : 0;
+      const nextActual = Math.max(quotaSettledTokens, safeActual);
+      if (!quotaReservationSettled) {
+        state!.quotaReservedTokens = Math.max(0, state!.quotaReservedTokens - safeQuotaReservation);
+        quotaReservationSettled = true;
+      }
+      state!.quotaCommittedTokens += nextActual - quotaSettledTokens;
+      quotaSettledTokens = nextActual;
+      state!.lastSeen = Date.now();
+    };
     const release = () => {
       if (released) return;
       released = true;
@@ -103,13 +134,13 @@ class ManagedKeyRateLimiter {
       this.admittedSinceSweep = 0;
       this.sweepExpired(Date.now());
     }
-    return { allowed: true, release };
+    return { allowed: true, release, settleQuota };
   }
 
   private sweepExpired(now: number): void {
     for (const [keyId, state] of this.states) {
       prune(state, now);
-      if (state.inFlight === 0 && state.requests.length === 0 && state.promptTokens.length === 0) {
+      if (state.inFlight === 0 && state.requests.length === 0 && state.promptTokens.length === 0 && state.quotaReservedTokens === 0) {
         this.states.delete(keyId);
       }
     }
@@ -133,9 +164,10 @@ export function acquireManagedKeyRequest(
   keyId: string,
   policy: EffectivePolicy,
   promptTokens: number,
-  now?: number
+  now?: number,
+  quotaReservationTokens?: number
 ): PolicyGateResult {
-  return limiter.acquire(keyId, policy, promptTokens, now);
+  return limiter.acquire(keyId, policy, promptTokens, now, quotaReservationTokens);
 }
 
 export function __clearManagedKeyRateLimiterForTests(): void {
