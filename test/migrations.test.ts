@@ -106,9 +106,13 @@ describe("SQLite migration runner", () => {
 
     expect(result).toEqual({
       currentVersion: 6,
-      applied: [{ version: 5, name: "remove-legacy-json-import-ledger" }],
+      applied: [
+        { version: 5, name: "remove-legacy-json-import-ledger" },
+        { version: 6, name: "plans-and-request-policy" },
+      ],
     });
     expect(ledger).toBeNull();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = ? AND name = ?").get("table", "plans")).toEqual({ name: "plans" });
     expect(provider).toEqual({ id: "sqlite-provider", name: "SQLite Provider" });
   });
 
