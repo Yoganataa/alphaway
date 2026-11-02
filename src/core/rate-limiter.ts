@@ -1,6 +1,5 @@
 import type { EffectivePolicy } from "./policy";
 
-const WINDOW_MS = 60_000;
 const MAX_KEY_STATES = 10_000;
 
 interface WindowBucket {
