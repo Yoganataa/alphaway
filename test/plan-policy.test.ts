@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { app } from "../src/app";
 import { adminHeaders, adminRequest } from "./helpers/admin";
-import { issueAPIKey, listAPIKeys, setAPIKeyPolicy } from "../src/core/api-keys";
+import { issueAPIKey, listAPIKeys, revokeAPIKey, setAPIKeyPolicy } from "../src/core/api-keys";
 import { recordRequestUsage } from "../src/core/usage-tracker";
 import { createPlan, deletePlan, listPlans } from "../src/core/plans";
 import { resolveEffectivePolicy, isModelAllowedByPolicy } from "../src/core/policy";
@@ -202,6 +202,39 @@ describe("Plan management and effective managed-key policy", () => {
     expect(listed.effectiveAllowedModels).toEqual(["metered-*"]);
   });
 
+
+  it("persists usage for an already-authenticated request after its key is revoked", () => {
+    const plan = createPlan({
+      name: "Revoked in-flight",
+      description: "",
+      rpmLimit: 0,
+      tpmLimit: 0,
+      concurrencyLimit: 1,
+      tokenQuota: 1000,
+      allowedModels: [],
+    });
+    const key = issueAPIKey("In-flight key");
+    setAPIKeyPolicy(key.record.id, { planId: plan.id });
+    expect(revokeAPIKey(key.record.id)).toBe(true);
+
+    recordRequestUsage({
+      protocol: "openai",
+      model: "gpt-test",
+      provider: "opencode",
+      status: 200,
+      latencyMs: 10,
+      promptTokens: 30,
+      completionTokens: 20,
+      clientApiKeyId: key.record.id,
+    });
+
+    const stored = getDatabase().prepare(
+      "SELECT status, total_tokens_used FROM api_keys WHERE id = ?"
+    ).get(key.record.id);
+    expect(stored.status).toBe("revoked");
+    expect(stored.total_tokens_used).toBe(50);
+  });
+
   it("keeps unassigned managed keys unrestricted and does not assign a default Plan", () => {
     const key = issueAPIKey("Unassigned");
     const policy = resolveEffectivePolicy(key.record.id)!;
@@ -249,6 +282,12 @@ describe("Plan management and effective managed-key policy", () => {
     });
     expect(responsesModel.status).toBe(403);
     expect((await responsesModel.json()).error.code).toBe("model_not_allowed");
+    const rejectedUsage = getDatabase().prepare(
+      "SELECT COUNT(*) AS count, SUM(total_tokens) AS tokens FROM request_logs WHERE client_api_key_id = ?"
+    ).get(modelKey.record.id);
+    expect(rejectedUsage.count).toBe(3);
+    expect(rejectedUsage.tokens).toBe(0);
+
 
     const quotaKey = issueAPIKey("Quota restricted");
     setAPIKeyPolicy(quotaKey.record.id, { tokenQuota: 1 });
