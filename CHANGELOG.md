@@ -49,7 +49,7 @@ First release of **AlphaWay — High-Performance Universal AI Gateway & Security
 #### 🗄️ Embedded SQLite Storage Engine
 - **Native Bun SQLite (`bun:sqlite`)**: High-performance, embedded ACID-compliant database (`alphaway.sqlite`) operating in WAL mode with indexed queries for request logs, custom provider configurations, and application settings.
 - **Zero-Dependency Architecture**: Leverages Bun's native SQLite C-bindings compiled statically into `alphaway.exe`.
-- **Automatic JSON Migration**: Transparently imports legacy `custom_providers.json`, `usage_stats.json`, and `tokensaver.json` into SQLite on initialization.
+- **SQLite-only persistence (current architecture)**: The former startup importer for `custom_providers.json`, `usage_stats.json`, and `tokensaver.json` was retired in Phase 2; standalone JSON configuration files are no longer imported.
 
 #### ⚡ Deployment & Packaging
 - **Single Self-Contained Executable**: Automated compilation into standalone native binaries (`alphaway.exe` / `alphaway`) without external Node.js or Bun dependencies.
