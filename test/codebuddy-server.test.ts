@@ -24,6 +24,13 @@ describe("CodeBuddy OAuth authorization URL validation", () => {
     expect(source).not.toMatch(/\b(?:exec|spawn|execFile)(?:Sync)?\s*\(/);
   });
 
+  it("does not log identity claims derived from the CodeBuddy credential", () => {
+    const source = fs.readFileSync(path.resolve(import.meta.dir, "../src/providers/codebuddy.ts"), "utf8");
+    expect(source).not.toContain("extractJwtSub(currentKey)");
+    expect(source).not.toContain("Token saat ini terdeteksi untuk user:");
+    expect(source).toContain("Credential CodeBuddy saat ini sudah dikonfigurasi.");
+  });
+
   it("rejects unsafe schemes, untrusted hosts, credentials, and nonstandard ports", () => {
     for (const value of [
       "javascript:alert(1)",
