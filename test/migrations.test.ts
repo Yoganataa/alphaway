@@ -26,7 +26,6 @@ describe("SQLite migration runner", () => {
         { version: 1, name: "initial-schema" },
         { version: 2, name: "auth-security" },
         { version: 3, name: "secret-residue-cleanup" },
-      { version: 4, name: "encrypt-legacy-codebuddy-credential" },
         { version: 4, name: "encrypt-legacy-codebuddy-credential" },
       ],
     });
@@ -52,6 +51,7 @@ describe("SQLite migration runner", () => {
       { version: 1, name: "initial-schema" },
       { version: 2, name: "auth-security" },
       { version: 3, name: "secret-residue-cleanup" },
+      { version: 4, name: "encrypt-legacy-codebuddy-credential" },
     ]);
     expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub").value).toBe(JSON.stringify("pending"));
   });
@@ -116,7 +116,7 @@ describe("SQLite migration runner", () => {
       .prepare("SELECT id, name, api_key FROM custom_providers WHERE id = ?")
       .get("legacy-provider");
 
-    expect(result.currentVersion).toBe(3);
+    expect(result.currentVersion).toBe(4);
     expect(row.id).toBe("legacy-provider");
     expect(row.name).toBe("Legacy");
     expect(row.api_key).toMatch(/^awenc:v1:/);
