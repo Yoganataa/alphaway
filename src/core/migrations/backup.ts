@@ -366,7 +366,7 @@ function pruneDatabaseBackupRetention(backupDir: string): void {
     return;
   }
 
-  candidates.sort((left, right) => right.modifiedAt - left.modifiedAt);
+  candidates.sort((left, right) => right.modifiedAt - left.modifiedAt || right.path.localeCompare(left.path));
   for (const candidate of candidates.slice(MAX_RETAINED_DATABASE_BACKUPS)) {
     try { fs.unlinkSync(candidate.path); } catch {}
   }
