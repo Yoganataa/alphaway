@@ -507,7 +507,7 @@ if [ "$BRIDGE_UP" != "1" ]; then
     system) warn "Inspect with: systemctl status alphaway && journalctl -u alphaway -n 80" ;;
     user) warn "Inspect with: systemctl --user status alphaway && journalctl --user -u alphaway -n 80" ;;
     launchd) warn "Inspect with: tail -n 80 $HOME/Library/Logs/alphaway.log" ;;
-    *) warn "Inspect with: tail -n 80 $BINDIR/alphaway.log" ;;
+    *) warn "Inspect with: tail -n 80 $DATA_DIR/alphaway.log" ;;
   esac
 
   # Restore the previous app when an upgrade fails its health check.
