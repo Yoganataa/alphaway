@@ -160,33 +160,30 @@ export function getDatabase(): any {
   }
 
   dbInstance = new Database(dbPath);
-  if (!isMemory && process.platform !== "win32") {
-    try {
+  try {
+    if (!isMemory && process.platform !== "win32") {
       fs.chmodSync(dbPath, 0o600);
-    } catch (error) {
-      try { dbInstance.close(); } catch {}
-      dbInstance = null;
-      throw new Error("Could not restrict SQLite database permissions to 0600: " + (error instanceof Error ? error.message : String(error)));
     }
-  }
 
-  // Match 9router-go's SQLite connection contract. Bun owns one synchronous
-  // connection per Database instance; the same per-connection PRAGMAs still
-  // apply to every operation performed by this process.
-  dbInstance.exec("PRAGMA busy_timeout = 5000;");
-  dbInstance.exec("PRAGMA foreign_keys = ON;");
-  dbInstance.exec("PRAGMA synchronous = NORMAL;");
-  dbInstance.exec("PRAGMA temp_store = MEMORY;");
-  dbInstance.exec("PRAGMA cache_size = -8000;");
-  if (!isMemory) {
-    dbInstance.exec("PRAGMA mmap_size = 30000000;");
-    dbInstance.exec("PRAGMA journal_mode = WAL;");
-    const journalMode = dbInstance.query("PRAGMA journal_mode;").get() as { journal_mode?: string };
-    if (String(journalMode?.journal_mode || "").toLowerCase() !== "wal") {
-      dbInstance.close();
-      dbInstance = null;
-      throw new Error("SQLite could not enable WAL journal mode");
+    // Match 9router-go's SQLite connection contract. Bun owns one synchronous
+    // connection per Database instance; these PRAGMAs apply to its operations.
+    dbInstance.exec("PRAGMA busy_timeout = 5000;");
+    dbInstance.exec("PRAGMA foreign_keys = ON;");
+    dbInstance.exec("PRAGMA synchronous = NORMAL;");
+    dbInstance.exec("PRAGMA temp_store = MEMORY;");
+    dbInstance.exec("PRAGMA cache_size = -8000;");
+    if (!isMemory) {
+      dbInstance.exec("PRAGMA mmap_size = 30000000;");
+      dbInstance.exec("PRAGMA journal_mode = WAL;");
+      const journalMode = dbInstance.query("PRAGMA journal_mode;").get() as { journal_mode?: string };
+      if (String(journalMode?.journal_mode || "").toLowerCase() !== "wal") {
+        throw new Error("SQLite could not enable WAL journal mode");
+      }
     }
+  } catch (error) {
+    try { dbInstance.close(); } catch {}
+    dbInstance = null;
+    throw new Error("Could not initialize the SQLite database safely: " + (error instanceof Error ? error.message : String(error)));
   }
 
   // 3. Apply versioned, transactional schema migrations. Existing tables are
