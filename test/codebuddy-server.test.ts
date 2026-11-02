@@ -206,20 +206,29 @@ describe("codebuddy server integration tests", () => {
     const previousStatus = mockResponseStatus;
     const previousBody = mockResponseBody;
     const previousSse = mockIsSSE;
+    const previousUrl = process.env.CODEBUDDY_INTL_URL;
+    const urlSecret = "codebuddy-url-secret +/= with spaces";
+    process.env.CODEBUDDY_INTL_URL = `http://127.0.0.1:${mockPort}/v2/chat/completions?token=${encodeURIComponent(urlSecret)}`;
     mockResponseStatus = 401;
     mockIsSSE = false;
-    mockResponseBody = JSON.stringify({ msg: "Rejected credential test-codebuddy-jwt-token" });
+    mockResponseBody = JSON.stringify({
+      msg: "Rejected credential test-codebuddy-jwt-token",
+      echoedUrlToken: encodeURIComponent(urlSecret),
+      echoedBearer: "Bearer test-codebuddy-jwt-token",
+    });
 
     try {
       const result = await codebuddy.testCodebuddyPing("test-codebuddy-jwt-token");
       expect(result.ok).toBe(false);
       expect(JSON.stringify(result)).not.toContain("test-codebuddy-jwt-token");
+      expect(JSON.stringify(result)).not.toContain(urlSecret);
+      expect(JSON.stringify(result)).not.toContain(encodeURIComponent(urlSecret));
       expect(result.raw).toBeUndefined();
       expect(JSON.stringify(result)).toContain("[REDACTED]");
     } finally {
       mockResponseStatus = previousStatus;
       mockResponseBody = previousBody;
-      mockIsSSE = previousSse;
+      mockIsSSE = previousSse;\n      if (previousUrl === undefined) delete process.env.CODEBUDDY_INTL_URL; else process.env.CODEBUDDY_INTL_URL = previousUrl;
     }
   });
 
