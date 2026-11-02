@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { deleteCookie, setCookie } from "hono/cookie";
-import { adminRequestError } from "../core/admin-guard";
+import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_TTL_SECONDS,
@@ -41,7 +41,13 @@ adminAuthRoute.get("/api/admin/auth/session", (c) => {
 adminAuthRoute.post("/api/admin/auth/bootstrap", async (c) => {
   const denied = originError(c);
   if (denied) return denied;
-  const body = await c.req.json().catch(() => null);
+  let body: any;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    const status = error?.statusCode === 413 ? 413 : 400;
+    return c.json({ error: status === 413 ? "Administrator auth request body is too large" : "A valid JSON object is required" }, status);
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return c.json({ error: "A JSON object is required" }, 400);
   }
@@ -64,7 +70,13 @@ adminAuthRoute.post("/api/admin/auth/bootstrap", async (c) => {
 adminAuthRoute.post("/api/admin/auth/login", async (c) => {
   const denied = originError(c);
   if (denied) return denied;
-  const body = await c.req.json().catch(() => null);
+  let body: any;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    const status = error?.statusCode === 413 ? 413 : 400;
+    return c.json({ error: status === 413 ? "Administrator auth request body is too large" : "A valid JSON object is required" }, status);
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return c.json({ error: "A JSON object is required" }, 400);
   }
