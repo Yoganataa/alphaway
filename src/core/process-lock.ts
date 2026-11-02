@@ -40,11 +40,7 @@ function readLockPid(lockPath: string): number {
 }
 
 function ensureLockDirectory(directory: string): string {
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const stat = fs.lstatSync(directory);
-  if (stat.isSymbolicLink() || !stat.isDirectory()) {
-    throw new Error("AlphaWay database lock directory must be a regular, non-symlink directory");
-  }
+  ensurePrivateDirectory(directory);
   return fs.realpathSync(directory);
 }
 
@@ -58,6 +54,10 @@ export function getAlphaWayDatabaseLockPath(databasePath: string = resolveDataba
   const realDirectory = ensureLockDirectory(path.dirname(absolutePath));
   let canonicalPath = path.join(realDirectory, path.basename(absolutePath));
   try {
+    const databaseStat = fs.lstatSync(absolutePath);
+    if (databaseStat.isSymbolicLink() || !databaseStat.isFile()) {
+      throw new Error("AlphaWay DB_PATH must resolve to a regular, non-symlink SQLite file");
+    }
     canonicalPath = fs.realpathSync(absolutePath);
   } catch (error: any) {
     if (error?.code !== "ENOENT") throw error;
