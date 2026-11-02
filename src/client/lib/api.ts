@@ -430,6 +430,14 @@ export interface DatabaseStats {
   sizeKb: number;
   requestLogsCount: number;
   customProvidersCount: number;
+  databaseSizeBytes?: number;
+  reclaimableBytes?: number;
+  walSizeBytes?: number;
+  pageCount?: number;
+  pageSize?: number;
+  freelistCount?: number;
+  journalMode?: string;
+  busyTimeoutMs?: number;
 }
 
 export async function fetchApiKeys(): Promise<APIKeyRecord[]> {
@@ -489,12 +497,12 @@ export async function clearConsoleLogs(): Promise<void> {
 }
 
 export async function fetchDatabaseStats(): Promise<DatabaseStats> {
-  const res = await fetch(`${BASE_URL}/api/settings/database`);
+  const res = await fetch(`${BASE_URL}/api/settings/database/stats`);
   if (!res.ok) throw new Error(`Failed to load database stats: ${res.statusText}`);
   return res.json();
 }
 
-export async function vacuumDatabase(): Promise<{ ok: boolean; message: string }> {
+export async function vacuumDatabase(): Promise<DatabaseStats & { ok: boolean; message: string }> {
   const res = await fetch(`${BASE_URL}/api/settings/database/vacuum`, {
     method: "POST",
   });
