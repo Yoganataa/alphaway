@@ -357,7 +357,7 @@ Type=simple
 WorkingDirectory="$APPDIR"
 Environment=PORT=$PORT
 Environment=HOST=$HOST
-Environment="ALPHAWAY_STATE_DIR=$BINDIR"
+Environment="DATA_DIR=$BINDIR"
 ExecStart="$APPDIR/alphaway"
 Restart=on-failure
 RestartSec=3
@@ -419,7 +419,7 @@ start_background() {
     setsid env PORT="$PORT" HOST="$HOST" DATA_DIR="$BINDIR" \
       "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
   else
-    nohup env PORT="$PORT" HOST="$HOST" ALPHAWAY_STATE_DIR="$BINDIR" \
+    nohup env PORT="$PORT" HOST="$HOST" DATA_DIR="$BINDIR" \
       "$APPDIR/alphaway" </dev/null >>"$log_file" 2>&1 &
   fi
   echo $! > "$BINDIR/alphaway.pid"
