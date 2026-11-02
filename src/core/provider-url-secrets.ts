@@ -31,7 +31,10 @@ export function redactCredentialEchoes(input: string, secrets: string[], maxLeng
     candidates.add(encodeURIComponent(secret));
     const token = secret.replace(/^Bearer\s+/i, "");
     candidates.add(token);
-    if (token) candidates.add("Bearer " + token);
+    if (token) {
+      candidates.add("Bearer " + token);
+      candidates.add("Bearer " + encodeURIComponent(token));
+    }
     try { candidates.add(decodeURIComponent(secret)); } catch {}
     try { candidates.add("Bearer " + decodeURIComponent(token)); } catch {}
   }
