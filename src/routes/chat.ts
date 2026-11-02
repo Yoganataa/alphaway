@@ -129,8 +129,10 @@ async function dispatchWithPolicy(
   isStream: boolean,
   promptTokens: number,
   protocol: GatewayProtocol,
+  provider: "opencode" | "codebuddy" | "custom",
   signal?: AbortSignal,
 ): Promise<Response> {
+  const startedAt = Date.now();
   const policy = c.get("effectivePolicy") as EffectivePolicy | null;
   if (!policy) return dispatchToUpstream(rawReq, body, targetModel, isStream, signal);
 
@@ -178,6 +180,19 @@ async function dispatchWithPolicy(
   } catch (error) {
     gate.release();
     gate.settleQuota(0, true);
+    try {
+      recordGatewayUsage(c, {
+        protocol,
+        model: targetModel,
+        provider,
+        status: 502,
+        latencyMs: Date.now() - startedAt,
+        promptTokens: 0,
+        completionTokens: 0,
+        savedTokens: 0,
+        stream: isStream,
+      });
+    } catch {}
     throw error;
   }
 }
@@ -656,7 +671,7 @@ const handleOpenAIChat = async (c: any) => {
   }
 
   const isStream = Boolean(body.stream);
-  const res = await dispatchWithPolicy(c, c.req.raw, body, targetModel, isStream, promptTokens, "openai", c.req.raw.signal);
+  const res = await dispatchWithPolicy(c, c.req.raw, body, targetModel, isStream, promptTokens, "openai", providerType, c.req.raw.signal);
 
   // Record Usage Telemetry
   if (!res.ok) {
@@ -766,7 +781,7 @@ const handleAnthropicMessages = async (c: any) => {
     : "opencode";
 
   const isStream = Boolean(body.stream);
-  const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "anthropic", c.req.raw.signal);
+  const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "anthropic", providerType, c.req.raw.signal);
 
   if (!upstreamRes.ok) {
     recordGatewayUsage(c, {
@@ -933,7 +948,7 @@ const handleResponses = async (c: any) => {
     : "opencode";
 
   const isStream = Boolean(body.stream);
-  const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "responses", c.req.raw.signal);
+  const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "responses", providerType, c.req.raw.signal);
 
   if (!upstreamRes.ok) {
     recordGatewayUsage(c, {
