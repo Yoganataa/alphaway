@@ -10,7 +10,7 @@ import {
   getCustomProvider,
   type CustomProvider,
 } from "../core/custom-providers";
-import { adminRequestError } from "../core/admin-guard";
+import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
 import { embeddedProviderUrlSecrets, hasEmbeddedProviderUrlSecrets, redactProviderBaseUrl, redactCredentialEchoes } from "../core/provider-url-secrets";
 
 function publicProvider(provider: CustomProvider) {
@@ -49,7 +49,10 @@ customProvidersRoute.get("/api/custom-providers", (c) => {
 // Create or update a custom provider
 customProvidersRoute.post("/api/custom-providers", async (c) => {
   try {
-    const body = await c.req.json();
+    const body = await readJsonRequestBody(c.req);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return c.json({ error: "A JSON object is required" }, 400);
+    }
     if (!body.name || !body.baseUrl) {
       return c.json({ error: "Provider 'name' and 'baseUrl' are required." }, 400);
     }
@@ -57,7 +60,8 @@ customProvidersRoute.post("/api/custom-providers", async (c) => {
     const saved = addOrUpdateCustomProvider(body);
     return c.json({ ok: true, provider: publicProvider(saved) });
   } catch (err: any) {
-    return c.json({ error: err.message || "Failed to save custom provider" }, 500);
+    const status = err?.statusCode === 413 ? 413 : 500;
+    return c.json({ error: status === 413 ? "Request body exceeds the 10 MiB limit" : err.message || "Failed to save custom provider" }, status);
   }
 });
 
@@ -74,7 +78,10 @@ customProvidersRoute.delete("/api/custom-providers/:id", (c) => {
 // Test connection to a custom provider
 customProvidersRoute.post("/api/custom-providers/test", async (c) => {
   try {
-    const body = await c.req.json();
+    const body = await readJsonRequestBody(c.req);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return c.json({ ok: false, error: "A JSON object is required" }, 400);
+    }
     const { baseUrl, apiKey, protocol, model } = body;
     const savedProvider = typeof body.id === "string" ? getCustomProvider(body.id) : undefined;
     if (!baseUrl) {
@@ -133,7 +140,10 @@ customProvidersRoute.post("/api/custom-providers/test", async (c) => {
       }
       return c.json({ ok: true, status: res.status, message: "OpenAI endpoint reachable!" });
     }
-  } catch {
+  } catch (err: any) {
+    if (err?.statusCode === 413) {
+      return c.json({ ok: false, error: "Request body exceeds the 10 MiB limit" }, 413);
+    }
     // Fetch errors may contain a URL with embedded credentials; never echo it.
     return c.json({ ok: false, error: "Connection failed. Verify the endpoint and credentials." }, 500);
   }
