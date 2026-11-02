@@ -268,7 +268,7 @@ export function rotateAPIKey(id: string): IssuedAPIKey | null {
       WHERE id = ? AND status = 'active'
     `).run(prefix, salt, digest(secret, salt).toString("hex"), Date.now(), id);
     if (Number(result.changes || 0)) {
-      const row = db.prepare("SELECT * FROM api_keys WHERE id = ?").get(id);
+      const row = getAPIKeyRecordRow(id);
       return { record: toRecord(row), secret };
     }
   }
