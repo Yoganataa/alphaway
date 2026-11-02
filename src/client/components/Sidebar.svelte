@@ -34,6 +34,7 @@
         { id: "providers", label: "Providers & Models", icon: "dns" },
         { id: "usage", label: "Usage & Analytics", icon: "monitoring" },
         { id: "quota", label: "Quota Tracker", icon: "speed" },
+        { id: "plans", label: "Plans", icon: "layers" },
       ],
     },
     {
