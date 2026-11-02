@@ -85,7 +85,7 @@ describe("AlphaWay SQLite Database Engine", () => {
     const schemaVersion = db
       .prepare("SELECT MAX(version) AS version FROM schema_migrations")
       .get()?.version;
-    expect(schemaVersion).toBe(3);
+    expect(schemaVersion).toBe(4);
 
     const secureDelete = db.prepare("PRAGMA secure_delete").get();
     expect(Number(secureDelete?.secure_delete)).toBe(1);
