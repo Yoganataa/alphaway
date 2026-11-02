@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { resolveDataDir, ensurePrivateDirectory } = require("../core/storage-paths");
+const { acquireAlphaWayProcessLock } = require("../core/process-lock");
 
 function getStateDir() {
   const dir = resolveDataDir();
@@ -163,19 +164,9 @@ function handleDaemonCli(port, host, publicUrl) {
     process.exit(0);
   }
 
-  // If this process IS the running daemon child, record PID and clean up on exit
-  if (process.env.__OC_DAEMON === "1") {
-    const pidFile = getPidFilePath();
-    try { fs.writeFileSync(pidFile, String(process.pid), "utf8"); } catch {}
-    process.on("exit", () => {
-      try {
-        if (fs.existsSync(pidFile)) {
-          const recorded = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
-          if (recorded === process.pid) fs.unlinkSync(pidFile);
-        }
-      } catch {}
-    });
-  }
+  // Every foreground, systemd/launchd, and daemon process holds the same
+  // exclusive data-directory lock. Database restore acquires this lock too.
+  acquireAlphaWayProcessLock();
 }
 
 module.exports = {
