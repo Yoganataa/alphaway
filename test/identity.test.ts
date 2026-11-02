@@ -628,6 +628,31 @@ describe("identity: self-healing on gate rejection", () => {
     assert.equal(calls.length, countAfterFirst, "must not re-fetch GitHub/catalog during 403 cooldown");
   });
 
+  it("places the default identity catalog cache under DATA_DIR", () => {
+    const fs = require("node:fs");
+    const os = require("node:os");
+    const path = require("node:path");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "alphaway-identity-cache-"));
+    const previousDataDir = process.env.DATA_DIR;
+    const previousCacheDir = process.env.OPENCODE_CACHE_DIR;
+    delete process.env.OPENCODE_CACHE_DIR;
+    process.env.DATA_DIR = tmpDir;
+    try {
+      const sha = "d4a6223d017e17f1beaa91d3e6ecc6511c5132ad";
+      const extracted = { sessionPrefix: "ses_", tools: identity.DEFAULT_TOOLS };
+      identity.writeCachedSource(sha, extracted);
+      const cachePath = path.join(tmpDir, "cache", "source-recipe.json");
+      assert.equal(fs.existsSync(cachePath), true);
+      assert.equal(identity.readCachedSource(sha)?.ref, sha);
+    } finally {
+      if (previousDataDir === undefined) delete process.env.DATA_DIR;
+      else process.env.DATA_DIR = previousDataDir;
+      if (previousCacheDir === undefined) delete process.env.OPENCODE_CACHE_DIR;
+      else process.env.OPENCODE_CACHE_DIR = previousCacheDir;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("memoizes extracted source by release SHA on forced refresh and persists source-recipe.json to disk", async () => {
     const fs = require("node:fs");
     const os = require("node:os");
