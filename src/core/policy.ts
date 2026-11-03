@@ -14,13 +14,20 @@ export interface EffectivePolicy {
 }
 
 function parseModels(raw: unknown): string[] {
-  if (typeof raw !== "string" || !raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? normalizeAllowedModels(parsed) : [];
-  } catch {
-    return [];
+  if (raw === null || raw === undefined || raw === "") return [];
+  if (typeof raw !== "string") {
+    throw new Error("Stored model policy is not a JSON string");
   }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Stored model policy contains invalid JSON");
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("Stored model policy must be an array");
+  }
+  return normalizeAllowedModels(parsed);
 }
 
 /**
