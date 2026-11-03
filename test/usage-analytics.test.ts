@@ -150,6 +150,7 @@ describe("Usage and Token Analytics Engine", () => {
     });
 
     const to = new Date(Date.now() + 1_000).toISOString();
+    expect(() => dbGetManagedKeyUsageWindow(to, from)).toThrow("Usage window boundaries must be ordered canonical ISO-8601 timestamps");
     const rows = dbGetManagedKeyUsageWindow(from, to);
     expect(rows).toContainEqual({
       clientApiKeyId: key.record.id,
