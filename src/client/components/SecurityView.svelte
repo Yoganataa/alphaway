@@ -11,6 +11,7 @@
     updateTokenSaverConfig,
     fetchSecurityRules,
     saveSecurityRules,
+    inspectSecurityPrompt,
     type SecurityKeywordRule,
     type TokenSaverConfig,
   } from "../lib/api";
@@ -97,51 +98,37 @@
     }
   }
 
-  function runSecurityTest() {
-    let text = sandboxInput;
-    const found: string[] = [];
-
-    // 1. DLP API Keys
-    if (config.maskSecrets) {
-      if (/\bsk-[A-Za-z0-9_\-]{15,}\b/.test(text)) {
-        found.push("DLP: Secret API Key Redacted");
-        text = text.replace(/\bsk-[A-Za-z0-9_\-]{15,}\b/g, "[REDACTED_API_KEY]");
-      }
-      if (/\bAKIA[0-9A-Z]{16}\b/.test(text)) {
-        found.push("DLP: AWS Access Key Redacted");
-        text = text.replace(/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED_AWS_KEY]");
-      }
-      if (/-----BEGIN [A-Z0-9\s]+PRIVATE KEY-----/i.test(text)) {
-        found.push("DLP: SSH/RSA Private Key Redacted");
-        text = text.replace(/-----BEGIN [A-Z0-9\s]+PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9\s]+PRIVATE KEY-----|$)/gi, "[REDACTED_PRIVATE_KEY]");
-      }
+  async function handleToggleRule(id: string, enabled: boolean) {
+    try {
+      rules = await saveSecurityRules(rules.map((rule) =>
+        rule.id === id ? { ...rule, enabled } : rule
+      ));
+      notifications.success(enabled ? "Security rule enabled" : "Security rule disabled");
+      runSecurityTest();
+    } catch (error) {
+      notifications.error(error instanceof Error ? error.message : "Failed to update security rule");
     }
+  }
 
-    // 2. Anti-Infostealer: Browser Cookies & DPAPI
-    if (/\\Chrome\\User Data\\|\\Edge\\User Data\\|\\Cookies|Login Data/i.test(text)) {
-      found.push("Anti-Infostealer: Browser Credential Vault Access Blocked");
-      text = text.replace(/[a-zA-Z]:\\Users\\[^\s\\"'`]+(\\.*(?:Cookies|Login Data|Web Data))/gi, "[BLOCKED_BY_ANTI_INFOSTEALER: Browser Database Trap]");
+  let previewSequence = 0;
+
+  async function runSecurityTest() {
+    const sequence = ++previewSequence;
+    try {
+      const result = await inspectSecurityPrompt(sandboxInput);
+      if (sequence !== previewSequence) return;
+      sandboxOutput = result.output;
+      detections = [
+        ...(result.blocked ? [`BLOCKED: ${result.blocked.id}`] : []),
+        ...result.maskedRuleIds.map((id) => `MASKED: ${id}`),
+      ];
+      if (detections.length === 0) detections = ["No custom Security Rule matched"];
+    } catch (error) {
+      if (sequence !== previewSequence) return;
+      sandboxOutput = "";
+      detections = ["Security inspection unavailable"];
+      notifications.error(error instanceof Error ? error.message : "Security inspection failed");
     }
-
-    // 3. User Path Anonymization
-    if (config.maskPaths) {
-      if (/[a-zA-Z]:\\Users\\[^\s\\"'`]+/i.test(text) || /\/(?:home|Users)\/[^\s\/"'`]+/i.test(text)) {
-        found.push("DLP: OS Username & Home Path Anonymized");
-        text = text.replace(/[a-zA-Z]:\\Users\\[^\s\\"'`]+(\\.*)?/gi, "/workspace$1");
-        text = text.replace(/\/(?:home|Users)\/[^\s\/"'`]+(\/.*)?/gi, "/workspace$1");
-      }
-    }
-
-    // 4. Anti-Exfiltration Images
-    if (config.sanitizeMarkdownImages) {
-      if (/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/.test(text)) {
-        found.push("DLP: Markdown Exfiltration URL Neutralized");
-        text = text.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/gi, "[External image link neutralized: $1]($2)");
-      }
-    }
-
-    sandboxOutput = text;
-    detections = found;
   }
 </script>
 
@@ -268,7 +255,7 @@
           <span>Security Sandbox & DLP Inspector</span>
         </h3>
         <p class="text-xs text-text-muted">
-          Test sample payloads against active DLP filters and Anti-Infostealer defense in real-time.
+          Test sample payloads against the same custom literal rules used by live outbound and inbound traffic.
         </p>
       </div>
 
@@ -297,7 +284,7 @@
       <!-- Output -->
       <div class="space-y-1.5">
         <label for="sandbox-sec-output" class="text-xs font-semibold text-text-muted flex items-center justify-between">
-          <span>Upstream Transmitted Payload</span>
+          <span>Sanitized Preview</span>
           <span class="text-[10px] font-mono text-emerald-400">Sanitized & Guarded</span>
         </label>
         <textarea
@@ -329,7 +316,7 @@
   <Card padding="none" elev class="overflow-hidden border-border-subtle">
     <div class="p-4 border-b border-border-subtle flex items-center justify-between bg-surface-2/40">
       <h3 class="text-sm font-bold text-text-main">Active Keyword Rules & Guardrail Patterns</h3>
-      <span class="text-xs text-text-muted font-mono">{rules.length} Active Rules</span>
+      <span class="text-xs text-text-muted font-mono">{rules.filter((rule) => rule.enabled).length} / {rules.length} enabled</span>
     </div>
 
     <div class="overflow-x-auto">
@@ -339,6 +326,7 @@
             <th class="px-5 py-3 font-semibold font-sans">Pattern / Signature</th>
             <th class="px-5 py-3 font-semibold font-sans">Description</th>
             <th class="px-5 py-3 font-semibold font-sans">Action</th>
+            <th class="px-5 py-3 font-semibold font-sans">Enabled</th>
             <th class="px-5 py-3 font-semibold font-sans text-right">Remove</th>
           </tr>
         </thead>
@@ -355,6 +343,12 @@
                 <Badge tone={r.action === 'block' ? 'error' : 'primary'} size="sm">
                   {r.action.toUpperCase()}
                 </Badge>
+              </td>
+              <td class="px-5 py-3.5 font-sans">
+                <Toggle
+                  checked={r.enabled}
+                  onchange={(enabled) => handleToggleRule(r.id, enabled)}
+                />
               </td>
               <td class="px-5 py-3.5 text-right font-sans">
                 <Button
@@ -388,12 +382,12 @@
     }}
   >
     <div class="space-y-1.5">
-      <label for="pattern-input" class="text-xs font-semibold text-text-muted">Target Pattern or Keyword</label>
+      <label for="pattern-input" class="text-xs font-semibold text-text-muted">Literal Keyword (case-insensitive)</label>
       <input
         id="pattern-input"
         type="text"
         bind:value={newPattern}
-        placeholder="e.g. internal_corp_secret or [A-Z0-9]{20}"
+        placeholder="e.g. internal_corp_secret"
         class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono focus:outline-hidden focus:border-brand-500"
         required
       />

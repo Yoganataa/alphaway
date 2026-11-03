@@ -135,13 +135,13 @@
       },
     },
     {
-      id: "soul",
-      label: "Soul Studio",
-      description: "Universal persona engine, SOUL.md editor, and live sandbox",
-      icon: "auto_awesome",
+      id: "persona",
+      label: "Persona",
+      description: "Model-bound prompt presets, exact bindings, keyword rules, and SOUL Studio",
+      icon: "masks",
       category: "Navigation",
       action: () => {
-        onNavigate?.("soul");
+        onNavigate?.("persona");
         isOpen = false;
       },
     },

@@ -1,3 +1,29 @@
+export interface PersonaKeyword {
+  text: string;
+  mode?: "word" | "partial";
+}
+
+export interface PersonaPreset {
+  id: string;
+  name: string;
+  prompt: string;
+  kind: string;
+  source: string;
+  keywords: PersonaKeyword[];
+  excludes: PersonaKeyword[];
+  order: number;
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonaModelBinding {
+  modelId: string;
+  enabled: boolean;
+  presetId: string | null;
+  updatedAt: string;
+}
+
 export interface SoulInfoResponse {
   ok: boolean;
   enabled: boolean;

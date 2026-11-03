@@ -111,6 +111,138 @@ export async function saveSecurityRules(
   return data.rules || [];
 }
 
+export interface PersonaKeyword {
+  text: string;
+  mode?: "word" | "partial";
+}
+
+export interface PersonaPreset {
+  id: string;
+  name: string;
+  prompt: string;
+  kind: string;
+  source: string;
+  keywords: PersonaKeyword[];
+  excludes: PersonaKeyword[];
+  order: number;
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonaModelBinding {
+  modelId: string;
+  enabled: boolean;
+  presetId: string | null;
+  updatedAt: string;
+}
+
+export interface PersonaResolution {
+  injected: boolean;
+  reason: string;
+  presetId?: string;
+  presetName?: string;
+  prompt?: string;
+  keyword?: string;
+  matchedModelId?: string;
+  detail: string;
+}
+
+async function personaRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${BASE_URL}/api/persona${path}`, init);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || `Persona request failed: ${response.statusText}`);
+  return data as T;
+}
+
+export async function fetchPersonaState(): Promise<{
+  presets: PersonaPreset[];
+  bindings: PersonaModelBinding[];
+  excludes: PersonaKeyword[];
+}> {
+  const data = await personaRequest<{ presets: PersonaPreset[]; bindings: PersonaModelBinding[]; excludes: PersonaKeyword[] }>("");
+  return { presets: data.presets || [], bindings: data.bindings || [], excludes: data.excludes || [] };
+}
+
+export async function savePersonaPreset(preset: Partial<PersonaPreset> & Pick<PersonaPreset, "id" | "name" | "prompt">): Promise<PersonaPreset> {
+  const data = await personaRequest<{ preset: PersonaPreset }>("/presets", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ preset }),
+  });
+  return data.preset;
+}
+
+export async function deletePersonaPreset(id: string): Promise<void> {
+  await personaRequest("/presets/" + encodeURIComponent(id), { method: "DELETE" });
+}
+
+export async function setPersonaModelBinding(binding: {
+  modelId: string;
+  enabled: boolean;
+  presetId: string | null;
+}): Promise<PersonaModelBinding> {
+  const data = await personaRequest<{ binding: PersonaModelBinding }>("/models", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(binding),
+  });
+  return data.binding;
+}
+
+export async function deletePersonaModelBinding(modelId: string): Promise<void> {
+  await personaRequest("/models", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelId }),
+  });
+}
+
+export async function savePersonaGlobalExcludes(excludes: PersonaKeyword[]): Promise<PersonaKeyword[]> {
+  const data = await personaRequest<{ excludes: PersonaKeyword[] }>("/excludes", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ excludes }),
+  });
+  return data.excludes || [];
+}
+
+export async function resolvePersona(modelIds: string[]): Promise<PersonaResolution> {
+  const data = await personaRequest<{ resolution: PersonaResolution }>("/resolve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelIds }),
+  });
+  return data.resolution;
+}
+
+export async function previewPersona(modelIds: string[], messages: any[]): Promise<{
+  resolution: PersonaResolution;
+  messages: any[];
+}> {
+  return personaRequest<{ resolution: PersonaResolution; messages: any[] }>("/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelIds, messages }),
+  });
+}
+
+export async function inspectSecurityPrompt(text: string): Promise<{
+  ok: boolean;
+  output: string;
+  blocked: { id: string; pattern: string; action: "block"; description: string } | null;
+  maskedRuleIds: string[];
+}> {
+  const response = await fetch(`${BASE_URL}/api/security/inspect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || `Security inspection failed: ${response.statusText}`);
+  return data;
+}
+
 export async function fetchSoulConfig(): Promise<SoulInfoResponse> {
   const res = await fetch(`${BASE_URL}/api/soul`);
   if (!res.ok) throw new Error(`Fetch soul failed: ${res.statusText}`);

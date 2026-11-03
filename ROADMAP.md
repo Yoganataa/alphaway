@@ -92,7 +92,8 @@
 
 ### Phase 3 — Plans, Limits, and Request Enforcement
 
-**Status:** Phase 3 implementation and acceptance tests are complete on [PR #6 — Plans, limits, and request enforcement](https://github.com/Yoganataa/alphaway/pull/6); PR is **Ready for review** and has not been merged. Latest verified implementation code head: `a6e1d2e4da00279d0945c4697e6e9b7d4b5ce3db`; Phase 3 base `main`: `a28ed9baef0c698ec879d649a24726706d1eee3d`. CI #41602464606 and PR CodeQL #41602459053 passed on that exact code head. All four mandatory CI jobs and both CodeQL analyzers passed; the optional live upstream drill was skipped by design. Both P2 review findings remain resolved. The owner-supplied GitHub Security screenshot (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed** alerts on `main`.
+**Status:** Phase 3 is **merged** via PR [#6 — Plans, limits, and request enforcement](https://github.com/Yoganataa/alphaway/pull/6), merge commit `145230a69c0b9295a0ac8ee3966aa669196094fa`. Post-merge CI [#41719318611](https://github.com/Yoganataa/alphaway/actions/runs/41719318611) passed all four mandatory jobs; optional live upstream drill skipped by design. Post-merge CodeQL [#41719315494](https://github.com/Yoganataa/alphaway/actions/runs/41719315494) passed both JavaScript/TypeScript and Actions analyzers.  
+**Priority:** P1 — security-critical
 
 **Goal:** Add enforceable, reusable policy tiers for managed AlphaWay API keys without changing legacy environment-key behavior or the OpenAI/Anthropic/Codex protocol contracts. Keep one effective-policy resolver as the only source of truth for key-scoped model access, rate limits, concurrency, and token allowances.
 
@@ -149,7 +150,7 @@
 - [x] Dashboard browser tests cover Plan create/edit/delete, key assignment, inherited Plan quota display, and selectable usage windows.
 - [x] CI #41602464606 passed on exact implementation code head `a6e1d2e`: Bun 1.4.4 frozen install, unit/protocol tests (including non-streaming tool-call fallback, authoritative zero-usage, and missing-usage estimator regressions), fingerprint check, dashboard E2E, UI/standalone build, and installer/embedded dashboard smoke. All four mandatory jobs succeeded; the optional live upstream drill was skipped by design. PR CodeQL #41602459053 passed both JavaScript/TypeScript and Actions analyzers on the same code head.
 
-**Current implementation boundary (PR #6):** All Phase 3 acceptance criteria in 3.1–3.5 are implemented and verified. PR #6 is Ready for review; both latest P2 inline review threads are resolved; merge remains a separate maintainer decision. RPM, prompt TPM, and in-flight concurrency state are process-local and reset on restart; lifetime token totals and completed-request usage windows are persisted in SQLite. OpenAI streaming metering counts visible text and tool/function-call names and arguments, preferring valid final provider usage where present. Non-streaming OpenAI Chat, Anthropic Messages, and Responses share a usage resolver that preserves valid provider zero values and falls back to the AlphaWay estimator across visible text, reasoning, refusal, and tool/function-call payloads; legacy translator placeholder counts are not used for quota settlement. The text estimator remains fallback only and is not a billing-grade tokenizer. Managed keys with nonzero TPM/token quota fail closed on non-text prompt parts the current estimator cannot safely measure. No USD spend budget, period rollover, provider quota probing, or queueing is implemented.
+**Current implementation boundary (PR #6):** All Phase 3 acceptance criteria in 3.1–3.5 are implemented, verified, and merged into `main` at `145230a69c0b9295a0ac8ee3966aa669196094fa`. Post-merge CI [#41719318611](https://github.com/Yoganataa/alphaway/actions/runs/41719318611) passed all four mandatory jobs; optional live upstream drill skipped by design. Post-merge CodeQL [#41719315494](https://github.com/Yoganataa/alphaway/actions/runs/41719315494) passed JavaScript/TypeScript and Actions analyzers. RPM, prompt TPM, and in-flight concurrency state are process-local and reset on restart; lifetime token totals and completed-request usage windows are persisted in SQLite. OpenAI streaming metering counts visible text and tool/function-call names and arguments, preferring valid final provider usage where present. Non-streaming OpenAI Chat, Anthropic Messages, and Responses share a usage resolver that preserves valid provider zero values and falls back to the AlphaWay estimator across visible text, reasoning, refusal, and tool/function-call payloads; legacy translator placeholder counts are not used for quota settlement. The text estimator remains fallback only and is not a billing-grade tokenizer. Managed keys with nonzero TPM/token quota fail closed on non-text prompt parts the current estimator cannot safely measure. No USD spend budget, period rollover, provider quota probing, or queueing is implemented.
 
 **Out of scope / deferred**
 - Provider-specific quota probing unless an upstream API provides authoritative quota values.
@@ -161,4 +162,54 @@
 - Windows ACL verification remains Phase 7.
 
 **Reference:** 9router-go policy resolver, Plans CRUD, and per-key limiter are behavioral references only. Adapt all persistence and execution to AlphaWay's Bun/TypeScript/Hono/SQLite architecture.
+
+### Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules
+
+**Status:** implementation in progress on `feat/phase-4-persona-security`, PR [#7](https://github.com/Yoganataa/alphaway/pull/7). Not merged. Phase 4 CI/CodeQL verification and project-owner merge decision are pending.  
+**Priority:** P1 — prompt policy and data-loss prevention
+
+**Goal:** add first-class, opt-in model-bound Persona presets and make persisted Security Rules enforceable in live gateway traffic. Preserve the existing global SOUL.md engine and adapt reference behavior from 9router-go to AlphaWay's Bun/TypeScript/Hono/SQLite architecture.
+
+**Design boundaries**
+- SQLite remains the only canonical persistence store. Migration v7 normalizes Persona presets, include/exclude keyword rules, exact model bindings, global exclusions, and Security Rules.
+- Persona injection is off unless an exact binding or an include-keyword rule matches. Global excludes win over every binding; exact bindings outrank keywords and remain authoritative even when the bound prompt is empty; preset excludes then deny an otherwise matching preset.
+- Keyword matching supports `word` (model-ID delimiter boundary) and `partial` (substring). Longer matching keywords win; ties resolve by preset ID for deterministic behavior. User-controlled regex is intentionally unsupported.
+- Existing SOUL.md behavior remains global and unchanged. SOUL Studio becomes an inner section of the Persona view.
+- Security Rule patterns are printable literal strings, case-insensitive, bounded to 100 rules and 128 characters each. `mask` replaces matching text; `block` rejects outbound prompts with HTTP 403 before upstream dispatch. Rules are rechecked after SOUL/Persona injection. Inbound provider text passes through the same custom rules plus the existing built-in sanitizer.
+- Security Rule preview calls the same backend engine used by runtime requests. Security Rules remain separate from the legacy TokenSaver DLP toggles.
+- Remote URL/repository imports and prompt file uploads are excluded from this phase. They need a separate SSRF-safe import and file-validation design.
+
+**4.1 — SQLite model and migration**
+- [x] Add additive migration v7 for Persona presets, preset keyword include/excludes, exact model bindings, global excludes, and normalized Security Rules.
+- [x] Migrate legacy `app_settings.security_rules` records into the normalized table and delete the old setting only inside the migration. Preserve an explicitly empty legacy rule list; seed safe defaults only when no usable legacy list exists.
+- [x] Keep foreign-key behavior so deleting a Persona preset removes its dependent binding and keyword rows.
+
+**4.2 — Persona preset library and resolver**
+- [x] Add administrator-session-protected preset CRUD, exact model binding CRUD, global excludes CRUD, resolver endpoint, and dry preview endpoint.
+- [x] Implement exact binding, word/partial keyword include rules, per-preset excludes, global excludes, and deterministic precedence.
+- [x] Inject resolved Persona prompts after model resolution for OpenAI Chat, Anthropic Messages, and Codex Responses, including legacy aliases.
+- [x] Recheck final transformed prompts after SOUL/Persona injection so custom Security Rules also cover generated system instructions.
+- [x] Keep the existing SOUL engine, SOUL route, and Soul Studio implementation; move its dashboard entry under Persona rather than rebuilding it.
+
+**4.3 — Live Security Rules**
+- [x] Replace legacy JSON-in-app_settings rule storage with normalized SQLite CRUD and admin-protected APIs.
+- [x] Validate rule IDs, uniqueness, bounded pattern/description lengths, actions, and enabled state. Do not execute user-supplied regular expressions.
+- [x] Apply mask/block rules to outbound textual content before provider dispatch; return a protocol-shaped 403 on a block and record the rejected request with zero tokens.
+- [x] Re-run custom rules after TokenSaver/Persona/SOUL injection. Run built-in DLP after generated prompts are composed so secrets in SOUL/Persona prompts are also masked.
+- [x] Apply custom rules to inbound provider text alongside the existing built-in response sanitizer.
+- [x] Add a backend inspection endpoint and connect the Security dashboard sandbox to the same runtime matcher; allow individual rules to be enabled/disabled.
+
+**4.4 — Dashboard and regression coverage**
+- [x] Add Persona navigation with preset editor, exact model bindings, global exclusions, resolver preview, and a SOUL Studio inner tab.
+- [x] Add Security Rule enabled-state controls and backend-backed preview.
+- [x] Add unit/API/migration regression tests for Persona precedence/injection, generated-prompt DLP, Security Rules validation, mask/block, Unicode text matching, legacy settings import, intentional empty legacy rules, and disabled rules.
+- [ ] Pass Bun 1.4.4 frozen install, unit/protocol CI, dashboard browser tests, UI/standalone build, installer smoke, and both CodeQL analyzers on the final PR head.
+
+**Known limitations / deferred**
+- No URL/repository/file import for Persona presets. Do not fetch arbitrary user-supplied URLs without an explicit SSRF-safe importer design.
+- Inbound custom Security Rules are applied to provider text segments as current stream translators emit them. A literal split across separate SSE delta boundaries is not guaranteed to match; add a buffered streaming sanitizer before claiming cross-delta coverage.
+- Model IDs are entered explicitly; model catalog auto-completion and batch binding are deferred.
+- Windows ACL verification remains Phase 7.
+
+**Reference:** 9router-go Persona/Jailbreak preset resolution and UI are behavioral references only. Do not port Go types, repositories, HTTP handlers, or persistence; retain AlphaWay's native SQLite and Bun/Hono runtime.
 
