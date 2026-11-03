@@ -6,6 +6,7 @@ const VERSION = pkg.version;
 const tokensaver = require("../src/features/tokensaver");
 const { issueAPIKey } = require("../src/core/api-keys");
 const { getDatabase } = require("../src/core/database");
+const { DEFAULT_SECURITY_RULES, replaceSecurityRules } = require("../src/core/security-rules");
 const opencode = require("../src/providers/opencode");
 const identity = opencode.identity;
 const {
@@ -111,6 +112,7 @@ describe("server unit & integration tests", () => {
   beforeEach(() => {
     sessionCache.clear();
     tokensaver.saveConfig(tokensaver.DEFAULT_CONFIG);
+    replaceSecurityRules(DEFAULT_SECURITY_RULES);
   });
 
   it("keeps VERSION synced with package.json", () => {
@@ -429,6 +431,60 @@ describe("server unit & integration tests", () => {
       const rBadJson = await httpRequest(port, "POST", "/v1/chat/completions", "{bad json");
       assert.equal(rBadJson.status, 400);
       assert.equal(rBadJson.body.error.code, "invalid_json");
+    });
+
+    it("blocks configured Security Rules before upstream dispatch across all gateway protocols and records zero-token usage", async () => {
+      const model = "phase4-security-block-model";
+      let upstreamCalls = 0;
+      mockFetchImpl = async () => {
+        upstreamCalls += 1;
+        throw new Error("Security Rule block must prevent upstream dispatch");
+      };
+      replaceSecurityRules([
+        {
+          id: "block-marker",
+          pattern: "forbidden_marker",
+          action: "block",
+          description: "Block the Phase 4 integration marker",
+          enabled: true,
+        },
+      ]);
+
+      const chat = await httpRequest(port, "POST", "/v1/chat/completions", {
+        model,
+        messages: [{ role: "user", content: "FORBIDDEN_MARKER" }],
+      });
+      assert.equal(chat.status, 403);
+      assert.equal(chat.body.error.code, "security_rule_blocked");
+
+      const anthropic = await httpRequest(port, "POST", "/v1/messages", {
+        model,
+        max_tokens: 64,
+        messages: [{ role: "user", content: "forbidden_marker" }],
+      }, { "anthropic-version": "2023-06-01" });
+      assert.equal(anthropic.status, 403);
+      assert.equal(anthropic.body.error.code, "security_rule_blocked");
+
+      const responses = await httpRequest(port, "POST", "/v1/responses", {
+        model,
+        input: "forbidden_marker",
+      });
+      assert.equal(responses.status, 403);
+      assert.equal(responses.body.error.code, "security_rule_blocked");
+
+      assert.equal(upstreamCalls, 0, "a blocked request must not fetch an upstream provider");
+      const rows = getDatabase().prepare(`
+        SELECT protocol, status, prompt_tokens, completion_tokens, total_tokens
+        FROM request_logs WHERE model = ? ORDER BY timestamp ASC
+      `).all(model);
+      assert.equal(rows.length, 3, "each blocked client request must have one usage record");
+      assert.deepEqual(rows.map((row) => row.protocol).sort(), ["anthropic", "openai", "responses"]);
+      for (const row of rows) {
+        assert.equal(row.status, 403);
+        assert.equal(row.prompt_tokens, 0);
+        assert.equal(row.completion_tokens, 0);
+        assert.equal(row.total_tokens, 0);
+      }
     });
 
     it("propagates real usage and finish_reason='length' in non-streaming Chat Completions", async () => {
