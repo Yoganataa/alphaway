@@ -66,6 +66,19 @@ function computePromptChars(messages: any[]): number {
   }, 0);
 }
 
+function hasUnmeteredPromptContent(messages: any[]): boolean {
+  if (!Array.isArray(messages)) return false;
+  return messages.some((message) => {
+    const content = message?.content;
+    if (Array.isArray(content)) {
+      return content.some((part: any) =>
+        !part || typeof part !== "object" || part.type !== "text" || typeof part.text !== "string"
+      );
+    }
+    return content !== null && typeof content === "object";
+  });
+}
+
 export const chatRoute = new Hono();
 
 type GatewayProtocol = "openai" | "anthropic" | "responses";
@@ -97,6 +110,22 @@ async function dispatchWithPolicy(
 
   if (!isModelAllowedByPolicy(policy, targetModel)) {
     return policyRejection(c, protocol, 403, "model_not_allowed", "The requested model is not allowed by this API key's effective policy.");
+  }
+
+  if ((policy.tpmLimit > 0 || policy.tokenQuota > 0) && hasUnmeteredPromptContent(body.messages)) {
+    c.set("policyRejected", true);
+    const message = "This API key has a prompt TPM limit or token quota, but the request contains non-text input that AlphaWay cannot meter safely. Use a key without these limits or send text-only input.";
+    if (protocol === "anthropic") {
+      return c.json({ type: "error", error: { type: "invalid_request_error", code: "multimodal_prompt_unmeterable", message } }, 400);
+    }
+    return c.json({
+      error: {
+        message,
+        type: "invalid_request_error",
+        param: protocol === "responses" ? "input" : "messages",
+        code: "multimodal_prompt_unmeterable",
+      },
+    }, 400);
   }
 
   let dispatchBody = body;
@@ -474,9 +503,18 @@ export function trackOpenAIStreamingUsage(
 ): Response {
   const source = response.body;
   let completionCharacters = 0;
+  let reportedPromptTokens: number | null = null;
+  let reportedCompletionTokens: number | null = null;
   let buffer = "";
   let finalized = false;
   const decoder = new TextDecoder();
+
+  const addCompletionText = (value: unknown) => {
+    if (typeof value === "string") completionCharacters += value.length;
+  };
+
+  const isTokenCount = (value: unknown): value is number =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
   const consumeLine = (line: string) => {
     const trimmed = line.trim();
@@ -485,11 +523,32 @@ export function trackOpenAIStreamingUsage(
     if (!payload || payload === "[DONE]") return;
     try {
       const event = JSON.parse(payload);
-      const content = event?.choices?.[0]?.delta?.content;
-      if (typeof content === "string") completionCharacters += content.length;
-      else if (Array.isArray(content)) {
-        for (const part of content) if (typeof part?.text === "string") completionCharacters += part.text.length;
+      const providerUsage = event?.usage;
+      if (providerUsage && typeof providerUsage === "object") {
+        if (isTokenCount(providerUsage.prompt_tokens)) reportedPromptTokens = providerUsage.prompt_tokens;
+        if (isTokenCount(providerUsage.completion_tokens)) reportedCompletionTokens = providerUsage.completion_tokens;
       }
+
+      const delta = event?.choices?.[0]?.delta;
+      if (!delta || typeof delta !== "object") return;
+
+      const content = delta.content;
+      if (typeof content === "string") addCompletionText(content);
+      else if (Array.isArray(content)) {
+        for (const part of content) addCompletionText(part?.text);
+      }
+
+      // Function/tool arguments are generated completion tokens too, even when
+      // the stream contains no assistant message content.
+      if (Array.isArray(delta.tool_calls)) {
+        for (const toolCall of delta.tool_calls) {
+          addCompletionText(toolCall?.function?.name);
+          addCompletionText(toolCall?.function?.arguments);
+        }
+      }
+      // Retain compatibility with the legacy Chat Completions function_call shape.
+      addCompletionText(delta.function_call?.name);
+      addCompletionText(delta.function_call?.arguments);
     } catch {}
   };
 
@@ -503,8 +562,8 @@ export function trackOpenAIStreamingUsage(
       provider: usage.provider,
       status: response.status,
       latencyMs: Date.now() - usage.startedAt,
-      promptTokens: usage.promptTokens,
-      completionTokens: estimateTokensFromCharacterCount(completionCharacters),
+      promptTokens: reportedPromptTokens ?? usage.promptTokens,
+      completionTokens: reportedCompletionTokens ?? estimateTokensFromCharacterCount(completionCharacters),
       savedTokens: usage.savedTokens,
       stream: true,
     });

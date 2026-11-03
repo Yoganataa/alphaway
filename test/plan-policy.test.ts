@@ -356,4 +356,56 @@ describe("Plan management and effective managed-key policy", () => {
     expect(() => resolveEffectivePolicy(key.record.id)).toThrow("Stored model policy contains invalid JSON");
   });
 
+
+  it("rejects non-text prompt parts when a managed key has TPM or token quota limits", async () => {
+    const tpmPlan = createPlan({
+      name: "TPM image guard",
+      description: "",
+      rpmLimit: 0,
+      tpmLimit: 1000,
+      concurrencyLimit: 0,
+      tokenQuota: 0,
+      allowedModels: [],
+    });
+    const tpmKey = issueAPIKey("TPM image guard");
+    setAPIKeyPolicy(tpmKey.record.id, { planId: tpmPlan.id });
+
+    const openaiImage = await app.request("/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + tpmKey.secret, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "unrestricted-model",
+        messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,aW1hZ2U=" } }] }],
+      }),
+    });
+    expect(openaiImage.status).toBe(400);
+    expect((await openaiImage.json()).error.code).toBe("multimodal_prompt_unmeterable");
+
+    const quotaPlan = createPlan({
+      name: "Token quota image guard",
+      description: "",
+      rpmLimit: 0,
+      tpmLimit: 0,
+      concurrencyLimit: 0,
+      tokenQuota: 10000,
+      allowedModels: [],
+    });
+    const quotaKey = issueAPIKey("Token quota image guard");
+    setAPIKeyPolicy(quotaKey.record.id, { planId: quotaPlan.id });
+
+    const anthropicImage = await app.request("/v1/messages", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + quotaKey.secret, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "unrestricted-model",
+        max_tokens: 64,
+        messages: [{
+          role: "user",
+          content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "aW1hZ2U=" } }],
+        }],
+      }),
+    });
+    expect(anthropicImage.status).toBe(400);
+    expect((await anthropicImage.json()).error.code).toBe("multimodal_prompt_unmeterable");
+  });
 });

@@ -77,4 +77,79 @@ describe("managed-key OpenAI stream metering", () => {
     expect(rows.total_tokens).toBe(rows.prompt_tokens + rows.completion_tokens);
     expect(settlementCalls).toBe(1);
   });
+
+  it("counts streamed tool-call names and arguments as completion usage", async () => {
+    const key = issueAPIKey("OpenAI stream tool call");
+    const encoder = new TextEncoder();
+    let settlementTokens = 0;
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const toolCallEvent = {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                function: { name: "lookup_weather", arguments: JSON.stringify({ city: "Paris" }) },
+              }],
+            },
+          }],
+        };
+        controller.enqueue(encoder.encode("data: " + JSON.stringify(toolCallEvent) + "\n\n" + "data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+    const tracked = trackOpenAIStreamingUsage(new Response(source), {
+      clientApiKeyId: key.record.id,
+      model: "stream-tool-meter-model",
+      provider: "opencode",
+      startedAt: Date.now(),
+      promptTokens: 10,
+      savedTokens: 0,
+      settleQuota: (tokens) => { settlementTokens = tokens; },
+    });
+
+    await tracked.text();
+    const row = getDatabase().prepare(
+      "SELECT COUNT(*) AS count, SUM(completion_tokens) AS completion_tokens, SUM(total_tokens) AS total_tokens FROM request_logs WHERE client_api_key_id = ?"
+    ).get(key.record.id);
+    expect(row.count).toBe(1);
+    expect(row.completion_tokens).toBeGreaterThan(0);
+    expect(settlementTokens).toBe(row.total_tokens);
+  });
+
+  it("prefers final provider-reported prompt and completion usage", async () => {
+    const key = issueAPIKey("OpenAI stream authoritative usage");
+    const encoder = new TextEncoder();
+    let settlementTokens = 0;
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const contentEvent = { choices: [{ delta: { content: "visible response" } }] };
+        const usageEvent = { choices: [], usage: { prompt_tokens: 17, completion_tokens: 23, total_tokens: 40 } };
+        controller.enqueue(encoder.encode(
+          "data: " + JSON.stringify(contentEvent) + "\n\n" +
+          "data: " + JSON.stringify(usageEvent) + "\n\n"
+        ));
+        controller.close();
+      },
+    });
+    const tracked = trackOpenAIStreamingUsage(new Response(source), {
+      clientApiKeyId: key.record.id,
+      model: "stream-provider-usage-model",
+      provider: "opencode",
+      startedAt: Date.now(),
+      promptTokens: 5,
+      savedTokens: 0,
+      settleQuota: (tokens) => { settlementTokens = tokens; },
+    });
+
+    await tracked.text();
+    const row = getDatabase().prepare(
+      "SELECT COUNT(*) AS count, SUM(prompt_tokens) AS prompt_tokens, SUM(completion_tokens) AS completion_tokens, SUM(total_tokens) AS total_tokens FROM request_logs WHERE client_api_key_id = ?"
+    ).get(key.record.id);
+    expect(row.count).toBe(1);
+    expect(row.prompt_tokens).toBe(17);
+    expect(row.completion_tokens).toBe(23);
+    expect(row.total_tokens).toBe(40);
+    expect(settlementTokens).toBe(40);
+  });
 });
