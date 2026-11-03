@@ -2,22 +2,23 @@
 
 > Read this file first when resuming work in a new ChatGPT/agent session. Then read `ROADMAP.md`.
 >
-> **Checkpoint date:** 2026-11-02 (Asia/Jakarta)  
+> **Checkpoint date:** 2026-11-03 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active workstream:** Phase 3 — Plans, Limits, and Request Enforcement. Implementation branch: `feat/phase-3-plans-limits`; documentation and implementation work in progress.
+> **Active workstream:** Phase 3 — Plans, Limits, and Request Enforcement. Only open PR: [#6](https://github.com/Yoganataa/alphaway/pull/6), Draft, branch `feat/phase-3-plans-limits`. Current branch HEAD at this checkpoint: `1b94131e6d12624c587021b91cec1ad78c859419`; source implementation head with green CI/CodeQL: `39447d162dc0f60e5e05250d9f69a0e980bc4df8`.
 > **Phase 2 merge commit on `main`:** `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` (PR #4).  
 > **Latest merged Phase 2 code head:** `b057042362f6497852cb037ed7be2ec4c0aa63a4`; merged into `main` by `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9`.  
-> **Latest CI verification:** PR CI [#425](https://github.com/Yoganataa/alphaway/actions/runs/41442485797) passed on Phase 2 head `b057042`. Post-merge CI [#426](https://github.com/Yoganataa/alphaway/actions/runs/41448272244) passed on merge commit `dc08b6d`; all four mandatory jobs succeeded and the optional live upstream drill was skipped by design.  
-> **Latest CodeQL verification:** Default-branch CodeQL [#213](https://github.com/Yoganataa/alphaway/actions/runs/41448964076) completed successfully on `main` HEAD `a28ed9b` for JavaScript/TypeScript and Actions. GitHub Security code-scanning screenshot (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed**; the former baseline alerts are resolved.
+> **Latest implementation CI:** PR CI [#444](https://github.com/Yoganataa/alphaway/actions/runs/41556425096) passed on Phase 3 source head `39447d1`: unit/protocol tests, UI/standalone build, installer smoke, and dashboard E2E all passed; optional live upstream drill was skipped by design. The later docs-only branch commit `1b94131` has new CI/CodeQL checks pending.  
+> **Latest CodeQL verification:** PR CodeQL [#229](https://github.com/Yoganataa/alphaway/actions/runs/41556419210) passed JavaScript/TypeScript and Actions analysis on Phase 3 source head `39447d1`. Default-branch CodeQL [#213](https://github.com/Yoganataa/alphaway/actions/runs/41448964076) passed on `main` HEAD `a28ed9b`. GitHub Security screenshot (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed**.
 > **Maintainer review decision:** This is a solo-developer repository with zero required approvals. The maintainer accepted residual review risk after passing CI/CodeQL evidence and resolution of all six inline review threads. No second human reviewer participated.  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (merged; merge commit `dc08b6d`).  
+> **Active Phase 3 PR:** [#6 — Plans, limits, and request enforcement](https://github.com/Yoganataa/alphaway/pull/6) (open Draft; see the Phase 3 status below).  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
 > **Superseded Phase 1 PR:** [#2 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/2) (closed without merge)
 
 ## 1. Current Status
 
-**Phase 0, Phase 1, and Phase 2 are merged into `main`. Phase 2 PR #4 merged at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. PR CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 all passed. CI #428 and CodeQL #213 passed on documentation merge commit `a28ed9b`. GitHub Security confirms 0 open / 14 closed CodeQL alerts for `is:open branch:main` (screenshot supplied by project owner, 2026-11-02). The solo maintainer accepted the Phase 2 review risk after all six inline review threads were resolved; no second human reviewer participated. Phase 3 is now active on `feat/phase-3-plans-limits`.
+**Phase 0, Phase 1, and Phase 2 are merged into `main`. Phase 2 PR #4 merged at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9`. The project owner confirmed 0 open / 14 closed CodeQL alerts on `main`. Phase 3 is active in Draft PR #6 on `feat/phase-3-plans-limits`; Plans, policy resolution, request enforcement, per-key usage, dashboard views, and regression tests are implemented. Source head `39447d1` passed CI #444 and CodeQL #229. Phase 3 is not complete yet: explicit retry/stream-cancellation metering and concurrency-wrapper regression tests remain.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
@@ -235,31 +236,38 @@ test/updater.test.ts
 test/verify-quick.test.ts
 ```
 
-### Current GitHub state
+### Historical Phase 0 baseline
 
-- Branch: `chore/phase-0-ci-distribution`
-- PR: [#1 — Stabilize CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)
-- PR state: merged.
-- Merge commit: `9805d2335293539424fd66af3c047b493edad630`.
+- Phase 0 PR #1 is merged; merge commit `9805d2335293539424fd66af3c047b493edad630`.
 - `main` includes the Phase 0 CI, Bun 1.4.4 runtime, installer, and standalone distribution baseline.
 
-### Current Phase 2 work
+### Historical Phase 2 implementation
 
 Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` from code head `b057042362f6497852cb037ed7be2ec4c0aa63a4`. CI #425, PR CodeQL #210, post-merge CI #426, and default-branch CodeQL #211 passed. CI #428 and CodeQL #213 passed on documentation merge commit `a28ed9b`. GitHub Security currently shows 0 open / 14 closed CodeQL alerts for `main` (2026-11-02 screenshot). Do not repeat Phase 2 remediation work.
 
-Next actions:
-1. CodeQL baseline is clean: 0 open / 14 closed in GitHub Security for `main` (2026-11-02 screenshot). Continue Phase 3 from `feat/phase-3-plans-limits`.
-2. Keep Windows ACL verification in Phase 7 hardening; POSIX file/directory permissions are covered.
-3. Do not reopen or recreate Phase 0–2 work unless a verified regression is found. Keep this Phase 3 work in its dedicated branch/PR and merge only after required CI/CodeQL checks pass.
+### Current Phase 3 implementation and verification
 
-Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field or begin quota enforcement during Phase 2.
+- PR #6 is open Draft; `main` is unchanged at the Phase 3 baseline `a28ed9baef0c698ec879d649a24726706d1eee3d`.
+- Migration v6 adds reusable Plans, managed-key Plan assignment/overrides, token usage counters, request attribution, and indexes for per-key range queries.
+- Implemented: strict Plan CRUD, effective policy precedence, model allowlists, RPM/prompt-TPM/concurrency gates, lifetime token reservations/settlement, OpenAI/Anthropic/Responses enforcement and all legacy aliases, managed-key usage attribution, persisted 1h/24h/7d/30d usage windows, and truthful Plans/Quota dashboard views.
+- Dashboard E2E covers Plan create/edit/delete, assigning a Plan to a managed key, inherited quota display, and selecting the usage window. Unit/integration tests cover migration, policy validation/precedence, alias enforcement, metering attribution, and limiter behavior.
+- CI #444 and PR CodeQL #229 passed on source head `39447d1`. The subsequent documentation commit `1b94131` is the current branch HEAD and needs a fresh CI/CodeQL result before it can be considered the latest verified SHA.
+- Remaining acceptance work: add explicit tests for exactly-once metering across retries/cancellation and concurrency-slot release on streaming/body cancellation. Keep PR #6 Draft until these tests and the subsequent CI/CodeQL checks pass.
+
+Next actions:
+1. Add targeted retry, stream-cancellation, body-cancellation, and concurrency-release tests without weakening existing tests.
+2. Run the complete required CI and PR CodeQL checks on the updated head; inspect any new findings and resolve all review threads.
+3. Only after the remaining acceptance criteria are verified, change PR #6 from Draft to Ready for review. Do not merge while these validation gaps remain.
+4. Keep Windows ACL verification in Phase 7; POSIX file/directory permissions are already covered.
+
+Do not reopen or recreate Phase 0–2 work unless a verified regression is found.
 ## 6. Working Rules for the Next Session
 
 - Read `CHECKPOINT.md` first, then `ROADMAP.md`, then inspect live GitHub state.
 - The live repository/PR state takes precedence over this checkpoint if newer commits exist.
 - Keep backend runtime Bun + TypeScript + Hono. Preserve OpenCode TLS/BoringSSL behavior and all documented gateway protocols.
 - Do not weaken or remove tests to make CI green. Do not claim tests/builds/CI passed unless the actual result was inspected.
-- Work only on the active phase. Phase 2 is merged; Phase 3 is active on `feat/phase-3-plans-limits`. GitHub Security confirms 0 open / 14 closed CodeQL alerts on `main`.
+- Work only on the active phase. Phase 0–2 are merged; Phase 3 is active in Draft PR #6 on `feat/phase-3-plans-limits`. The main CodeQL screenshot confirms 0 open / 14 closed alerts. Do not mark Phase 3 complete until the remaining stream/retry/cancellation tests, CI, and PR CodeQL checks pass.
 - Update this checkpoint and the roadmap after meaningful work, including branch/PR state, changed paths, verification evidence, open risks, and exact next action.
 - If work is interrupted, leave a committed state and an accurate checkpoint; do not claim background work.
 
@@ -267,15 +275,15 @@ Per-key Plan assignment belongs to Phase 3. Do not add a placeholder plan field 
 
 ```text
 Lanjutkan AlphaWay dari repository https://github.com/Yoganataa/alphaway.
-Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Periksa live main, branch `feat/phase-3-plans-limits`, PR aktif, Ruleset Protect main, dan hasil GitHub Actions sebelum mengubah apa pun.
+Baca CHECKPOINT.md terlebih dahulu, lalu ROADMAP.md. Periksa live main, branch `feat/phase-3-plans-limits`, PR #6, Ruleset Protect main, dan hasil GitHub Actions sebelum mengubah apa pun.
 
-Phase 0 PR #1, Phase 1 PR #3, Phase 2 PR #4, dan dokumentasi sync PR #5 sudah merged. Main saat Phase 3 dimulai: a28ed9baef0c698ec879d649a24726706d1eee3d. CI #428 dan CodeQL #213 passed. GitHub Security screenshot 2026-11-02 dengan filter `is:open branch:main` menunjukkan 0 Open / 14 Closed alerts.
+Phase 0 PR #1, Phase 1 PR #3, Phase 2 PR #4, dan dokumentasi sync PR #5 sudah merged. Main Phase 3 baseline: `a28ed9baef0c698ec879d649a24726706d1eee3d`. GitHub Security screenshot 2026-11-02 dengan filter `is:open branch:main` menunjukkan 0 Open / 14 Closed alerts.
 
-Phase 2 merampungkan admin bootstrap/session, managed API key lifecycle, gateway/admin auth separation, AES-256-GCM credential storage, SQLite-only persistence, migration v5, encrypted streaming backup/restore, cross-process DB locking, body limits, diagnostic redaction, dan CodeQL remediation. Jangan ulangi.
+Phase 2 selesai; jangan mengulang. Backend wajib tetap Bun >=1.4.4 + TypeScript + Hono + SQLite. Jangan port backend Go dari 9router-go; gunakan 9router-go hanya sebagai referensi konsep policy.
 
-Phase 3 — Plans, Limits, and Request Enforcement — sedang dikerjakan pada `feat/phase-3-plans-limits`. Backend wajib tetap Bun >=1.4.4 + TypeScript + Hono; SQLite adalah satu-satunya state store. Jangan port backend Go dari 9router-go. Gunakan 9router-go sebagai referensi konsep policy/behavior saja.
+Phase 3 aktif pada branch `feat/phase-3-plans-limits`, PR #6 masih Draft. Source head `39447d162dc0f60e5e05250d9f69a0e980bc4df8` passed CI #444 dan PR CodeQL #229. Checkpoint/roadmap docs diperbarui setelah source head tersebut; cek dan verifikasi HEAD terbaru sebelum melanjutkan.
 
-Sasaran Phase 3: reusable Plan templates; assign/unassign plans pada managed API keys; satu resolver effective policy (global defaults -> plan -> explicit key overrides); enforce model allowlists, RPM, prompt TPM, concurrency, token usage quota dengan metering akurat; attribute usage ledger ke managed key; real quota/plan UI tanpa data acak. Legacy environment keys dan key tanpa Plan harus tetap backward-compatible/unrestricted. Jangan membuat fake USD cost budgets karena AlphaWay belum punya pricing ledger tepercaya; period spend ceiling hanya boleh ditambahkan bila sumber harga/meter akurat tersedia. Semua 3 protokol (OpenAI Chat, Anthropic Messages, Codex Responses) dan aliases wajib dites.
+Implementasi Phase 3 saat ini mencakup migration v6, Plan CRUD, effective policy precedence, per-key overrides, model allowlists, RPM/prompt TPM/concurrency, lifetime token quotas, request attribution, usage windows 1h/24h/7d/30d, dashboard Plans/Quota, dan coverage semua route aliases. PR tetap Draft karena sisa acceptance tests yang harus ditambah: exactly-once metering across retries/client cancellation; release concurrency slots on successful/error/stream/body cancellation; leak/double-release regression tests. Jangan weaken test. Setelah tes selesai, jalankan required CI/CodeQL untuk HEAD terbaru, baru mark PR Ready for review. Jangan merge sebelum semua acceptance criteria ROADMAP.md verified.
 
-Phase 3 belum dianggap selesai sampai acceptance criteria di ROADMAP.md dan semua required CI/CodeQL checks pass. Jangan weaken tests. Update checkpoint setiap ada progress bermakna.
+Tidak ada USD spend budgets, provider quota probing, period rollover, atau queueing; pricing ledger dan time-zone semantics belum tersedia/dirancang. Environment-key dan unassigned managed key behavior wajib tetap unrestricted/backward-compatible.
 ```
