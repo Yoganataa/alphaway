@@ -407,7 +407,12 @@ function inspectNestedValue(
     for (const [key, entry] of Object.entries(value)) {
       const inspected = inspectNestedValue(entry, compiled, maskedRuleIds, depth + 1);
       if (inspected.blocked) return { value, blocked: inspected.blocked };
-      output[key] = inspected.value;
+      Object.defineProperty(output, key, {
+        value: inspected.value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
     return { value: output, blocked: null };
   }

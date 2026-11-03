@@ -76,6 +76,17 @@ describe("persistent live Security Rules", () => {
     expect(blocked.blocked?.id).toBe("tool-block");
   });
 
+  it("preserves special JSON keys as data while inspecting nested values", () => {
+    const message = JSON.parse('{"role":"user","metadata":{"__proto__":{"polluted":"yes"},"token":"provider_secret"}}');
+    replaceSecurityRules([
+      { id: "special-key-mask", pattern: "provider_secret", action: "mask", description: "Mask nested token", enabled: true },
+    ]);
+    const result = inspectSecurityMessages([message]);
+    expect(Object.prototype.hasOwnProperty.call(result.messages[0].metadata, "__proto__")).toBe(true);
+    expect(({} as any).polluted).toBeUndefined();
+    expect(result.messages[0].metadata.token).toBe("[REDACTED_SECURITY_RULE:special-key-mask]");
+  });
+
   it("fails closed on excessive nested message structures", () => {
     const deep: any[] = [];
     let cursor: any = deep;

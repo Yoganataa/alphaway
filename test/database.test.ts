@@ -100,7 +100,7 @@ describe("AlphaWay SQLite Database Engine", () => {
     const schemaVersion = db
       .prepare("SELECT MAX(version) AS version FROM schema_migrations")
       .get()?.version;
-    expect(schemaVersion).toBe(6);
+    expect(schemaVersion).toBe(7);
     const requestColumns = db.prepare("PRAGMA table_info(request_logs)").all().map((row: any) => row.name);
     expect(requestColumns).toContain("client_api_key_id");
     const keyColumns = db.prepare("PRAGMA table_info(api_keys)").all().map((row: any) => row.name);
