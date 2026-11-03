@@ -330,6 +330,58 @@ function sanitizeInboundContent(text, options) {
   return typeof builtIn === "string" ? sanitizeSecurityResponse(builtIn) : builtIn;
 }
 
+function sanitizeInboundTextValue(value) {
+  if (typeof value === "string") return sanitizeInboundContent(value);
+  if (!Array.isArray(value)) return value;
+
+  return value.map((part) => {
+    if (!part || typeof part !== "object" || typeof part.text !== "string") return part;
+    return { ...part, text: sanitizeInboundContent(part.text) };
+  });
+}
+
+/**
+ * Sanitize assistant output fields, including function/tool call names and
+ * serialized arguments. This is used for both JSON responses and SSE deltas.
+ */
+function sanitizeInboundAssistantMessage(message) {
+  if (!message || typeof message !== "object" || Array.isArray(message)) return message;
+  const output = { ...message };
+
+  for (const field of ["content", "reasoning", "reasoning_content", "refusal"]) {
+    if (typeof output[field] === "string" || Array.isArray(output[field])) {
+      output[field] = sanitizeInboundTextValue(output[field]);
+    }
+  }
+
+  if (Array.isArray(output.tool_calls)) {
+    output.tool_calls = output.tool_calls.map((toolCall) => {
+      if (!toolCall || typeof toolCall !== "object") return toolCall;
+      const fn = toolCall.function;
+      if (!fn || typeof fn !== "object") return toolCall;
+      return {
+        ...toolCall,
+        function: {
+          ...fn,
+          ...(typeof fn.name === "string" ? { name: sanitizeInboundContent(fn.name) } : {}),
+          ...(typeof fn.arguments === "string" ? { arguments: sanitizeInboundContent(fn.arguments) } : {}),
+        },
+      };
+    });
+  }
+
+  if (output.function_call && typeof output.function_call === "object") {
+    const fn = output.function_call;
+    output.function_call = {
+      ...fn,
+      ...(typeof fn.name === "string" ? { name: sanitizeInboundContent(fn.name) } : {}),
+      ...(typeof fn.arguments === "string" ? { arguments: sanitizeInboundContent(fn.arguments) } : {}),
+    };
+  }
+
+  return output;
+}
+
 module.exports = {
   CavemanFull,
   CavemanLite,
@@ -357,4 +409,5 @@ module.exports = {
   anonymizeWorkspacePaths: securityGuard.anonymizeWorkspacePaths,
   sanitizeOutboundMessages: securityGuard.sanitizeOutboundMessages,
   sanitizeInboundContent,
+  sanitizeInboundAssistantMessage,
 };

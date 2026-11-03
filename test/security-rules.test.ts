@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { app } from "../src/app";
 import { adminRequest } from "./helpers/admin";
+import tokensaver from "../src/features/tokensaver";
 import {
   DEFAULT_SECURITY_RULES,
   inspectSecurityMessages,
@@ -139,6 +140,35 @@ describe("persistent live Security Rules", () => {
     ]);
     expect(inspectSecurityText("blocked_marker").blocked).toBeNull();
     expect(inspectSecurityText("blocked_marker").text).toBe("blocked_marker");
+  });
+
+  it("sanitizes tool-call and legacy function-call names and arguments on inbound assistant messages", () => {
+    replaceSecurityRules([
+      { id: "tool-mask", pattern: "provider_secret", action: "mask", description: "Mask a tool argument", enabled: true },
+      { id: "tool-block", pattern: "forbidden_tool_payload", action: "block", description: "Block a tool argument", enabled: true },
+    ]);
+
+    const output = tokensaver.sanitizeInboundAssistantMessage({
+      role: "assistant",
+      content: "Response text",
+      tool_calls: [{
+        id: "call_1",
+        type: "function",
+        function: {
+          name: "lookup_provider_secret",
+          arguments: JSON.stringify({ token: "provider_secret" }),
+        },
+      }],
+      function_call: {
+        name: "legacy_lookup",
+        arguments: JSON.stringify({ token: "forbidden_tool_payload" }),
+      },
+    });
+
+    expect(output.tool_calls[0].function.name).toContain("[REDACTED_SECURITY_RULE:tool-mask]");
+    expect(output.tool_calls[0].function.arguments).toContain("[REDACTED_SECURITY_RULE:tool-mask]");
+    expect(output.function_call.arguments).toContain("[BLOCKED_BY_ALPHAWAY: Security rule tool-block]");
+    expect(output.content).toBe("Response text");
   });
 
   it("rejects malformed rules, duplicate IDs, duplicate patterns, and oversized lists", () => {

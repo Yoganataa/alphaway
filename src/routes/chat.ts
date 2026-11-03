@@ -356,8 +356,8 @@ async function dispatchToUpstream(
         };
         return Response.json(openAiFormat);
       } else {
-        if (json.choices?.[0]?.message?.content) {
-          json.choices[0].message.content = tokensaver.sanitizeInboundContent(json.choices[0].message.content);
+        if (json.choices?.[0]?.message) {
+          json.choices[0].message = tokensaver.sanitizeInboundAssistantMessage(json.choices[0].message);
         }
         return Response.json(json);
       }
@@ -439,10 +439,8 @@ async function dispatchToUpstream(
                     if (data && data !== "[DONE]") {
                       try {
                         const parsed = JSON.parse(data);
-                        if (parsed.choices?.[0]?.delta?.content) {
-                          parsed.choices[0].delta.content = tokensaver.sanitizeInboundContent(
-                            parsed.choices[0].delta.content
-                          );
+                        if (parsed.choices?.[0]?.delta) {
+                          parsed.choices[0].delta = tokensaver.sanitizeInboundAssistantMessage(parsed.choices[0].delta);
                           data = JSON.stringify(parsed);
                         }
                       } catch {}
@@ -548,10 +546,8 @@ async function dispatchToUpstream(
                     if (data && data !== "[DONE]") {
                       try {
                         const parsed = JSON.parse(data);
-                        if (parsed.choices?.[0]?.delta?.content) {
-                          parsed.choices[0].delta.content = tokensaver.sanitizeInboundContent(
-                            parsed.choices[0].delta.content
-                          );
+                        if (parsed.choices?.[0]?.delta) {
+                          parsed.choices[0].delta = tokensaver.sanitizeInboundAssistantMessage(parsed.choices[0].delta);
                           data = JSON.stringify(parsed);
                         }
                       } catch {}
@@ -577,8 +573,8 @@ async function dispatchToUpstream(
       } else {
         const text = await upstreamRes.text();
         const json = codebuddy.sseToOpenAIJson(text, targetModel);
-        if (json.choices?.[0]?.message?.content) {
-          json.choices[0].message.content = tokensaver.sanitizeInboundContent(json.choices[0].message.content);
+        if (json.choices?.[0]?.message) {
+          json.choices[0].message = tokensaver.sanitizeInboundAssistantMessage(json.choices[0].message);
         }
         return Response.json(json);
       }
