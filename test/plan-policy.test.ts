@@ -314,4 +314,27 @@ describe("Plan management and effective managed-key policy", () => {
       expect((await response.json()).error.code).toBe("token_quota_exceeded");
     }
   });
+ 
+  it("fails closed when a persisted Plan or key model allowlist is malformed", () => {
+    const plan = createPlan({
+      name: "Corrupt policy",
+      description: "",
+      rpmLimit: 0,
+      tpmLimit: 0,
+      concurrencyLimit: 0,
+      tokenQuota: 0,
+      allowedModels: ["allowed-model"],
+    });
+    const planKey = issueAPIKey("Corrupt Plan policy");
+    setAPIKeyPolicy(planKey.record.id, { planId: plan.id });
+    getDatabase().prepare("UPDATE plans SET allowed_models = ? WHERE id = ?").run("{invalid-json", plan.id);
+    expect(() => resolveEffectivePolicy(planKey.record.id)).toThrow("Stored model policy contains invalid JSON");
+    expect(() => listPlans()).toThrow("Stored Plan model allowlist contains invalid JSON");
+
+    const key = issueAPIKey("Corrupt key policy");
+    setAPIKeyPolicy(key.record.id, { allowedModels: ["allowed-model"] });
+    getDatabase().prepare("UPDATE api_keys SET allowed_models = ? WHERE id = ?").run("{invalid-json", key.record.id);
+    expect(() => resolveEffectivePolicy(key.record.id)).toThrow("Stored model policy contains invalid JSON");
+  });
+
 });
