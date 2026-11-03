@@ -202,4 +202,59 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const content = await editor.inputValue();
     expect(content.length).toBeGreaterThan(0);
   }, 15000);
+ 
+  it("shows an inherited Plan quota for a managed API key in the dashboard", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    const adminHeaders = {
+      Cookie: adminCookie,
+      Origin: baseURL,
+      "Content-Type": "application/json",
+    };
+
+    const planName = "Phase 3 E2E Starter";
+    const keyName = "Phase 3 E2E Managed Key";
+    const planResponse = await fetch(baseURL + "/api/plans", {
+      method: "POST",
+      headers: adminHeaders,
+      body: JSON.stringify({
+        name: planName,
+        description: "Dashboard policy regression",
+        rpmLimit: 5,
+        tpmLimit: 4000,
+        concurrencyLimit: 2,
+        tokenQuota: 1000,
+        allowedModels: ["e2e-model"],
+      }),
+    });
+    expect(planResponse.status).toBe(201);
+    const plan = (await planResponse.json()).plan;
+
+    const keyResponse = await fetch(baseURL + "/api/keys", {
+      method: "POST",
+      headers: adminHeaders,
+      body: JSON.stringify({ name: keyName }),
+    });
+    expect(keyResponse.status).toBe(201);
+    const key = (await keyResponse.json()).key;
+
+    const assignment = await fetch(baseURL + "/api/keys/" + key.id + "/policy", {
+      method: "PATCH",
+      headers: adminHeaders,
+      body: JSON.stringify({ planId: plan.id }),
+    });
+    expect(assignment.status).toBe(200);
+
+    await page.getByRole("button", { name: "Quota Tracker" }).click();
+    const row = page.locator("tbody tr").filter({ hasText: keyName });
+    await row.waitFor({ state: "visible", timeout: 10000 });
+    expect(await row.locator("td").nth(1).textContent()).toContain(planName);
+    expect(await row.locator("td").nth(4).textContent()).toContain("1,000");
+
+    await page.getByRole("button", { name: "Plans" }).click();
+    const mainText = await page.textContent("main");
+    expect(mainText).toContain("Plans");
+    expect(mainText).toContain(planName);
+    expect(mainText).toContain("Allowed models");
+  }, 20000);
+
 });
