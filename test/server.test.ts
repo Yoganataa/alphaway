@@ -4,6 +4,8 @@ const http = require("node:http");
 const pkg = require("../package.json");
 const VERSION = pkg.version;
 const tokensaver = require("../src/features/tokensaver");
+const { issueAPIKey } = require("../src/core/api-keys");
+const { getDatabase } = require("../src/core/database");
 const opencode = require("../src/providers/opencode");
 const identity = opencode.identity;
 const {
@@ -467,6 +469,41 @@ describe("server unit & integration tests", () => {
         completion_tokens: 512,
         total_tokens: 632,
       });
+    });
+
+    it("records managed-key usage exactly once after an upstream 5xx retry", async () => {
+      const key = issueAPIKey("Retry metering regression");
+      let upstreamCalls = 0;
+      mockFetchImpl = async () => {
+        upstreamCalls += 1;
+        return new Response(JSON.stringify({
+          error: { message: "simulated upstream unavailable", type: "upstream_error" },
+        }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        });
+      };
+
+      const response = await httpRequest(
+        port,
+        "POST",
+        "/v1/chat/completions",
+        {
+          model: "phase3-retry-metering-model",
+          messages: [{ role: "user", content: "meter this managed request once" }],
+        },
+        { authorization: "Bearer " + key.secret }
+      );
+
+      assert.equal(response.status, 503);
+      assert.equal(upstreamCalls, 2, "the provider retry must remain enabled");
+      const usage = getDatabase().prepare(
+        "SELECT COUNT(*) AS requests, SUM(prompt_tokens) AS prompt_tokens, SUM(completion_tokens) AS completion_tokens, SUM(total_tokens) AS total_tokens FROM request_logs WHERE client_api_key_id = ?"
+      ).get(key.record.id);
+      assert.equal(usage.requests, 1, "one client request must produce one usage row, not one row per upstream attempt");
+      assert.ok(usage.prompt_tokens > 0, "HTTP upstream failures retain the prompt usage charge");
+      assert.equal(usage.completion_tokens, 0);
+      assert.equal(usage.total_tokens, usage.prompt_tokens);
     });
 
     it("propagates finish_reason='length' on Responses API incomplete and restores aliased client tool names", async () => {
