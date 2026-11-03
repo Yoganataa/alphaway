@@ -80,7 +80,7 @@ function extractOpenAICompletionText(message: any): string {
   }
   add(message.function_call?.name);
   add(message.function_call?.arguments);
-  return parts.join("\\n");
+  return parts.join(" ");
 }
 
 /**

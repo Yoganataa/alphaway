@@ -20,7 +20,7 @@ describe("managed-key OpenAI stream metering", () => {
 
     expect(result.promptTokens).toBe(11);
     expect(result.completionTokens).toBeGreaterThan(0);
-    expect(result.completionTokens).toBe(Math.ceil(("lookup_weather" + toolArguments).length / 3.8));
+    expect(result.completionTokens).toBe(Math.ceil(("lookup_weather " + toolArguments).length / 3.8));
   });
 
   it("preserves authoritative provider usage values of zero", () => {
