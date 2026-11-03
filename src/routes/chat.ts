@@ -460,7 +460,7 @@ async function dispatchToUpstream(
 }
 
 
-function trackOpenAIStreamingUsage(
+export function trackOpenAIStreamingUsage(
   response: Response,
   usage: {
     clientApiKeyId: string | null;
