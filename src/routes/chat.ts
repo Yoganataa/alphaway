@@ -15,6 +15,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { readJsonRequestBody } from "../core/admin-guard";
+import { releaseWhenBodyConsumed } from "../core/response-lifecycle";
 
 import type { ChatCompletionRequest } from "../types";
 import { codebuddy, opencode } from "../providers";
@@ -76,48 +77,6 @@ function policyRejection(c: any, protocol: GatewayProtocol, status: number, code
     return c.json({ type: "error", error: { type: status === 403 ? "permission_error" : status === 503 ? "api_error" : "rate_limit_error", code, message } }, status);
   }
   return c.json({ error: { message, type: status === 403 ? "permission_error" : status === 503 ? "server_error" : "rate_limit_error", param: status === 403 ? "model" : null, code } }, status);
-}
-
-function releaseWhenBodyConsumed(response: Response, release: () => void, afterRelease: () => void = () => {}): Response {
-  const source = response.body;
-  if (!source) {
-    release();
-    afterRelease();
-    return response;
-  }
-  const reader = source.getReader();
-  let finished = false;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    release();
-    afterRelease();
-    try { reader.releaseLock(); } catch {}
-  };
-  const body = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      try {
-        const result = await reader.read();
-        if (result.done) {
-          controller.close();
-          finish();
-        } else {
-          controller.enqueue(result.value);
-        }
-      } catch (error) {
-        controller.error(error);
-        finish();
-      }
-    },
-    async cancel(reason) {
-      try {
-        await reader.cancel(reason);
-      } finally {
-        finish();
-      }
-    },
-  });
-  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
 /** Apply managed-key model/rate/concurrency policy before the upstream request. */
