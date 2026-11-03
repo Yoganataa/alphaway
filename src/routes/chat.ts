@@ -802,6 +802,12 @@ const handleAnthropicMessages = async (c: any) => {
       let completionCharacters = 0;
       let upstreamEnded = false;
 
+      stream.onAbort(() => {
+        if (!upstreamEnded) {
+          void reader.cancel("downstream client disconnected").catch(() => {});
+        }
+      });
+
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -974,6 +980,12 @@ const handleResponses = async (c: any) => {
       let buffer = "";
       let completionCharacters = 0;
       let upstreamEnded = false;
+
+      stream.onAbort(() => {
+        if (!upstreamEnded) {
+          void reader.cancel("downstream client disconnected").catch(() => {});
+        }
+      });
 
       try {
         while (true) {
