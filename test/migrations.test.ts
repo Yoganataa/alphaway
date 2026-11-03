@@ -63,6 +63,7 @@ describe("SQLite migration runner", () => {
       { version: 3, name: "secret-residue-cleanup" },
       { version: 4, name: "encrypt-legacy-codebuddy-credential" },
       { version: 5, name: "remove-legacy-json-import-ledger" },
+      { version: 6, name: "plans-and-request-policy" },
     ]);
     expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub").value).toBe(JSON.stringify("pending"));
   });
@@ -325,7 +326,7 @@ describe("SQLite migration runner", () => {
     ]);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(6);
+    ).toBe(7);
   });
 
   it("refuses destructive migrations unless a backup callback is provided", () => {
