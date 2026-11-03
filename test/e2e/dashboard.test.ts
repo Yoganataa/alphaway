@@ -251,7 +251,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await row.locator("td").nth(4).textContent()).toContain("1,000");
 
     await page.getByRole("button", { name: "Plans" }).click();
-    await page.getByRole("heading", { name: "Plans" }).waitFor({ state: "visible", timeout: 10000 });
+    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
     await page.getByRole("heading", { name: planName }).waitFor({ state: "visible", timeout: 10000 });
     const mainText = await page.textContent("main");
     expect(mainText).toContain("Plans");
