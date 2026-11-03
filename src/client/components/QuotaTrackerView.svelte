@@ -3,19 +3,34 @@
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
   import { notifications } from "../lib/notifications";
-  import { fetchApiKeys, type APIKeyRecord } from "../lib/api";
+  import {
+    fetchApiKeys,
+    fetchManagedKeyUsageWindow,
+    type APIKeyRecord,
+    type ManagedKeyUsageWindowItem,
+    type ManagedKeyUsageWindowName,
+  } from "../lib/api";
 
   let keys = $state<APIKeyRecord[]>([]);
+  let windowUsage = $state<ManagedKeyUsageWindowItem[]>([]);
+  let usageWindow = $state<ManagedKeyUsageWindowName>("24h");
   let loading = $state(true);
   let searchTerm = $state("");
 
+  const usageByKey = $derived(new Map(windowUsage.map((item) => [item.clientApiKeyId, item])));
+  const usageWindowLabel = $derived(usageWindow === "1h" ? "Last hour" : usageWindow === "24h" ? "Last 24 hours" : usageWindow === "7d" ? "Last 7 days" : "Last 30 days");
   const limitLabel = (value: number | null) => value === null || value === 0 ? "Unlimited" : value.toLocaleString();
   const tokenLabel = (value: number) => value.toLocaleString();
 
-  async function loadData() {
+  async function loadData(windowName: ManagedKeyUsageWindowName = usageWindow) {
     loading = true;
     try {
-      keys = await fetchApiKeys();
+      const [keyRecords, usageRecords] = await Promise.all([
+        fetchApiKeys(),
+        fetchManagedKeyUsageWindow(windowName),
+      ]);
+      keys = keyRecords;
+      windowUsage = usageRecords;
     } catch (error: any) {
       notifications.error(error.message || "Failed to load managed key policy usage");
     } finally {
@@ -53,9 +68,28 @@
     <div class="flex items-center justify-between gap-3">
       <div>
         <h3 class="text-sm font-semibold text-text-main">Managed API key usage</h3>
-        <p class="text-xs text-text-muted">Lifetime request and token totals are stored per key. Rate limits are policy settings enforced by AlphaWay.</p>
+        <p class="text-xs text-text-muted">Lifetime totals are stored per key. The selected window counts completed requests persisted by AlphaWay.</p>
       </div>
-      <span class="text-xs text-text-subtle">{filteredKeys.length} active keys</span>
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-text-muted flex items-center gap-2">
+          Window
+          <select
+            aria-label="Usage window"
+            class="rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs text-text-main"
+            value={usageWindow}
+            onchange={(event) => {
+              usageWindow = event.currentTarget.value as ManagedKeyUsageWindowName;
+              void loadData(usageWindow);
+            }}
+          >
+            <option value="1h">1 hour</option>
+            <option value="24h">24 hours</option>
+            <option value="7d">7 days</option>
+            <option value="30d">30 days</option>
+          </select>
+        </label>
+        <span class="text-xs text-text-subtle">{filteredKeys.length} active keys</span>
+      </div>
     </div>
     <input
       type="search"
@@ -64,13 +98,14 @@
       class="w-full sm:max-w-sm rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-text-main"
     />
     <div class="overflow-x-auto">
-      <table class="w-full min-w-[850px] text-left text-xs">
+      <table class="w-full min-w-[980px] text-left text-xs">
         <thead class="text-text-muted uppercase tracking-wider border-b border-border-subtle">
           <tr>
             <th class="py-3 pr-4 font-semibold">Key</th>
             <th class="py-3 pr-4 font-semibold">Plan</th>
-            <th class="py-3 pr-4 font-semibold">Requests</th>
-            <th class="py-3 pr-4 font-semibold">Tokens used</th>
+            <th class="py-3 pr-4 font-semibold">Requests (lifetime)</th>
+            <th class="py-3 pr-4 font-semibold">Tokens (lifetime)</th>
+            <th class="py-3 pr-4 font-semibold">Recorded usage ({usageWindowLabel})</th>
             <th class="py-3 pr-4 font-semibold">Token quota</th>
             <th class="py-3 pr-4 font-semibold">RPM / prompt TPM</th>
             <th class="py-3 font-semibold">Concurrency</th>
@@ -80,6 +115,7 @@
           {#each filteredKeys as key (key.id)}
             {@const quota = key.effectiveTokenQuota}
             {@const percent = quota > 0 ? Math.min(100, Math.round((key.totalTokensUsed / quota) * 100)) : 0}
+            {@const activity = usageByKey.get(key.id)}
             <tr>
               <td class="py-3 pr-4">
                 <p class="font-semibold text-text-main">{key.name}</p>
@@ -94,6 +130,10 @@
               </td>
               <td class="py-3 pr-4 tabular-nums text-text-main">{key.requestsCount.toLocaleString()}</td>
               <td class="py-3 pr-4 tabular-nums text-text-main">{tokenLabel(key.totalTokensUsed)}</td>
+              <td class="py-3 pr-4 tabular-nums text-text-main">
+                {(activity?.requests ?? 0).toLocaleString()} requests
+                <p class="mt-0.5 text-text-muted">{tokenLabel(activity?.totalTokens ?? 0)} tokens</p>
+              </td>
               <td class="py-3 pr-4 min-w-[150px]">
                 {#if quota > 0}
                   <div class="flex items-center justify-between gap-2 text-text-main tabular-nums">
@@ -115,9 +155,9 @@
             </tr>
           {/each}
           {#if loading}
-            <tr><td colspan="7" class="py-8 text-center text-text-muted">Loading managed key usage…</td></tr>
+            <tr><td colspan="8" class="py-8 text-center text-text-muted">Loading managed key usage…</td></tr>
           {:else if filteredKeys.length === 0}
-            <tr><td colspan="7" class="py-8 text-center text-text-muted">No active managed API keys match this filter.</td></tr>
+            <tr><td colspan="8" class="py-8 text-center text-text-muted">No active managed API keys match this filter.</td></tr>
           {/if}
         </tbody>
       </table>
@@ -126,7 +166,7 @@
 
   <div class="rounded-lg border border-border-subtle bg-surface-2 p-4 space-y-1">
     <h3 class="text-xs font-semibold text-text-main">Measurement boundaries</h3>
-    <p class="text-xs text-text-muted">Token totals use provider-reported usage when available and AlphaWay's text estimator as a fallback. Streamed output is estimated from the text delivered. RPM and prompt TPM settings are AlphaWay policy limits; rolling-window usage counters are currently process-local and are not presented as lifetime usage.</p>
+    <p class="text-xs text-text-muted">Token totals use provider-reported usage when available and AlphaWay's text estimator as a fallback. Streamed output is estimated from the text delivered. Recorded window totals count completed requests in SQLite; an in-flight request appears after its usage is finalized. RPM and prompt TPM enforcement windows are process-local and may reset on restart.</p>
     <p class="text-xs text-text-muted">Upstream provider RPM/TPM/quota values are not shown because AlphaWay does not have authoritative quota data for every provider.</p>
   </div>
 </div>
