@@ -841,11 +841,15 @@ const handleAnthropicMessages = async (c: any) => {
       let started = false;
       let buffer = "";
       let completionCharacters = 0;
+      let upstreamEnded = false;
 
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            upstreamEnded = true;
+            break;
+          }
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
@@ -876,6 +880,9 @@ const handleAnthropicMessages = async (c: any) => {
         }
         await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
+        if (!upstreamEnded) {
+          try { await reader.cancel("downstream stream closed"); } catch {}
+        }
         recordGatewayUsage(c, {
           clientApiKeyId: c.get("managedApiKeyId") ?? null,
           protocol: "anthropic",
@@ -1007,11 +1014,15 @@ const handleResponses = async (c: any) => {
     return streamSSE(c, async (stream) => {
       let buffer = "";
       let completionCharacters = 0;
+      let upstreamEnded = false;
 
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            upstreamEnded = true;
+            break;
+          }
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
@@ -1034,6 +1045,9 @@ const handleResponses = async (c: any) => {
         }
         await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
+        if (!upstreamEnded) {
+          try { await reader.cancel("downstream stream closed"); } catch {}
+        }
         recordGatewayUsage(c, {
           clientApiKeyId: c.get("managedApiKeyId") ?? null,
           protocol: "responses",
