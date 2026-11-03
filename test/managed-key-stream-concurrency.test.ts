@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { app } from "../src/app";
 import { issueAPIKey, setAPIKeyPolicy } from "../src/core/api-keys";
+import { getDatabase } from "../src/core/database";
 import { __clearManagedKeyRateLimiterForTests } from "../src/core/rate-limiter";
 import { __resetProtocolLanes, identity } from "../src/providers/opencode";
 
@@ -122,6 +123,14 @@ describe("managed-key gateway concurrency releases streamed requests", () => {
       const secondReader = admittedAfterCancel.body!.getReader();
       await secondReader.read();
       await secondReader.cancel("test cleanup");
+
+      const usage = getDatabase().prepare(
+        "SELECT COUNT(*) AS requests, SUM(CASE WHEN status = 200 THEN 1 ELSE 0 END) AS completed, SUM(CASE WHEN status = 429 THEN 1 ELSE 0 END) AS rejected, SUM(total_tokens) AS total_tokens FROM request_logs WHERE client_api_key_id = ?"
+      ).get(key.record.id);
+      expect(usage.requests).toBe(3);
+      expect(usage.completed).toBe(2);
+      expect(usage.rejected).toBe(1);
+      expect(usage.total_tokens).toBeGreaterThan(0);
     }, 15000);
   }
 });
