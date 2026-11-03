@@ -37,6 +37,7 @@ import { recordRequestUsage, estimateTokensFromText } from "../core/usage-tracke
 import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
 import { isModelAllowedByPolicy, type EffectivePolicy } from "../core/policy";
 import { acquireManagedKeyRequest, type PolicyGateResult } from "../core/rate-limiter";
+import { inspectSecurityMessages } from "../core/security-rules";
 
 function recordGatewayUsage(c: any, entry: Parameters<typeof recordRequestUsage>[0]) {
   const policyRejected = Boolean(c.get("policyRejected"));
@@ -50,6 +51,58 @@ function recordGatewayUsage(c: any, entry: Parameters<typeof recordRequestUsage>
   return recorded;
 }
 
+
+function blockSecurityRuleRequest(
+  c: any,
+  protocol: GatewayProtocol,
+  model: string,
+  provider: "opencode" | "codebuddy" | "custom",
+  isStream: boolean,
+  startedAt: number,
+  rule: { id: string; description: string },
+): Response {
+  const message = `Request blocked by Security Rule '${rule.id}'. ${rule.description || "The configured security policy denied this content."}`;
+  recordGatewayUsage(c, {
+    protocol,
+    model,
+    provider,
+    status: 403,
+    latencyMs: Date.now() - startedAt,
+    promptTokens: 0,
+    completionTokens: 0,
+    savedTokens: 0,
+    stream: isStream,
+  });
+
+  if (protocol === "anthropic") {
+    return c.json({
+      type: "error",
+      error: { type: "permission_error", code: "security_rule_blocked", message },
+    }, 403);
+  }
+  return c.json({
+    error: { type: "permission_error", code: "security_rule_blocked", message },
+  }, 403);
+}
+
+function inspectOutboundMessages(
+  c: any,
+  messages: any[],
+  protocol: GatewayProtocol,
+  model: string,
+  provider: "opencode" | "codebuddy" | "custom",
+  isStream: boolean,
+  startedAt: number,
+): { messages: any[]; response: Response | null } {
+  const result = inspectSecurityMessages(messages);
+  if (result.blocked) {
+    return {
+      messages,
+      response: blockSecurityRuleRequest(c, protocol, model, provider, isStream, startedAt, result.blocked),
+    };
+  }
+  return { messages: result.messages, response: null };
+}
 
 function estimateTokensFromCharacterCount(characters: number): number {
   return characters > 0 ? Math.max(1, Math.ceil(characters / 3.8)) : 0;
@@ -303,8 +356,8 @@ async function dispatchToUpstream(
         };
         return Response.json(openAiFormat);
       } else {
-        if (json.choices?.[0]?.message?.content) {
-          json.choices[0].message.content = tokensaver.sanitizeInboundContent(json.choices[0].message.content);
+        if (json.choices?.[0]?.message) {
+          json.choices[0].message = tokensaver.sanitizeInboundAssistantMessage(json.choices[0].message);
         }
         return Response.json(json);
       }
@@ -386,10 +439,8 @@ async function dispatchToUpstream(
                     if (data && data !== "[DONE]") {
                       try {
                         const parsed = JSON.parse(data);
-                        if (parsed.choices?.[0]?.delta?.content) {
-                          parsed.choices[0].delta.content = tokensaver.sanitizeInboundContent(
-                            parsed.choices[0].delta.content
-                          );
+                        if (parsed.choices?.[0]?.delta) {
+                          parsed.choices[0].delta = tokensaver.sanitizeInboundAssistantMessage(parsed.choices[0].delta);
                           data = JSON.stringify(parsed);
                         }
                       } catch {}
@@ -495,10 +546,8 @@ async function dispatchToUpstream(
                     if (data && data !== "[DONE]") {
                       try {
                         const parsed = JSON.parse(data);
-                        if (parsed.choices?.[0]?.delta?.content) {
-                          parsed.choices[0].delta.content = tokensaver.sanitizeInboundContent(
-                            parsed.choices[0].delta.content
-                          );
+                        if (parsed.choices?.[0]?.delta) {
+                          parsed.choices[0].delta = tokensaver.sanitizeInboundAssistantMessage(parsed.choices[0].delta);
                           data = JSON.stringify(parsed);
                         }
                       } catch {}
@@ -524,8 +573,8 @@ async function dispatchToUpstream(
       } else {
         const text = await upstreamRes.text();
         const json = codebuddy.sseToOpenAIJson(text, targetModel);
-        if (json.choices?.[0]?.message?.content) {
-          json.choices[0].message.content = tokensaver.sanitizeInboundContent(json.choices[0].message.content);
+        if (json.choices?.[0]?.message) {
+          json.choices[0].message = tokensaver.sanitizeInboundAssistantMessage(json.choices[0].message);
         }
         return Response.json(json);
       }
@@ -691,14 +740,6 @@ const handleOpenAIChat = async (c: any) => {
   }
 
   const startTime = Date.now();
-  const origChars = computePromptChars(body.messages);
-
-  // Apply Outbound DLP & TokenSaver
-  body.messages = tokensaver.applyTokenSavers(body.messages);
-  const newChars = computePromptChars(body.messages);
-  const savedTokens = Math.max(0, estimateTokensFromText("x".repeat(Math.max(0, origChars - newChars))));
-  const promptTokens = estimateTokensFromText("x".repeat(newChars));
-
   const rawModel = body.model;
   const isCodebuddy = codebuddy.isCodebuddyModel(rawModel);
   const isCustom = Boolean(findCustomProviderForModel(rawModel));
@@ -717,6 +758,17 @@ const handleOpenAIChat = async (c: any) => {
   if (!targetModel) {
     return c.json({ error: { message: "Missing or empty required parameter: 'model'", type: "invalid_request_error", param: "model", code: "model_required" } }, 400);
   }
+
+  const security = inspectOutboundMessages(c, body.messages, "openai", targetModel, providerType, Boolean(body.stream), startTime);
+  if (security.response) return security.response;
+  body.messages = tokensaver.applyTokenSavers(security.messages, undefined, [rawModel, targetModel]);
+  const injectedSecurity = inspectOutboundMessages(c, body.messages, "openai", targetModel, providerType, Boolean(body.stream), startTime);
+  if (injectedSecurity.response) return injectedSecurity.response;
+  body.messages = injectedSecurity.messages;
+  const origChars = computePromptChars(security.messages);
+  const newChars = computePromptChars(body.messages);
+  const savedTokens = Math.max(0, estimateTokensFromText("x".repeat(Math.max(0, origChars - newChars))));
+  const promptTokens = estimateTokensFromText("x".repeat(newChars));
 
   if (!isCodebuddy && !isCustom) {
     const modelVerdict = identity.getCatalogVerdict(targetModel);
@@ -824,14 +876,6 @@ const handleAnthropicMessages = async (c: any) => {
 
   // Convert Anthropic request to OpenAI Chat format
   const openAIBody = anthropicToOpenAI(body);
-  const origChars = computePromptChars(openAIBody.messages);
-
-  // Apply Outbound DLP
-  openAIBody.messages = tokensaver.applyTokenSavers(openAIBody.messages);
-  const newChars = computePromptChars(openAIBody.messages);
-  const savedTokens = Math.max(0, estimateTokensFromText("x".repeat(Math.max(0, origChars - newChars))));
-  const promptTokens = estimateTokensFromText("x".repeat(newChars));
-
   const rawModel = openAIBody.model;
   const isCodebuddy = codebuddy.isCodebuddyModel(rawModel);
   const isCustom = Boolean(findCustomProviderForModel(rawModel));
@@ -848,6 +892,17 @@ const handleAnthropicMessages = async (c: any) => {
     : "opencode";
 
   const isStream = Boolean(body.stream);
+  const security = inspectOutboundMessages(c, openAIBody.messages, "anthropic", targetModel, providerType, isStream, startTime);
+  if (security.response) return security.response;
+  const origChars = computePromptChars(security.messages);
+  openAIBody.messages = tokensaver.applyTokenSavers(security.messages, undefined, [rawModel, targetModel]);
+  const injectedSecurity = inspectOutboundMessages(c, openAIBody.messages, "anthropic", targetModel, providerType, isStream, startTime);
+  if (injectedSecurity.response) return injectedSecurity.response;
+  openAIBody.messages = injectedSecurity.messages;
+  const newChars = computePromptChars(openAIBody.messages);
+  const savedTokens = Math.max(0, estimateTokensFromText("x".repeat(Math.max(0, origChars - newChars))));
+  const promptTokens = estimateTokensFromText("x".repeat(newChars));
+
   const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "anthropic", providerType, c.req.raw.signal);
 
   if (!upstreamRes.ok) {
@@ -1021,14 +1076,6 @@ const handleResponses = async (c: any) => {
 
   // Convert Responses request to OpenAI Chat format
   const openAIBody = responsesToOpenAI(body);
-  const origChars = computePromptChars(openAIBody.messages);
-
-  // Apply Outbound DLP
-  openAIBody.messages = tokensaver.applyTokenSavers(openAIBody.messages);
-  const newChars = computePromptChars(openAIBody.messages);
-  const savedTokens = Math.max(0, estimateTokensFromText("x".repeat(Math.max(0, origChars - newChars))));
-  const promptTokens = estimateTokensFromText("x".repeat(newChars));
-
   const rawModel = openAIBody.model;
   const isCodebuddy = codebuddy.isCodebuddyModel(rawModel);
   const isCustom = Boolean(findCustomProviderForModel(rawModel));
@@ -1045,6 +1092,17 @@ const handleResponses = async (c: any) => {
     : "opencode";
 
   const isStream = Boolean(body.stream);
+  const security = inspectOutboundMessages(c, openAIBody.messages, "responses", targetModel, providerType, isStream, startTime);
+  if (security.response) return security.response;
+  const origChars = computePromptChars(security.messages);
+  openAIBody.messages = tokensaver.applyTokenSavers(security.messages, undefined, [rawModel, targetModel]);
+  const injectedSecurity = inspectOutboundMessages(c, openAIBody.messages, "responses", targetModel, providerType, isStream, startTime);
+  if (injectedSecurity.response) return injectedSecurity.response;
+  openAIBody.messages = injectedSecurity.messages;
+  const newChars = computePromptChars(openAIBody.messages);
+  const savedTokens = Math.max(0, estimateTokensFromText("x".repeat(Math.max(0, origChars - newChars))));
+  const promptTokens = estimateTokensFromText("x".repeat(newChars));
+
   const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "responses", providerType, c.req.raw.signal);
 
   if (!upstreamRes.ok) {

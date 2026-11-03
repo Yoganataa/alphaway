@@ -10,108 +10,25 @@ import {
   getDbFilePath,
   getDatabaseStorageStats,
   vacuumDatabase,
-  dbGetSetting,
-  dbSetSetting,
   dbGetManagedKeyUsageWindow,
 } from "../core/database";
 import { getConsoleLogs, clearConsoleLogs, pushLog } from "../core/console-buffer";
 import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
 import { listAPIKeys, issueAPIKey, renameAPIKey, revokeAPIKey, rotateAPIKey, setAPIKeyPolicy } from "../core/api-keys";
 import { listPlans, getPlan, createPlan, updatePlan, deletePlan } from "../core/plans";
+import {
+  listSecurityRules,
+  replaceSecurityRules,
+  inspectSecurityText,
+} from "../core/security-rules";
 
 export const settingsRoute = new Hono();
-
-export interface SecurityKeywordRule {
-  id: string;
-  pattern: string;
-  action: "mask" | "block";
-  description: string;
-  enabled: boolean;
-}
-
-const DEFAULT_SECURITY_RULES: SecurityKeywordRule[] = [
-  {
-    id: "rule-1",
-    pattern: "browser_cookies_db",
-    action: "block",
-    description: "Anti-Infostealer: Protect browser cookies and login databases",
-    enabled: true,
-  },
-  {
-    id: "rule-2",
-    pattern: "dpapi_masterkey",
-    action: "block",
-    description: "Anti-Infostealer: Protect Windows DPAPI credentials and vault",
-    enabled: true,
-  },
-  {
-    id: "rule-3",
-    pattern: "keychain_access",
-    action: "block",
-    description: "Anti-Infostealer: Protect macOS Keychain database",
-    enabled: true,
-  },
-  {
-    id: "rule-4",
-    pattern: "openai_secret_token",
-    action: "mask",
-    description: "DLP: Redact provider API keys before forwarding",
-    enabled: true,
-  },
-  {
-    id: "rule-5",
-    pattern: "aws_credentials",
-    action: "mask",
-    description: "DLP: Redact AWS access keys and session secrets",
-    enabled: true,
-  },
-];
-
-function validateSecurityRules(input: unknown): SecurityKeywordRule[] | null {
-  if (!Array.isArray(input) || input.length > 100) return null;
-
-  const ids = new Set<string>();
-  const rules: SecurityKeywordRule[] = [];
-  for (const item of input) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
-    const value = item as Record<string, unknown>;
-    if (
-      typeof value.id !== "string" ||
-      !/^[a-zA-Z0-9_-]{1,64}$/.test(value.id) ||
-      ids.has(value.id) ||
-      typeof value.pattern !== "string" ||
-      !value.pattern.trim() ||
-      value.pattern.trim().length > 128 ||
-      (value.action !== "mask" && value.action !== "block") ||
-      typeof value.description !== "string" ||
-      value.description.length > 256 ||
-      typeof value.enabled !== "boolean"
-    ) {
-      return null;
-    }
-
-    ids.add(value.id);
-    rules.push({
-      id: value.id,
-      pattern: value.pattern.trim(),
-      action: value.action,
-      description: value.description.trim(),
-      enabled: value.enabled,
-    });
-  }
-  return rules;
-}
 
 // GET /api/security/rules
 settingsRoute.get("/api/security/rules", (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
-
-  const rules = dbGetSetting<SecurityKeywordRule[]>(
-    "security_rules",
-    DEFAULT_SECURITY_RULES
-  );
-  return c.json({ rules });
+  return c.json({ rules: listSecurityRules() });
 });
 
 // PUT /api/security/rules
@@ -119,23 +36,47 @@ settingsRoute.put("/api/security/rules", async (c) => {
   const denied = adminRequestError(c);
   if (denied) return c.json({ error: denied }, 403);
 
-  let body: any = null;
+  let body: any;
   try {
     body = await readJsonRequestBody(c.req);
   } catch (error: any) {
-    if (error?.statusCode === 413) return c.json({ error: "Request body exceeds the 10 MiB limit" }, 413);
-  }
-  const rules = validateSecurityRules(body?.rules);
-  if (!rules) {
-    return c.json(
-      { error: "Invalid security rules. Provide up to 100 unique rules with valid IDs, patterns, actions, descriptions, and enabled flags." },
-      400
-    );
+    const status = error?.statusCode === 413 ? 413 : 400;
+    return c.json({ error: status === 413 ? "Request body exceeds the 10 MiB limit" : "A valid JSON body is required" }, status);
   }
 
-  dbSetSetting("security_rules", rules);
-  pushLog("info", `[Security] Persisted ${rules.length} custom DLP rule(s)`);
-  return c.json({ ok: true, rules });
+  try {
+    const rules = replaceSecurityRules(body?.rules);
+    pushLog("info", `[Security] Replaced live Security Rules (${rules.length} rule(s))`);
+    return c.json({ ok: true, rules });
+  } catch (error: any) {
+    return c.json({ error: String(error?.message || "Invalid Security Rules") }, 400);
+  }
+});
+
+// POST /api/security/inspect
+// The Security dashboard uses the same rule engine as live gateway requests.
+settingsRoute.post("/api/security/inspect", async (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+
+  let body: any;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    const status = error?.statusCode === 413 ? 413 : 400;
+    return c.json({ error: status === 413 ? "Request body exceeds the 10 MiB limit" : "A valid JSON body is required" }, status);
+  }
+  if (typeof body?.text !== "string" || body.text.length > 1_000_000) {
+    return c.json({ error: "Inspection text must be a string up to 1 MiB" }, 400);
+  }
+
+  const result = inspectSecurityText(body.text);
+  return c.json({
+    ok: true,
+    output: result.blocked ? `[BLOCKED_BY_ALPHAWAY: Security rule ${result.blocked.id}]` : result.text,
+    blocked: result.blocked,
+    maskedRuleIds: result.maskedRuleIds,
+  });
 });
 
 

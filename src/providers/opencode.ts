@@ -2086,7 +2086,7 @@ export async function handleOpenCodeChat(
                     if (ev.item.call_id) toolIndexMap.set(ev.item.call_id, toolIdx);
                     if (ev.item.id) toolIndexMap.set(ev.item.id, toolIdx);
                   }
-                  const restoredName = restoreClientToolName(ev.item.name, aliasToOriginal);
+                  const restoredName = tokensaver.sanitizeInboundContent(restoreClientToolName(ev.item.name, aliasToOriginal));
                   writeSse(`data: ${JSON.stringify({
                     id: completionId,
                     object: "chat.completion.chunk",
@@ -2116,7 +2116,7 @@ export async function handleOpenCodeChat(
                     choices: [{
                       index: 0,
                       delta: {
-                        tool_calls: [{ index: toolIdx, function: { arguments: ev.delta } }],
+                        tool_calls: [{ index: toolIdx, function: { arguments: tokensaver.sanitizeInboundContent(ev.delta) } }],
                       },
                       finish_reason: null,
                     }],
@@ -2185,14 +2185,8 @@ export async function handleOpenCodeChat(
               try {
                 const chunk = JSON.parse(raw);
                 const delta = chunk.choices?.[0]?.delta;
-                if (delta?.content) {
-                  delta.content = tokensaver.sanitizeInboundContent(delta.content);
-                }
                 if (delta && delta.reasoning && !delta.reasoning_content) {
                   delta.reasoning_content = delta.reasoning;
-                }
-                if (delta?.reasoning_content) {
-                  delta.reasoning_content = tokensaver.sanitizeInboundContent(delta.reasoning_content);
                 }
                 if (hasAliases && Array.isArray(delta?.tool_calls)) {
                   for (const tc of delta.tool_calls) {
@@ -2200,6 +2194,9 @@ export async function handleOpenCodeChat(
                       tc.function.name = restoreClientToolName(tc.function.name, aliasToOriginal);
                     }
                   }
+                }
+                if (delta) {
+                  Object.assign(delta, tokensaver.sanitizeInboundAssistantMessage(delta));
                 }
                 writeSse(`data: ${JSON.stringify(chunk)}\n\n`);
               } catch {
@@ -2343,11 +2340,12 @@ export async function handleOpenCodeChat(
     }
 
     const validToolCalls = toolCalls.filter(Boolean);
-    const sanitizedAssistantText = assistantText ? tokensaver.sanitizeInboundContent(assistantText) : null;
-    const sanitizedReasoningText = reasoningText ? tokensaver.sanitizeInboundContent(reasoningText) : "";
-    const messageObj: any = { role: "assistant", content: sanitizedAssistantText };
-    if (sanitizedReasoningText) messageObj.reasoning_content = sanitizedReasoningText;
-    if (validToolCalls.length > 0) messageObj.tool_calls = validToolCalls;
+    const messageObj: any = tokensaver.sanitizeInboundAssistantMessage({
+      role: "assistant",
+      content: assistantText || null,
+      ...(reasoningText ? { reasoning_content: reasoningText } : {}),
+      ...(validToolCalls.length > 0 ? { tool_calls: validToolCalls } : {}),
+    });
 
     let finishReason = upstreamFinishReason || "stop";
     if (validToolCalls.length > 0 && finishReason !== "length" && finishReason !== "content_filter") {

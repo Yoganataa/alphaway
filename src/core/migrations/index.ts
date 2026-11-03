@@ -4,11 +4,12 @@ import { secretResidueCleanupMigration } from "./003_secret_residue_cleanup";
 import { encryptLegacyCodeBuddyCredentialMigration } from "./004_encrypt_legacy_codebuddy_credential";
 import { removeLegacyJsonImportLedgerMigration } from "./005_remove_legacy_json_import_ledger";
 import { plansAndRequestPolicyMigration } from "./006_plans_and_request_policy";
+import { personaAndSecurityRulesMigration } from "./007_persona_and_security_rules";
 import type { Migration, MigrationRunOptions, MigrationRunResult } from "./types";
 
 export type { Migration, MigrationRunOptions, MigrationRunResult } from "./types";
 
-export const MIGRATIONS: readonly Migration[] = [initialSchemaMigration, authSecurityMigration, secretResidueCleanupMigration, encryptLegacyCodeBuddyCredentialMigration, removeLegacyJsonImportLedgerMigration, plansAndRequestPolicyMigration];
+export const MIGRATIONS: readonly Migration[] = [initialSchemaMigration, authSecurityMigration, secretResidueCleanupMigration, encryptLegacyCodeBuddyCredentialMigration, removeLegacyJsonImportLedgerMigration, plansAndRequestPolicyMigration, personaAndSecurityRulesMigration];
 
 export class MigrationError extends Error {
   constructor(message: string) {

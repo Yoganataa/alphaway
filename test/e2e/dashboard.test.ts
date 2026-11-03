@@ -176,24 +176,28 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(mainText).toContain("bun src/index.ts --stop");
   }, 15000);
 
-  it("navigates to Soul Studio and verifies SoulSpec controls and presets", async () => {
+  it("navigates to Persona and opens the preserved SOUL Studio section", async () => {
     const { page } = dashboard;
 
-    // Click Soul Studio Tab
-    await page.getByRole("button", { name: "Soul Studio" }).click();
+    await page.getByRole("button", { name: "Persona" }).click();
+    await page.getByText("Model Personas").waitFor({ state: "visible" });
+    // Wait for the asynchronous Persona API request to finish before checking
+    // the preset editor, which is not rendered while the view is loading.
+    await page.getByText("Preset Library").waitFor({ state: "visible" });
+    const personaText = await page.textContent("main");
+    expect(personaText).toContain("Preset Library");
+
+    await page.getByRole("button", { name: "SOUL.md" }).click();
 
     const mainText = await page.textContent("main");
     expect(mainText).toContain("Soul Studio");
-    expect(mainText).toContain("SOUL.md Specification");
     expect(mainText).toContain("Atlas");
     expect(mainText).toContain("Minimalist");
     expect(mainText).toContain("Socratic");
 
     const editor = page.locator("#soul-editor");
     await editor.waitFor({ state: "visible" });
-    // Soul configuration is loaded asynchronously after the view mounts.
-    // Wait for the API-backed editor value rather than racing the initial
-    // render; the non-empty assertion below remains mandatory.
+    // Soul configuration is loaded asynchronously after the inner tab mounts.
     await page.waitForFunction(() => {
       const element = document.querySelector<HTMLTextAreaElement>("#soul-editor");
       return Boolean(element && element.value.trim().length > 0);

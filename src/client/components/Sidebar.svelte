@@ -43,7 +43,7 @@
         { id: "tokensaver", label: "TokenSaver", icon: "bolt", badge: "RTK" },
         { id: "security", label: "Security & DLP", icon: "shield", badge: "DLP" },
         { id: "proxy", label: "Egress Proxy", icon: "vpn_lock" },
-        { id: "soul", label: "Soul Studio", icon: "auto_awesome", badge: "SOUL" },
+        { id: "persona", label: "Persona", icon: "masks", badge: "AI" },
       ],
     },
     {

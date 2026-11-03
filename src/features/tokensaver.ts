@@ -2,6 +2,8 @@
 
 const securityGuard = require("../core/security-guard");
 const soulEngine = require("./soul-engine");
+const personaEngine = require("../core/persona");
+const { sanitizeSecurityResponse } = require("../core/security-rules");
 const { dbGetSetting, dbSetSetting } = require("../core/database");
 
 // --- Prompts ---
@@ -201,18 +203,10 @@ function getADHDPrompt(level = "full") {
 /**
  * Apply token saver transformations (DLP, RTK, Caveman, ADHD) to messages payload.
  */
-function applyTokenSavers(messages, config = currentConfig) {
+function applyTokenSavers(messages, config = currentConfig, modelIds = []) {
   if (!Array.isArray(messages) || messages.length === 0) return messages;
 
   let out = messages.map((m) => ({ ...m }));
-
-  // 0. DLP Guard: Redact secrets and anonymize local user paths before sending to upstream
-  if (config.dlpEnabled !== false) {
-    out = securityGuard.sanitizeOutboundMessages(out, {
-      maskSecrets: config.maskSecrets !== false,
-      maskPaths: config.maskPaths !== false,
-    });
-  }
 
   // 1. RTK: Compress tool results / command outputs
   if (config.rtkEnabled) {
@@ -263,6 +257,18 @@ function applyTokenSavers(messages, config = currentConfig) {
     }
   }
 
+  // 3b. Model-bound Persona prompt injection. SOUL remains global and keeps
+  // its existing behavior; Persona is opt-in for exact IDs or keyword matches.
+  if (Array.isArray(modelIds) && modelIds.length > 0) {
+    const match = personaEngine.resolvePersonaForModels(modelIds);
+    if (match.injected && match.prompt) {
+      promptsToInject.push(personaEngine.formatPersonaPrompt(match.prompt));
+      if (match.presetId) {
+        try { personaEngine.recordPersonaUsage(match.presetId); } catch {}
+      }
+    }
+  }
+
   // 4. Caveman Mode system prompt injection
   if (config.cavemanEnabled) {
     let bypass = false;
@@ -307,7 +313,73 @@ function applyTokenSavers(messages, config = currentConfig) {
     }
   }
 
+  // Final outbound DLP pass includes generated SOUL and model-bound Persona prompts.
+  // These instructions are still outbound data and must not bypass redaction.
+  if (config.dlpEnabled !== false) {
+    out = securityGuard.sanitizeOutboundMessages(out, {
+      maskSecrets: config.maskSecrets !== false,
+      maskPaths: config.maskPaths !== false,
+    });
+  }
+
   return out;
+}
+
+function sanitizeInboundContent(text, options) {
+  const builtIn = securityGuard.sanitizeInboundContent(text, options);
+  return typeof builtIn === "string" ? sanitizeSecurityResponse(builtIn) : builtIn;
+}
+
+function sanitizeInboundTextValue(value) {
+  if (typeof value === "string") return sanitizeInboundContent(value);
+  if (!Array.isArray(value)) return value;
+
+  return value.map((part) => {
+    if (!part || typeof part !== "object" || typeof part.text !== "string") return part;
+    return { ...part, text: sanitizeInboundContent(part.text) };
+  });
+}
+
+/**
+ * Sanitize assistant output fields, including function/tool call names and
+ * serialized arguments. This is used for both JSON responses and SSE deltas.
+ */
+function sanitizeInboundAssistantMessage(message) {
+  if (!message || typeof message !== "object" || Array.isArray(message)) return message;
+  const output = { ...message };
+
+  for (const field of ["content", "reasoning", "reasoning_content", "refusal"]) {
+    if (typeof output[field] === "string" || Array.isArray(output[field])) {
+      output[field] = sanitizeInboundTextValue(output[field]);
+    }
+  }
+
+  if (Array.isArray(output.tool_calls)) {
+    output.tool_calls = output.tool_calls.map((toolCall) => {
+      if (!toolCall || typeof toolCall !== "object") return toolCall;
+      const fn = toolCall.function;
+      if (!fn || typeof fn !== "object") return toolCall;
+      return {
+        ...toolCall,
+        function: {
+          ...fn,
+          ...(typeof fn.name === "string" ? { name: sanitizeInboundContent(fn.name) } : {}),
+          ...(typeof fn.arguments === "string" ? { arguments: sanitizeInboundContent(fn.arguments) } : {}),
+        },
+      };
+    });
+  }
+
+  if (output.function_call && typeof output.function_call === "object") {
+    const fn = output.function_call;
+    output.function_call = {
+      ...fn,
+      ...(typeof fn.name === "string" ? { name: sanitizeInboundContent(fn.name) } : {}),
+      ...(typeof fn.arguments === "string" ? { arguments: sanitizeInboundContent(fn.arguments) } : {}),
+    };
+  }
+
+  return output;
 }
 
 module.exports = {
@@ -336,5 +408,6 @@ module.exports = {
   redactSecrets: securityGuard.redactSecrets,
   anonymizeWorkspacePaths: securityGuard.anonymizeWorkspacePaths,
   sanitizeOutboundMessages: securityGuard.sanitizeOutboundMessages,
-  sanitizeInboundContent: securityGuard.sanitizeInboundContent,
+  sanitizeInboundContent,
+  sanitizeInboundAssistantMessage,
 };

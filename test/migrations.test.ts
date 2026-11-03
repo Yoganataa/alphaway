@@ -29,7 +29,7 @@ describe("SQLite migration runner", () => {
     const result = runTestMigrations(db);
 
     expect(result).toEqual({
-      currentVersion: 6,
+      currentVersion: 7,
       applied: [
         { version: 1, name: "initial-schema" },
         { version: 2, name: "auth-security" },
@@ -37,6 +37,7 @@ describe("SQLite migration runner", () => {
         { version: 4, name: "encrypt-legacy-codebuddy-credential" },
         { version: 5, name: "remove-legacy-json-import-ledger" },
         { version: 6, name: "plans-and-request-policy" },
+      { version: 7, name: "persona-and-security-rules" },
       ],
     });
 
@@ -53,6 +54,11 @@ describe("SQLite migration runner", () => {
     expect(tables).toContain("api_keys");
     expect(tables).toContain("admin_users");
     expect(tables).toContain("admin_sessions");
+    expect(tables).toContain("persona_presets");
+    expect(tables).toContain("persona_preset_keywords");
+    expect(tables).toContain("persona_model_bindings");
+    expect(tables).toContain("persona_global_excludes");
+    expect(tables).toContain("security_rules");
 
     const history = db
       .prepare("SELECT version, name FROM schema_migrations")
@@ -64,11 +70,45 @@ describe("SQLite migration runner", () => {
       { version: 4, name: "encrypt-legacy-codebuddy-credential" },
       { version: 5, name: "remove-legacy-json-import-ledger" },
       { version: 6, name: "plans-and-request-policy" },
+        { version: 7, name: "persona-and-security-rules" },
     ]);
     const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((row: any) => row.name);
     expect(indexes).toContain("idx_request_logs_client_key_timestamp");
     expect(indexes).toContain("idx_request_logs_timestamp_client_key");
     expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub").value).toBe(JSON.stringify("pending"));
+    expect(db.prepare("SELECT COUNT(*) AS count FROM security_rules").get().count).toBe(5);
+  });
+
+  it("migrates valid legacy Security Rules from app_settings into normalized SQLite rows", () => {
+    db = openDatabase();
+    runTestMigrations(db, MIGRATIONS.slice(0, 6));
+    const legacyRules = [
+      { id: "legacy-mask", pattern: "legacy_secret", action: "mask", description: "Migrated mask rule", enabled: true },
+      { id: "legacy-block", pattern: "legacy_block", action: "block", description: "Migrated block rule", enabled: false },
+    ];
+    db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .run("security_rules", JSON.stringify(legacyRules), Date.now());
+
+    runTestMigrations(db);
+
+    const rows = db.prepare("SELECT id, pattern, action, description, enabled FROM security_rules ORDER BY sort_order").all();
+    expect(rows).toEqual([
+      { ...legacyRules[0], enabled: 1 },
+      { ...legacyRules[1], enabled: 0 },
+    ]);
+    expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("security_rules")).toBeNull();
+  });
+
+  it("preserves an explicitly empty legacy Security Rules array", () => {
+    db = openDatabase();
+    runTestMigrations(db, MIGRATIONS.slice(0, 6));
+    db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .run("security_rules", "[]", Date.now());
+
+    runTestMigrations(db);
+
+    expect(db.prepare("SELECT COUNT(*) AS count FROM security_rules").get().count).toBe(0);
+    expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("security_rules")).toBeNull();
   });
 
   it("requires encrypted database backups before irreversible credential migrations", () => {
@@ -109,10 +149,11 @@ describe("SQLite migration runner", () => {
     ).get("sqlite-provider");
 
     expect(result).toEqual({
-      currentVersion: 6,
+      currentVersion: 7,
       applied: [
         { version: 5, name: "remove-legacy-json-import-ledger" },
         { version: 6, name: "plans-and-request-policy" },
+        { version: 7, name: "persona-and-security-rules" },
       ],
     });
     expect(ledger).toBeNull();
@@ -144,7 +185,7 @@ describe("SQLite migration runner", () => {
       .update(legacySecret, "utf8")
       .digest("hex");
 
-    expect(result.currentVersion).toBe(6);
+    expect(result.currentVersion).toBe(7);
     expect(stored.name).toBe("Legacy Integration");
     expect(stored.key_prefix).toBe(legacySecret.slice(0, 16));
     expect(stored.secret_hash).toBe(expectedHash);
@@ -180,7 +221,7 @@ describe("SQLite migration runner", () => {
       .prepare("SELECT id, name, api_key FROM custom_providers WHERE id = ?")
       .get("legacy-provider");
 
-    expect(result.currentVersion).toBe(6);
+    expect(result.currentVersion).toBe(7);
     expect(row.id).toBe("legacy-provider");
     expect(row.name).toBe("Legacy");
     expect(row.api_key).toMatch(/^awenc:v1:/);
@@ -262,7 +303,7 @@ describe("SQLite migration runner", () => {
     const marker = JSON.parse(db.prepare("SELECT value FROM app_settings WHERE key = ?")
       .get("alpha_security_secret_scrub").value);
 
-    expect(result.currentVersion).toBe(6);
+    expect(result.currentVersion).toBe(7);
     expect(stored).toMatch(/^awenc:v1:/);
     expect(stored).not.toContain(legacyCredential);
     expect(decryptSecret(stored)).toBe(legacyCredential);
@@ -275,11 +316,11 @@ describe("SQLite migration runner", () => {
     const first = runTestMigrations(db);
     const second = runTestMigrations(db);
 
-    expect(first.applied).toHaveLength(6);
+    expect(first.applied).toHaveLength(7);
     expect(second.applied).toHaveLength(0);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(6);
+    ).toBe(7);
   });
 
   it("rolls back migration DDL and history when a migration fails", () => {
@@ -287,7 +328,7 @@ describe("SQLite migration runner", () => {
     runTestMigrations(db);
 
     const failingMigration: Migration = {
-      version: 7,
+      version: 8,
       name: "failing-test-migration",
       up(database) {
         database.exec("CREATE TABLE should_rollback (id INTEGER PRIMARY KEY)");
@@ -296,7 +337,7 @@ describe("SQLite migration runner", () => {
     };
 
     expect(() => runTestMigrations(db, [...MIGRATIONS, failingMigration])).toThrow(
-      /Migration 7 .* simulated interruption/
+      /Migration 8 .* simulated interruption/
     );
 
     const table = db
@@ -307,7 +348,7 @@ describe("SQLite migration runner", () => {
       .get().count;
 
     expect(table).toBeNull();
-    expect(count).toBe(6);
+    expect(count).toBe(7);
   });
 
   it("can retry a migration after its failed attempt was rolled back", () => {
@@ -315,7 +356,7 @@ describe("SQLite migration runner", () => {
     runTestMigrations(db);
 
     const recoveredMigration: Migration = {
-      version: 7,
+      version: 8,
       name: "recovered-test-migration",
       up(database) {
         database.exec("CREATE TABLE recovered_state (value TEXT NOT NULL)");
@@ -323,13 +364,13 @@ describe("SQLite migration runner", () => {
     };
 
     const result = runTestMigrations(db, [...MIGRATIONS, recoveredMigration]);
-    expect(result.currentVersion).toBe(7);
+    expect(result.currentVersion).toBe(8);
     expect(result.applied).toEqual([
-      { version: 7, name: "recovered-test-migration" },
+      { version: 8, name: "recovered-test-migration" },
     ]);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get().count
-    ).toBe(7);
+    ).toBe(8);
   });
 
   it("refuses destructive migrations unless a backup callback is provided", () => {
@@ -337,7 +378,7 @@ describe("SQLite migration runner", () => {
     runTestMigrations(db);
 
     const destructiveMigration: Migration = {
-      version: 7,
+      version: 8,
       name: "destructive-test-migration",
       destructive: true,
       up(database) {
@@ -358,7 +399,7 @@ describe("SQLite migration runner", () => {
     });
 
     expect(backupWasCreated).toBe(true);
-    expect(result.currentVersion).toBe(7);
+    expect(result.currentVersion).toBe(8);
   });
 
   it("rejects a database created by a newer application schema", () => {

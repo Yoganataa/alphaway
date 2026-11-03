@@ -84,10 +84,15 @@
       subtitle: "Cloudflare Named Tunnel ingress and native background daemon supervisor",
       icon: "cloud",
     },
+    persona: {
+      title: "Persona",
+      subtitle: "Model-bound prompt presets, keyword matching, exact bindings, and SOUL.md",
+      icon: "masks",
+    },
     soul: {
-      title: "Soul Studio",
-      subtitle: "Universal SOUL.md specification engine, persona presets, and real-time sandbox test",
-      icon: "auto_awesome",
+      title: "Persona",
+      subtitle: "Model-bound prompt presets and SOUL.md configuration",
+      icon: "masks",
     },
     settings: {
       title: "System & Storage Settings",
