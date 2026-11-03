@@ -58,7 +58,7 @@
       </div>
       <p class="text-xs text-text-muted mt-1">Configured limits and usage recorded by AlphaWay. This is not an upstream provider quota monitor.</p>
     </div>
-    <Button variant="secondary" size="sm" onclick={loadData} disabled={loading}>
+    <Button variant="secondary" size="sm" onclick={() => loadData(usageWindow)} disabled={loading}>
       <span class="material-symbols-outlined text-[16px] {loading ? 'animate-spin' : ''}">refresh</span>
       <span>Refresh</span>
     </Button>
