@@ -237,12 +237,11 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(keyResponse.status).toBe(201);
     const key = (await keyResponse.json()).key;
 
-    const assignment = await fetch(baseURL + "/api/keys/" + key.id + "/policy", {
-      method: "PATCH",
-      headers: adminHeaders,
-      body: JSON.stringify({ planId: plan.id }),
-    });
-    expect(assignment.status).toBe(200);
+    await page.getByRole("button", { name: "Endpoint" }).click();
+    const planSelect = page.getByRole("combobox", { name: "Plan for " + keyName });
+    await planSelect.waitFor({ state: "visible", timeout: 10000 });
+    await planSelect.selectOption(plan.id);
+    await page.getByText("Plan assigned to API key", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     await page.getByRole("button", { name: "Quota Tracker" }).click();
     const row = page.locator("tbody tr").filter({ hasText: keyName });
