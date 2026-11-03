@@ -4,26 +4,26 @@
 >
 > **Checkpoint date:** 2026-11-03 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Active workstream:** Phase 3 — Plans, Limits, and Request Enforcement. Only open PR: [#6](https://github.com/Yoganataa/alphaway/pull/6), Draft, branch `feat/phase-3-plans-limits`. Current branch HEAD at this checkpoint: `1b94131e6d12624c587021b91cec1ad78c859419`; source implementation head with green CI/CodeQL: `39447d162dc0f60e5e05250d9f69a0e980bc4df8`.
+> **Active workstream:** Phase 3 — Plans, Limits, and Request Enforcement. Only open PR: [#6](https://github.com/Yoganataa/alphaway/pull/6), currently Draft, branch `feat/phase-3-plans-limits`. Latest verified source head: `9996474261aeb8b4154846a27ce5427cc1bcf46b`; docs are being synchronized in follow-up commits. Inspect the live head and checks before the Ready-for-review transition.
 > **Phase 2 merge commit on `main`:** `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9` (PR #4).  
 > **Latest merged Phase 2 code head:** `b057042362f6497852cb037ed7be2ec4c0aa63a4`; merged into `main` by `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9`.  
-> **Latest implementation CI:** PR CI [#444](https://github.com/Yoganataa/alphaway/actions/runs/41556425096) passed on Phase 3 source head `39447d1`: unit/protocol tests, UI/standalone build, installer smoke, and dashboard E2E all passed; optional live upstream drill was skipped by design. The later docs-only branch commit `1b94131` has new CI/CodeQL checks pending.  
-> **Latest CodeQL verification:** PR CodeQL [#229](https://github.com/Yoganataa/alphaway/actions/runs/41556419210) passed JavaScript/TypeScript and Actions analysis on Phase 3 source head `39447d1`. Default-branch CodeQL [#213](https://github.com/Yoganataa/alphaway/actions/runs/41448964076) passed on `main` HEAD `a28ed9b`. GitHub Security screenshot (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed**.
+> **Latest implementation CI:** PR CI [#461](https://github.com/Yoganataa/alphaway/actions/runs/41558744386) passed on Phase 3 source head `9996474`: unit/protocol tests, fingerprint check, UI/standalone build, installer smoke, dashboard E2E, managed-key retry metering, and streaming cancellation/concurrency tests all passed; optional live upstream drill was skipped by design.  
+> **Latest CodeQL verification:** PR CodeQL [#246](https://github.com/Yoganataa/alphaway/actions/runs/41558739163) passed JavaScript/TypeScript and Actions analysis on Phase 3 source head `9996474`. Default-branch CodeQL [#213](https://github.com/Yoganataa/alphaway/actions/runs/41448964076) passed on `main` HEAD `a28ed9b`. GitHub Security screenshot (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed**.
 > **Maintainer review decision:** This is a solo-developer repository with zero required approvals. The maintainer accepted residual review risk after passing CI/CodeQL evidence and resolution of all six inline review threads. No second human reviewer participated.  
 > **Phase 2 PR:** [#4 — Authentication, API keys, and administrative access](https://github.com/Yoganataa/alphaway/pull/4) (merged; merge commit `dc08b6d`).  
-> **Active Phase 3 PR:** [#6 — Plans, limits, and request enforcement](https://github.com/Yoganataa/alphaway/pull/6) (open Draft; see the Phase 3 status below).  
+> **Active Phase 3 PR:** [#6 — Plans, limits, and request enforcement](https://github.com/Yoganataa/alphaway/pull/6) (open Draft while documentation is synchronized; all implementation acceptance checks are green).  
 > **Merged Phase 0 PR:** [#1 — Phase 0 CI, installer, and standalone distribution](https://github.com/Yoganataa/alphaway/pull/1)  
 > **Merged Phase 1 PR:** [#3 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/3)  
 > **Superseded Phase 1 PR:** [#2 — Versioned SQLite migrations and canonical persistence](https://github.com/Yoganataa/alphaway/pull/2) (closed without merge)
 
 ## 1. Current Status
 
-**Phase 0, Phase 1, and Phase 2 are merged into `main`. Phase 2 PR #4 merged at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9`. The project owner confirmed 0 open / 14 closed CodeQL alerts on `main`. Phase 3 is active in Draft PR #6 on `feat/phase-3-plans-limits`; Plans, policy resolution, request enforcement, per-key usage, dashboard views, and regression tests are implemented. Source head `39447d1` passed CI #444 and CodeQL #229. Phase 3 is not complete yet: explicit retry/stream-cancellation metering and concurrency-wrapper regression tests remain.
+**Phase 0, Phase 1, and Phase 2 are merged into `main`. Phase 2 PR #4 merged at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9`. The project owner confirmed 0 open / 14 closed CodeQL alerts on `main`. Phase 3 implementation and acceptance criteria 3.1–3.5 are complete on branch `feat/phase-3-plans-limits`, in PR #6. Source head `9996474` passed CI #461 and CodeQL #246, including tests for exactly-once retry metering, cancellation and upstream reader cleanup across OpenAI/Anthropic/Responses, per-key usage windows, Plan UI, and all legacy route aliases. PR #6 remains Draft pending final documentation sync and Ready-for-review transition; it has not been merged.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
 - [x] Phase 2 — Authentication, API Keys, and Administrative Access (PR #4 merged; PR and post-merge CI/CodeQL checks passed).
-- [ ] Phase 3 — Plans, Limits, and Request Enforcement (active; current PR work tracked on `feat/phase-3-plans-limits`).
+- [ ] Phase 3 — Plans, Limits, and Request Enforcement (implementation acceptance criteria verified; PR #6 review/merge pending).
 - [ ] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules.
 - [ ] Phase 5 — Accurate Backend Feature Contracts.
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
@@ -247,17 +247,17 @@ Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9
 
 ### Current Phase 3 implementation and verification
 
-- PR #6 is open Draft; `main` is unchanged at the Phase 3 baseline `a28ed9baef0c698ec879d649a24726706d1eee3d`.
+- PR #6 is open Draft; `main` is unchanged at the Phase 3 baseline `a28ed9baef0c698ec879d649a24726706d1eee3d`. Implementation is complete; only documentation synchronization and the Ready-for-review transition remain.
 - Migration v6 adds reusable Plans, managed-key Plan assignment/overrides, token usage counters, request attribution, and indexes for per-key range queries.
 - Implemented: strict Plan CRUD, effective policy precedence, model allowlists, RPM/prompt-TPM/concurrency gates, lifetime token reservations/settlement, OpenAI/Anthropic/Responses enforcement and all legacy aliases, managed-key usage attribution, persisted 1h/24h/7d/30d usage windows, and truthful Plans/Quota dashboard views.
-- Dashboard E2E covers Plan create/edit/delete, assigning a Plan to a managed key, inherited quota display, and selecting the usage window. Unit/integration tests cover migration, policy validation/precedence, alias enforcement, metering attribution, and limiter behavior.
-- CI #444 and PR CodeQL #229 passed on source head `39447d1`. The subsequent documentation commit `1b94131` is the current branch HEAD and needs a fresh CI/CodeQL result before it can be considered the latest verified SHA.
-- Remaining acceptance work: add explicit tests for exactly-once metering across retries/cancellation and concurrency-slot release on streaming/body cancellation. Keep PR #6 Draft until these tests and the subsequent CI/CodeQL checks pass.
+- Dashboard E2E covers Plan create/edit/delete, assigning a Plan through the API key dropdown, inherited quota display, and selectable usage windows. Unit/integration tests cover migration, policy validation/precedence, all protocol aliases, retry exactly-once metering, stream completion/cancellation metering, upstream reader cancellation, and concurrency-slot release.
+- CI #461 and PR CodeQL #246 passed on source head `9996474`. The new tests verify: two upstream 503 attempts produce one managed-key usage row; OpenAI SSE usage finalizes exactly once on completion/cancel; OpenAI, Anthropic, and Responses managed-key streams reject concurrent admission, cancel the upstream stream, release the slot, admit a subsequent request, and record one row for each client request; wrapper release/settlement is idempotent on normal completion, body error, no-body, and cancellation.
+- Implementation acceptance criteria 3.1–3.5 are verified. Remaining action is to synchronize this checkpoint and roadmap, run CI/CodeQL on that documentation commit, and mark PR #6 Ready for review. Do not merge without explicit project-owner instruction.
 
 Next actions:
-1. Add targeted retry, stream-cancellation, body-cancellation, and concurrency-release tests without weakening existing tests.
-2. Run the complete required CI and PR CodeQL checks on the updated head; inspect any new findings and resolve all review threads.
-3. Only after the remaining acceptance criteria are verified, change PR #6 from Draft to Ready for review. Do not merge while these validation gaps remain.
+1. Run the required CI and PR CodeQL checks on the documentation-sync commit; confirm all four mandatory CI jobs and both CodeQL analyzers pass.
+2. Verify live PR #6 still has zero unresolved review threads, then mark it Ready for review.
+3. Do not merge PR #6 until the project owner explicitly instructs the merge.
 4. Keep Windows ACL verification in Phase 7; POSIX file/directory permissions are already covered.
 
 Do not reopen or recreate Phase 0–2 work unless a verified regression is found.
@@ -267,7 +267,7 @@ Do not reopen or recreate Phase 0–2 work unless a verified regression is found
 - The live repository/PR state takes precedence over this checkpoint if newer commits exist.
 - Keep backend runtime Bun + TypeScript + Hono. Preserve OpenCode TLS/BoringSSL behavior and all documented gateway protocols.
 - Do not weaken or remove tests to make CI green. Do not claim tests/builds/CI passed unless the actual result was inspected.
-- Work only on the active phase. Phase 0–2 are merged; Phase 3 is active in Draft PR #6 on `feat/phase-3-plans-limits`. The main CodeQL screenshot confirms 0 open / 14 closed alerts. Do not mark Phase 3 complete until the remaining stream/retry/cancellation tests, CI, and PR CodeQL checks pass.
+- Work only on the active phase. Phase 0–2 are merged; Phase 3 implementation criteria are verified on PR #6 source head `9996474` (CI #461, CodeQL #246). The main CodeQL screenshot confirms 0 open / 14 closed alerts. Do not mark Phase 3 merged until PR #6 is actually merged.
 - Update this checkpoint and the roadmap after meaningful work, including branch/PR state, changed paths, verification evidence, open risks, and exact next action.
 - If work is interrupted, leave a committed state and an accurate checkpoint; do not claim background work.
 
@@ -281,9 +281,11 @@ Phase 0 PR #1, Phase 1 PR #3, Phase 2 PR #4, dan dokumentasi sync PR #5 sudah me
 
 Phase 2 selesai; jangan mengulang. Backend wajib tetap Bun >=1.4.4 + TypeScript + Hono + SQLite. Jangan port backend Go dari 9router-go; gunakan 9router-go hanya sebagai referensi konsep policy.
 
-Phase 3 aktif pada branch `feat/phase-3-plans-limits`, PR #6 masih Draft. Source head `39447d162dc0f60e5e05250d9f69a0e980bc4df8` passed CI #444 dan PR CodeQL #229. Checkpoint/roadmap docs diperbarui setelah source head tersebut; cek dan verifikasi HEAD terbaru sebelum melanjutkan.
+Phase 3 implementation acceptance criteria 3.1–3.5 telah diverifikasi pada source head `9996474261aeb8b4154846a27ce5427cc1bcf46b`; CI #461 dan PR CodeQL #246 pass pada exact head tersebut. PR #6 saat checkpoint ini masih Draft karena dokumentasi sedang disinkronkan. Cek live HEAD dan hasil run baru; jika docs commit CI/CodeQL lulus dan tidak ada review thread terbuka, mark PR #6 Ready for review. Jangan merge tanpa instruksi eksplisit project owner.
 
-Implementasi Phase 3 saat ini mencakup migration v6, Plan CRUD, effective policy precedence, per-key overrides, model allowlists, RPM/prompt TPM/concurrency, lifetime token quotas, request attribution, usage windows 1h/24h/7d/30d, dashboard Plans/Quota, dan coverage semua route aliases. PR tetap Draft karena sisa acceptance tests yang harus ditambah: exactly-once metering across retries/client cancellation; release concurrency slots on successful/error/stream/body cancellation; leak/double-release regression tests. Jangan weaken test. Setelah tes selesai, jalankan required CI/CodeQL untuk HEAD terbaru, baru mark PR Ready for review. Jangan merge sebelum semua acceptance criteria ROADMAP.md verified.
+Implementasi mencakup migration v6, Plan CRUD, effective policy precedence, nullable per-key overrides, model allowlists, RPM/prompt TPM/concurrency, lifetime token reservations/settlement, managed-key attribution, usage windows 1h/24h/7d/30d, Plans UI, key assignment selector, Quota Tracker, dan enforcement pada OpenAI Chat, Anthropic Messages, Codex Responses serta semua legacy aliases. Tests cover exactly-once retry usage, stream completion/cancellation, upstream reader cancellation, concurrency release across all three protocols, wrapper error/no-body/completion/cancellation, and dashboard Plan CRUD/assignment/usage window. Do not recreate these tasks.
 
-Tidak ada USD spend budgets, provider quota probing, period rollover, atau queueing; pricing ledger dan time-zone semantics belum tersedia/dirancang. Environment-key dan unassigned managed key behavior wajib tetap unrestricted/backward-compatible.
+Operational boundaries: RPM/TPM/in-flight concurrency buckets are process-local and reset on restart; lifetime token totals and per-key completed-request windows persist in SQLite. Text estimation is not billing-grade. No USD spend budgets, provider quota probing, period rollover, or queueing are included. Environment-key and unassigned managed key behavior remains unrestricted/backward-compatible.
+
+Backend remains Bun >=1.4.4 + TypeScript + Hono + SQLite. Do not port backend Go from 9router-go. Keep Windows ACL verification in Phase 7.
 ```
