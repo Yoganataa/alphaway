@@ -425,6 +425,16 @@ export interface APIKeyRecord {
   status: "active" | "revoked";
 }
 
+export type ManagedKeyUsageWindowName = "1h" | "24h" | "7d" | "30d";
+
+export interface ManagedKeyUsageWindowItem {
+  clientApiKeyId: string;
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface PlanRecord {
   id: string;
   name: string;
@@ -518,6 +528,15 @@ export async function fetchApiKeys(): Promise<APIKeyRecord[]> {
   if (!res.ok) throw new Error(`Failed to load API keys: ${res.statusText}`);
   const data = await res.json();
   return data.keys || [];
+}
+
+export async function fetchManagedKeyUsageWindow(
+  window: ManagedKeyUsageWindowName = "24h",
+): Promise<ManagedKeyUsageWindowItem[]> {
+  const response = await fetch(`${BASE_URL}/api/keys/usage?window=${encodeURIComponent(window)}`);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || `Failed to load managed key usage: ${response.statusText}`);
+  return data?.items || [];
 }
 
 export async function createApiKey(name: string): Promise<IssuedAPIKey> {
