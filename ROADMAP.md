@@ -74,11 +74,11 @@
 - Post-merge CI [#426](https://github.com/Yoganataa/alphaway/actions/runs/41448272244) passed on the merge commit: unit/protocol tests, dashboard browser tests, UI/standalone build, and installer/embedded-dashboard smoke all succeeded; optional live upstream drill was skipped by design.
 - Default-branch CodeQL [#211](https://github.com/Yoganataa/alphaway/actions/runs/41448263339) passed both analyzers on the merge commit.
 - Direct full SARIF [run #41426255599](https://github.com/Yoganataa/alphaway/actions/runs/41426255599) on earlier remediated source head `ee317f3` returned **0 JavaScript/TypeScript results and 0 Actions results**.
-- The old `main` baseline `e2492fb` had 14 open alerts; PR #4 contains corresponding remediations. Do not claim the current open-alert count is zero without confirming it in GitHub Security; this session's GitHub connector did not expose that inventory endpoint.
+- GitHub Security screenshot supplied by the project owner (2026-11-02), filtered to `is:open branch:main`, confirms **0 Open / 14 Closed** CodeQL alerts on `main`. Phase 2 PR #4 and default-branch CodeQL checks passed after remediation.
 - All six inline review threads were resolved. The solo maintainer explicitly accepted residual review risk after reviewing CI/CodeQL evidence; no second human reviewer participated.
 - Repository Ruleset `Protect main` remains active, requires a PR, conversation resolution, and four mandatory CI jobs with strict up-to-date checks, blocks deletion/force-pushes, and requires zero approvals for the solo-developer workflow.
 - Windows ACL behavior for bootstrap/encryption-key files and SQLite migration backups remains unverified and is deferred to Phase 7. POSIX `0600`/`0700` behavior is covered.
-- Phase 3 — Plans, Limits, and Request Enforcement — is next and has not started. Do not begin it until the checkpoint/roadmap refresh is merged and the live CodeQL alert inventory is checked.
+- Phase 3 — Plans, Limits, and Request Enforcement — is active on `feat/phase-3-plans-limits` in PR #6. The main CodeQL baseline was checked before Phase 3 started; do not repeat Phase 0–2 work unless a regression is verified.
 
 **Acceptance criteria**
 
@@ -92,7 +92,7 @@
 
 ### Phase 3 — Plans, Limits, and Request Enforcement
 
-**Status:** Active implementation on `feat/phase-3-plans-limits`. Phase 2 is merged and GitHub Security confirms **0 open / 14 closed** CodeQL alerts on `main` (filter `is:open branch:main`, screenshot supplied by the project owner on 2026-11-02). Main baseline at phase start: `a28ed9baef0c698ec879d649a24726706d1eee3d`.
+**Status:** Active implementation in [PR #6 — Plans, limits, and request enforcement](https://github.com/Yoganataa/alphaway/pull/6), currently Draft. Branch head at this checkpoint: `39447d162dc0f60e5e05250d9f69a0e980bc4df8`; base `main` at phase start: `a28ed9baef0c698ec879d649a24726706d1eee3d`. CI #444 and PR CodeQL #229 passed on this exact head. GitHub Security screenshot supplied by the project owner (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed** alerts on `main`.
 
 **Goal:** Add enforceable, reusable policy tiers for managed AlphaWay API keys without changing legacy environment-key behavior or the OpenAI/Anthropic/Codex protocol contracts. Keep one effective-policy resolver as the only source of truth for key-scoped model access, rate limits, concurrency, and token allowances.
 
@@ -113,40 +113,42 @@
 **Work breakdown / acceptance criteria**
 
 **3.1 — SQLite schema and policy model**
-- [ ] Add migration v6 with a reusable `plans` table and nullable `api_keys.plan_id` foreign-key assignment plus explicitly nullable per-key override columns.
-- [ ] Define and validate a typed Plan/PlanInput model: name, description, RPM, prompt TPM, concurrency, lifetime token quota, and allowed-model patterns.
-- [ ] Add a single `resolveEffectivePolicy` function with precedence: unrestricted system defaults (0) → assigned Plan → explicit key overrides. Unassigned/no-plan remains unrestricted.
-- [ ] Define model allowlist matching semantics (exact IDs and explicit wildcard rules); default empty list means unrestricted. Normalize aliases before evaluating the list.
-- [ ] Add transactional repository operations: create/list/get/update/delete Plans, count keys assigned to a Plan, and set/clear a managed key's Plan/overrides. Reject deleting a Plan while keys still reference it unless an explicit reassignment is part of the same transaction.
-- [ ] Cover migration from a v5 database, fresh database initialization, rollback on failure, and preservation of existing keys/usage/settings.
+- [x] Add migration v6 with a reusable `plans` table, nullable `api_keys.plan_id` foreign-key assignment, and nullable per-key policy override columns.
+- [x] Define and validate typed Plan/PlanInput fields for RPM, prompt TPM, concurrency, lifetime token quota, and allowed-model patterns.
+- [x] Add the single `resolveEffectivePolicy` resolver with defaults → Plan → explicit key override precedence; unassigned keys remain unrestricted.
+- [x] Define exact-ID and prefix-wildcard allowlist matching; normalize model aliases before policy evaluation. Empty allowlists mean unrestricted.
+- [x] Add Plan create/list/get/update/delete and managed-key assignment/override operations. Plan deletion is transactional and rejected while keys remain assigned.
+- [x] Cover fresh initialization, v5 upgrade, failed-migration rollback, and preservation of canonical existing state.
 
 **3.2 — Request attribution and metering**
-- [ ] Add nullable `client_api_key_id` to request logs through v6 and carry the ID in request-scoped context after gateway auth. Never store the API key secret.
-- [ ] Make request logging include managed-key identity for all three protocols and error responses. Keep environment-key traffic unattributed.
-- [ ] Replace hardcoded streaming completion-token counts with measured/estimated streamed text accounting using the existing token estimator; non-streaming uses provider usage when present and a documented fallback estimator otherwise.
-- [ ] Ensure one request is charged once even when protocol translation, stream consumption, retries, or client cancellation occur. Define when a failed upstream attempt is charged.
-- [ ] Add queries for per-key usage by window and lifetime; use indexed stable key IDs and safe date boundaries.
+- [x] Add nullable `client_api_key_id` through migration v6 and carry the stable managed-key ID in request context; raw secrets are never stored in request logs.
+- [x] Attribute request logs for OpenAI Chat, Anthropic Messages, and Codex Responses, including policy/upstream error outcomes. Environment-key traffic remains unattributed.
+- [x] Replace fixed streaming completion counts with text-based streaming estimation; prefer provider-reported usage for non-streaming and fall back to the existing estimator where needed.
+- [ ] Complete targeted tests proving one charge per request across retries, protocol translation, stream consumption, and client cancellation; keep the documented policy for HTTP upstream failures versus thrown transport failures.
+- [x] Add indexed per-key usage queries for 1h/24h/7d/30d windows plus persisted lifetime totals, with canonical UTC boundaries and bounded range validation.
 
 **3.3 — Enforcement**
-- [ ] Implement bounded per-key RPM sliding windows, prompt TPM window/token bucket, and concurrency gates. Reject excess usage with consistent 429 responses and `Retry-After`; do not create unbounded queues.
-- [ ] Apply effective model allowlists to normalized models across OpenAI, Anthropic, and Codex routes before dispatch.
-- [ ] Enforce lifetime token quotas with concurrent reservations, bounded output tokens, and authoritative usage settlement. Period token budgets are deferred until rollover boundaries and time-zone semantics are designed. Return documented 429 responses consistently across protocols.
-- [ ] Release concurrency slots for every completion/error/cancellation path, including streaming responses. Add leak and double-release tests.
-- [ ] Keep provider-specific upstream quota separate from AlphaWay per-client policy. Never represent synthetic provider RPM/TPM as real provider quota.
+- [x] Implement bounded per-key RPM, prompt TPM, and concurrency gates with consistent 429/Retry-After behavior and fail-closed limiter capacity. No unbounded request queue is created.
+- [x] Enforce normalized model allowlists before dispatch across OpenAI, Anthropic, and Codex paths. Integration tests cover canonical endpoints and every legacy route alias.
+- [x] Enforce lifetime token quotas with concurrent reservations, bounded output tokens, and quota settlement. Period budgets remain deferred until rollover/time-zone semantics are designed.
+- [ ] Add explicit integration tests for concurrency-slot release on all success/error/cancellation paths, including stream cancellation, plus leak and double-release assertions for the gateway wrapper.
+- [x] Keep provider-specific upstream quota separate from AlphaWay client policy; the dashboard does not fabricate provider RPM/TPM values.
 
 **3.4 — Admin API and dashboard**
-- [ ] Add admin-session-protected Plan CRUD endpoints with strict input validation and bounded request bodies.
-- [ ] Extend managed API key create/update/read APIs to assign/clear Plan and explicit per-key overrides. API responses expose only key metadata and effective policy, never secret hash/salt.
-- [ ] Add Plans management UI and Plan assignment in the API key management UI.
-- [ ] Replace random values in `QuotaTrackerView.svelte` with API-backed per-key limit/usage details. Show unavailable for upstream quotas not exposed by a provider.
-- [ ] Add accurate per-key usage view and clear empty/loading/error states.
+- [x] Add administrator-session-protected Plan CRUD endpoints with strict input validation and bounded JSON parsing.
+- [x] Extend managed API key read/update APIs for Plan assignment and nullable per-key overrides; expose only metadata/effective policy, never hashes or salts.
+- [x] Add Plans management UI and Plan assignment in the managed API key table.
+- [x] Replace synthetic Quota Tracker values with API-backed effective limits and persisted usage. Clearly distinguish AlphaWay policy limits from unavailable upstream-provider quotas.
+- [x] Add per-key lifetime and selectable 1h/24h/7d/30d usage views, with loading, empty, and error handling.
 
 **3.5 — Verification**
-- [ ] Unit tests for policy precedence, validation, wildcard model access, RPM/TPM/concurrency windows, lifetime quota reservation/settlement, token accounting, map bounds, retries, cancellation, and concurrency release.
-- [ ] Integration tests for Plan CRUD/assignment/deletion constraints and enforcement across OpenAI Chat, Anthropic Messages, Codex Responses, and aliases.
-- [ ] Regression tests prove legacy env keys and unassigned managed keys keep current behavior.
-- [ ] Dashboard browser tests cover Plan CRUD, assignment, policy display, and truthful Quota Tracker values.
-- [ ] Run repository-mandated Bun 1.4.4 frozen install, unit tests, fingerprint check, E2E, build, and installer syntax check. Do not weaken tests or claim unrun checks.
+- [ ] Complete the remaining unit-test matrix for retries, cancellation, and gateway concurrency release; policy precedence, validation, wildcard models, RPM/TPM/concurrency windows, quota reservation/settlement, token accounting, and limiter map bounds are already covered.
+- [x] Integration tests cover Plan CRUD/assignment/deletion constraints and policy enforcement on OpenAI Chat, Anthropic Messages, Codex Responses, and all legacy aliases.
+- [x] Regression tests cover environment-managed credentials and unrestricted unassigned managed keys.
+- [x] Dashboard browser tests cover Plan create/edit/delete, key assignment, inherited Plan quota display, and selectable usage windows.
+- [x] CI #444 passed on PR #6 head `39447d1`: Bun 1.4.4 frozen install, unit/protocol tests, fingerprint check, E2E, UI/standalone build, and installer smoke. Optional live upstream drill was skipped by design. PR CodeQL #229 passed both analyzers.
+
+**Current implementation boundary (PR #6):** The implementation is broadly in place, but Phase 3 is not complete or merge-ready while the retry/stream-cancellation metering and gateway concurrency-wrapper tests listed in 3.5 remain unchecked. RPM, prompt TPM, concurrency windows are process-local and reset on restart; lifetime token totals and completed-request usage windows are persisted in SQLite. No spend budget, period rollover, provider quota probing, or queueing is implemented.
 
 **Out of scope / deferred**
 - Provider-specific quota probing unless an upstream API provides authoritative quota values.
