@@ -78,7 +78,7 @@
         </thead>
         <tbody class="divide-y divide-border-subtle">
           {#each filteredKeys as key (key.id)}
-            {@const quota = key.tokenQuota ?? 0}
+            {@const quota = key.effectiveTokenQuota}
             {@const percent = quota > 0 ? Math.min(100, Math.round((key.totalTokensUsed / quota) * 100)) : 0}
             <tr>
               <td class="py-3 pr-4">
