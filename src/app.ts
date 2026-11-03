@@ -152,7 +152,12 @@ const authMiddleware = async (c: any, next: any) => {
         },
       }, 403);
     }
-    const effectivePolicy = resolveEffectivePolicy(managedCredential.id);
+    let effectivePolicy;
+    try {
+      effectivePolicy = resolveEffectivePolicy(managedCredential.id);
+    } catch {
+      return c.json({ error: { message: "API key policy could not be resolved", type: "server_error", code: "policy_unavailable" } }, 503);
+    }
     if (!effectivePolicy) {
       return c.json({ error: { message: "API key policy could not be resolved", type: "server_error", code: "policy_unavailable" } }, 503);
     }
