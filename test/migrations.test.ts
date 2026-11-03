@@ -65,6 +65,9 @@ describe("SQLite migration runner", () => {
       { version: 5, name: "remove-legacy-json-import-ledger" },
       { version: 6, name: "plans-and-request-policy" },
     ]);
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((row: any) => row.name);
+    expect(indexes).toContain("idx_request_logs_client_key_timestamp");
+    expect(indexes).toContain("idx_request_logs_timestamp_client_key");
     expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("alpha_security_secret_scrub").value).toBe(JSON.stringify("pending"));
   });
 
