@@ -45,6 +45,14 @@ export interface RequestLogRow {
   clientApiKeyId?: string | null;
 }
 
+export interface ManagedKeyUsageWindow {
+  clientApiKeyId: string;
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 /** @deprecated Use resolveDataDir; retained for existing internal callers. */
 export function resolveDbDir(): string {
   return resolveDataDir();
@@ -345,6 +353,46 @@ export function dbGetRecentRequestLogs(limit: number = 100): RequestLogRow[] {
   const db = getDatabase();
   const rows = db.prepare("SELECT * FROM request_logs ORDER BY timestamp DESC LIMIT ?").all(limit);
   return rows.map(mapRequestRow);
+}
+
+/**
+ * Aggregate persisted request usage by stable managed-key ID over a bounded ISO-UTC window.
+ * The composite index on (client_api_key_id, timestamp) supports per-key range filtering.
+ */
+export function dbGetManagedKeyUsageWindow(fromIso: string, toIso: string): ManagedKeyUsageWindow[] {
+  const fromMs = Date.parse(fromIso);
+  const toMs = Date.parse(toIso);
+  if (
+    !Number.isFinite(fromMs) ||
+    !Number.isFinite(toMs) ||
+    new Date(fromMs).toISOString() !== fromIso ||
+    new Date(toMs).toISOString() !== toIso ||
+    fromMs >= toMs
+  ) {
+    throw new Error("Usage window boundaries must be ordered canonical ISO-8601 timestamps");
+  }
+
+  const rows = getDatabase().prepare(`
+    SELECT
+      client_api_key_id AS clientApiKeyId,
+      COUNT(*) AS requests,
+      COALESCE(SUM(prompt_tokens), 0) AS promptTokens,
+      COALESCE(SUM(completion_tokens), 0) AS completionTokens,
+      COALESCE(SUM(total_tokens), 0) AS totalTokens
+    FROM request_logs
+    WHERE client_api_key_id IS NOT NULL
+      AND timestamp >= ?
+      AND timestamp < ?
+    GROUP BY client_api_key_id
+  `).all(fromIso, toIso);
+
+  return rows.map((row: any) => ({
+    clientApiKeyId: String(row.clientApiKeyId),
+    requests: Number(row.requests),
+    promptTokens: Number(row.promptTokens),
+    completionTokens: Number(row.completionTokens),
+    totalTokens: Number(row.totalTokens),
+  }));
 }
 
 export function dbGetRequestLogById(id: string): RequestLogRow | null {
