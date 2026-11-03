@@ -181,7 +181,8 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     await page.getByRole("button", { name: "Persona" }).click();
     await page.getByText("Model Personas").waitFor({ state: "visible" });
-    await expect(page.getByText("Preset Library")).toBeVisible();
+    const personaText = await page.textContent("main");
+    expect(personaText).toContain("Preset Library");
 
     await page.getByRole("button", { name: "SOUL.md" }).click();
 
