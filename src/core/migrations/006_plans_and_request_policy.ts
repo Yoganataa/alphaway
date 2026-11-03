@@ -38,6 +38,9 @@ export const plansAndRequestPolicyMigration: Migration = {
       CREATE INDEX idx_api_keys_plan_id ON api_keys(plan_id);
       CREATE INDEX idx_request_logs_client_key_timestamp
         ON request_logs(client_api_key_id, timestamp);
+
+      CREATE INDEX idx_request_logs_timestamp_client_key
+        ON request_logs(timestamp, client_api_key_id);
     `);
   },
 };
