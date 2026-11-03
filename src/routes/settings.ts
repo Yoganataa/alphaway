@@ -12,6 +12,7 @@ import {
   vacuumDatabase,
   dbGetSetting,
   dbSetSetting,
+  dbGetManagedKeyUsageWindow,
 } from "../core/database";
 import { getConsoleLogs, clearConsoleLogs, pushLog } from "../core/console-buffer";
 import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
@@ -231,6 +232,34 @@ settingsRoute.patch("/api/keys/:id/policy", async (c) => {
   } catch (error: any) {
     return c.json({ error: error.message || "API key policy update failed" }, 400);
   }
+});
+
+// GET /api/keys/usage?window=1h|24h|7d|30d — persisted per-key usage for a bounded window.
+settingsRoute.get("/api/keys/usage", (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+
+  const windowName = c.req.query("window") || "24h";
+  const durationMs: Record<string, number> = {
+    "1h": 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
+    "30d": 30 * 24 * 60 * 60 * 1000,
+  };
+  const duration = durationMs[windowName];
+  if (!duration) {
+    return c.json({ error: "window must be one of: 1h, 24h, 7d, 30d" }, 400);
+  }
+
+  const to = Date.now();
+  const fromIso = new Date(to - duration).toISOString();
+  const toIso = new Date(to).toISOString();
+  return c.json({
+    window: windowName,
+    from: fromIso,
+    to: toIso,
+    items: dbGetManagedKeyUsageWindow(fromIso, toIso),
+  });
 });
 
 // GET /api/keys — metadata only; the raw secret is never stored or returned.
