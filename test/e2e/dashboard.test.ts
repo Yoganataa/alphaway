@@ -248,7 +248,11 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const row = page.locator("tbody tr").filter({ hasText: keyName });
     await row.waitFor({ state: "visible", timeout: 10000 });
     expect(await row.locator("td").nth(1).textContent()).toContain(planName);
-    expect(await row.locator("td").nth(4).textContent()).toContain("1,000");
+    expect(await row.locator("td").nth(5).textContent()).toContain("1,000");
+
+    const usageWindow = page.getByRole("combobox", { name: "Usage window" });
+    await usageWindow.selectOption("7d");
+    await page.getByText("Recorded usage (Last 7 days)", { exact: true }).waitFor({ state: "visible" });
 
     await page.getByRole("button", { name: "Plans" }).click();
     await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
