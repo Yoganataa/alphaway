@@ -42,6 +42,15 @@ export interface RequestLogRow {
   totalTokens: number;
   savedTokens: number;
   stream: boolean;
+  clientApiKeyId?: string | null;
+}
+
+export interface ManagedKeyUsageWindow {
+  clientApiKeyId: string;
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 /** @deprecated Use resolveDataDir; retained for existing internal callers. */
@@ -320,8 +329,8 @@ export function dbInsertRequestLog(entry: RequestLogRow): void {
   const stmt = db.prepare(`
     INSERT INTO request_logs (
       id, timestamp, protocol, model, provider, status,
-      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream, client_api_key_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `);
   stmt.run(
     entry.id,
@@ -335,7 +344,8 @@ export function dbInsertRequestLog(entry: RequestLogRow): void {
     entry.completionTokens,
     entry.totalTokens,
     entry.savedTokens,
-    entry.stream ? 1 : 0
+    entry.stream ? 1 : 0,
+    entry.clientApiKeyId ?? null
   );
 }
 
@@ -343,6 +353,46 @@ export function dbGetRecentRequestLogs(limit: number = 100): RequestLogRow[] {
   const db = getDatabase();
   const rows = db.prepare("SELECT * FROM request_logs ORDER BY timestamp DESC LIMIT ?").all(limit);
   return rows.map(mapRequestRow);
+}
+
+/**
+ * Aggregate persisted request usage by stable managed-key ID over a bounded ISO-UTC window.
+ * The composite index on (client_api_key_id, timestamp) supports per-key range filtering.
+ */
+export function dbGetManagedKeyUsageWindow(fromIso: string, toIso: string): ManagedKeyUsageWindow[] {
+  const fromMs = Date.parse(fromIso);
+  const toMs = Date.parse(toIso);
+  if (
+    !Number.isFinite(fromMs) ||
+    !Number.isFinite(toMs) ||
+    new Date(fromMs).toISOString() !== fromIso ||
+    new Date(toMs).toISOString() !== toIso ||
+    fromMs >= toMs
+  ) {
+    throw new Error("Usage window boundaries must be ordered canonical ISO-8601 timestamps");
+  }
+
+  const rows = getDatabase().prepare(`
+    SELECT
+      client_api_key_id AS clientApiKeyId,
+      COUNT(*) AS requests,
+      COALESCE(SUM(prompt_tokens), 0) AS promptTokens,
+      COALESCE(SUM(completion_tokens), 0) AS completionTokens,
+      COALESCE(SUM(total_tokens), 0) AS totalTokens
+    FROM request_logs
+    WHERE client_api_key_id IS NOT NULL
+      AND timestamp >= ?
+      AND timestamp < ?
+    GROUP BY client_api_key_id
+  `).all(fromIso, toIso);
+
+  return rows.map((row: any) => ({
+    clientApiKeyId: String(row.clientApiKeyId),
+    requests: Number(row.requests),
+    promptTokens: Number(row.promptTokens),
+    completionTokens: Number(row.completionTokens),
+    totalTokens: Number(row.totalTokens),
+  }));
 }
 
 export function dbGetRequestLogById(id: string): RequestLogRow | null {
@@ -584,8 +634,8 @@ export function dbInsertRequestLogWithSnapshot(entry: RequestLogRow, snapshot: u
   const insert = db.prepare(`
     INSERT INTO request_logs (
       id, timestamp, protocol, model, provider, status,
-      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      latency_ms, prompt_tokens, completion_tokens, total_tokens, saved_tokens, stream, client_api_key_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const upsert = db.prepare(`
     INSERT INTO app_settings (key, value, updated_at)
@@ -605,8 +655,13 @@ export function dbInsertRequestLogWithSnapshot(entry: RequestLogRow, snapshot: u
       entry.completionTokens,
       entry.totalTokens,
       entry.savedTokens,
-      entry.stream ? 1 : 0
+      entry.stream ? 1 : 0,
+      entry.clientApiKeyId ?? null
     );
+    if (entry.clientApiKeyId) {
+      db.prepare("UPDATE api_keys SET total_tokens_used = total_tokens_used + ? WHERE id = ?")
+        .run(Math.max(0, Number(entry.totalTokens) || 0), entry.clientApiKeyId);
+    }
     upsert.run(JSON.stringify(snapshot), Date.now());
   });
   persist();
@@ -646,6 +701,7 @@ function mapRequestRow(r: any): RequestLogRow {
     totalTokens: r.total_tokens,
     savedTokens: r.saved_tokens,
     stream: Boolean(r.stream),
+    clientApiKeyId: r.client_api_key_id == null ? null : String(r.client_api_key_id),
   };
 }
 

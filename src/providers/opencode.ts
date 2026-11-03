@@ -2008,6 +2008,15 @@ export async function handleOpenCodeChat(
       const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
       const writer = writable.getWriter();
 
+      // A client that cancels the transformed response errors the writable side.
+      // Propagate that cancellation to the original upstream reader instead of
+      // leaving the provider request running after the downstream has gone away.
+      void writer.closed.catch((reason) => {
+        if (reader) {
+          return reader.cancel(reason).catch(() => {});
+        }
+      });
+
       const writeSse = (payload: string) => {
         writer.write(encoder.encode(payload)).catch(() => {});
       };

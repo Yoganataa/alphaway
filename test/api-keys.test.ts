@@ -10,6 +10,7 @@ describe("administrator authentication and managed gateway API keys", () => {
   beforeEach(() => {
     const db = getDatabase();
     db.prepare("DELETE FROM api_keys").run();
+    db.prepare("DELETE FROM plans").run();
     db.prepare("DELETE FROM custom_providers").run();
   });
 

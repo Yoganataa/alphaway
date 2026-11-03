@@ -15,6 +15,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { readJsonRequestBody } from "../core/admin-guard";
+import { releaseWhenBodyConsumed } from "../core/response-lifecycle";
 
 import type { ChatCompletionRequest } from "../types";
 import { codebuddy, opencode } from "../providers";
@@ -34,6 +35,75 @@ const identity = require("../core/identity");
 import * as tokensaver from "../features/tokensaver";
 import { recordRequestUsage, estimateTokensFromText } from "../core/usage-tracker";
 import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
+import { isModelAllowedByPolicy, type EffectivePolicy } from "../core/policy";
+import { acquireManagedKeyRequest, type PolicyGateResult } from "../core/rate-limiter";
+
+function recordGatewayUsage(c: any, entry: Parameters<typeof recordRequestUsage>[0]) {
+  const policyRejected = Boolean(c.get("policyRejected"));
+  const recorded = recordRequestUsage({
+    ...entry,
+    clientApiKeyId: c.get("managedApiKeyId") ?? null,
+    ...(policyRejected ? { promptTokens: 0, completionTokens: 0, savedTokens: 0 } : {}),
+  });
+  const settleQuota = c.get("settlePolicyQuota") as ((actualTokens: number, authoritative?: boolean) => void) | undefined;
+  settleQuota?.(recorded.totalTokens, true);
+  return recorded;
+}
+
+
+function estimateTokensFromCharacterCount(characters: number): number {
+  return characters > 0 ? Math.max(1, Math.ceil(characters / 3.8)) : 0;
+}
+
+function isNonNegativeTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function extractOpenAICompletionText(message: any): string {
+  if (!message || typeof message !== "object" || Array.isArray(message)) return "";
+  const parts: string[] = [];
+  const add = (value: unknown) => {
+    if (typeof value === "string" && value.length > 0) parts.push(value);
+  };
+
+  add(message.content);
+  if (Array.isArray(message.content)) {
+    for (const part of message.content) add(part?.text);
+  }
+  add(message.reasoning_content);
+  add(message.refusal);
+  if (Array.isArray(message.tool_calls)) {
+    for (const toolCall of message.tool_calls) {
+      add(toolCall?.function?.name);
+      add(toolCall?.function?.arguments);
+    }
+  }
+  add(message.function_call?.name);
+  add(message.function_call?.arguments);
+  return parts.join(" ");
+}
+
+/**
+ * Resolve non-streaming OpenAI-style usage without inventing provider metrics.
+ * Valid provider values, including zero, are authoritative. Missing or invalid
+ * fields fall back to AlphaWay's text estimator, including tool-call payloads.
+ */
+export function resolveOpenAIResponseUsage(
+  response: any,
+  promptTokenFallback: number,
+): { promptTokens: number; completionTokens: number } {
+  const providerUsage = response?.usage;
+  const message = response?.choices?.[0]?.message;
+  const promptFallback = isNonNegativeTokenCount(promptTokenFallback) ? promptTokenFallback : 0;
+  return {
+    promptTokens: isNonNegativeTokenCount(providerUsage?.prompt_tokens)
+      ? providerUsage.prompt_tokens
+      : promptFallback,
+    completionTokens: isNonNegativeTokenCount(providerUsage?.completion_tokens)
+      ? providerUsage.completion_tokens
+      : estimateTokensFromText(extractOpenAICompletionText(message)),
+  };
+}
 
 function computePromptChars(messages: any[]): number {
   if (!Array.isArray(messages)) return 0;
@@ -46,7 +116,125 @@ function computePromptChars(messages: any[]): number {
   }, 0);
 }
 
+function hasUnmeteredPromptContent(messages: any[]): boolean {
+  if (!Array.isArray(messages)) return false;
+  return messages.some((message) => {
+    const content = message?.content;
+    if (Array.isArray(content)) {
+      return content.some((part: any) =>
+        !part || typeof part !== "object" || part.type !== "text" || typeof part.text !== "string"
+      );
+    }
+    return content !== null && typeof content === "object";
+  });
+}
+
 export const chatRoute = new Hono();
+
+type GatewayProtocol = "openai" | "anthropic" | "responses";
+
+function policyRejection(c: any, protocol: GatewayProtocol, status: number, code: string, message: string, retryAfter?: number): Response {
+  c.set("policyRejected", true);
+  if (retryAfter !== undefined) c.header("Retry-After", String(retryAfter));
+  if (protocol === "anthropic") {
+    return c.json({ type: "error", error: { type: status === 403 ? "permission_error" : status === 503 ? "api_error" : "rate_limit_error", code, message } }, status);
+  }
+  return c.json({ error: { message, type: status === 403 ? "permission_error" : status === 503 ? "server_error" : "rate_limit_error", param: status === 403 ? "model" : null, code } }, status);
+}
+
+/** Apply managed-key model/rate/concurrency policy before the upstream request. */
+async function dispatchWithPolicy(
+  c: any,
+  rawReq: Request,
+  body: ChatCompletionRequest,
+  targetModel: string,
+  isStream: boolean,
+  promptTokens: number,
+  protocol: GatewayProtocol,
+  provider: "opencode" | "codebuddy" | "custom",
+  signal?: AbortSignal,
+): Promise<Response> {
+  const startedAt = Date.now();
+  const policy = c.get("effectivePolicy") as EffectivePolicy | null;
+  if (!policy) return dispatchToUpstream(rawReq, body, targetModel, isStream, signal);
+
+  if (!isModelAllowedByPolicy(policy, targetModel)) {
+    return policyRejection(c, protocol, 403, "model_not_allowed", "The requested model is not allowed by this API key's effective policy.");
+  }
+
+  if ((policy.tpmLimit > 0 || policy.tokenQuota > 0) && hasUnmeteredPromptContent(body.messages)) {
+    c.set("policyRejected", true);
+    const message = "This API key has a prompt TPM limit or token quota, but the request contains non-text input that AlphaWay cannot meter safely. Use a key without these limits or send text-only input.";
+    if (protocol === "anthropic") {
+      return c.json({ type: "error", error: { type: "invalid_request_error", code: "multimodal_prompt_unmeterable", message } }, 400);
+    }
+    return c.json({
+      error: {
+        message,
+        type: "invalid_request_error",
+        param: protocol === "responses" ? "input" : "messages",
+        code: "multimodal_prompt_unmeterable",
+      },
+    }, 400);
+  }
+
+  let dispatchBody = body;
+  let quotaReservationTokens = promptTokens;
+  if (policy.tokenQuota > 0) {
+    const remaining = Math.max(0, policy.tokenQuota - policy.totalTokensUsed);
+    const completionBudget = remaining - promptTokens;
+    if (remaining <= 0 || completionBudget <= 0) {
+      return policyRejection(c, protocol, 429, "token_quota_exceeded", "The API key token quota has been exhausted or cannot cover this prompt and a completion.");
+    }
+    const requestedOutput = Number(body.max_tokens);
+    const boundedOutput = Number.isSafeInteger(requestedOutput) && requestedOutput > 0
+      ? Math.min(requestedOutput, completionBudget)
+      : completionBudget;
+    dispatchBody = { ...body, max_tokens: boundedOutput };
+    quotaReservationTokens = promptTokens + boundedOutput;
+  }
+
+  const gate: PolicyGateResult = acquireManagedKeyRequest(policy.keyId, policy, promptTokens, Date.now(), quotaReservationTokens);
+  if (!gate.allowed) {
+    const status = gate.status || 429;
+    const axis = gate.axis || "rpm";
+    const code = axis === "capacity" ? "policy_capacity_exceeded" : axis === "token_quota" ? "token_quota_exceeded" : "rate_limit_exceeded";
+    const message = axis === "capacity"
+      ? "The gateway policy limiter is at capacity. Retry this request shortly."
+      : axis === "concurrency"
+      ? "The API key concurrency limit has been reached."
+      : axis === "tpm"
+      ? "The API key prompt tokens-per-minute limit has been reached."
+      : axis === "token_quota"
+      ? "The API key token quota is reserved by other in-flight requests."
+      : "The API key requests-per-minute limit has been reached.";
+    return policyRejection(c, protocol, status, code, message, gate.retryAfterSeconds);
+  }
+
+  c.set("settlePolicyQuota", gate.settleQuota);
+  try {
+    const response = await dispatchToUpstream(rawReq, dispatchBody, targetModel, isStream, signal);
+    return releaseWhenBodyConsumed(response, gate.release, () => gate.settleQuota(promptTokens, false));
+  } catch (error) {
+    gate.release();
+    gate.settleQuota(0, true);
+    try {
+      recordGatewayUsage(c, {
+        protocol,
+        model: targetModel,
+        provider,
+        status: 502,
+        latencyMs: Date.now() - startedAt,
+        promptTokens: 0,
+        completionTokens: 0,
+        savedTokens: 0,
+        stream: isStream,
+      });
+    } catch {}
+    throw error;
+  }
+}
+
 
 /**
  * Core Dispatcher: Executes chat completions across OpenCode, CodeBuddy, or Custom Providers.
@@ -102,11 +290,14 @@ async function dispatchToUpstream(
               finish_reason: json.stop_reason === "max_tokens" ? "length" : "stop",
             },
           ],
-          usage: json.usage
+          usage: json.usage && (
+            Number.isFinite(json.usage.input_tokens) || Number.isFinite(json.usage.output_tokens)
+          )
             ? {
-                prompt_tokens: json.usage.input_tokens || 10,
-                completion_tokens: json.usage.output_tokens || 20,
-                total_tokens: (json.usage.input_tokens || 10) + (json.usage.output_tokens || 20),
+                prompt_tokens: Number.isFinite(json.usage.input_tokens) ? json.usage.input_tokens : undefined,
+                completion_tokens: Number.isFinite(json.usage.output_tokens) ? json.usage.output_tokens : undefined,
+                total_tokens: (Number.isFinite(json.usage.input_tokens) ? json.usage.input_tokens : 0)
+                  + (Number.isFinite(json.usage.output_tokens) ? json.usage.output_tokens : 0),
               }
             : undefined,
         };
@@ -347,6 +538,128 @@ async function dispatchToUpstream(
   return opencode.handleOpenCodeChat(rawReq, body, targetModel, isStream, signal);
 }
 
+
+export function trackOpenAIStreamingUsage(
+  response: Response,
+  usage: {
+    clientApiKeyId: string | null;
+    model: string;
+    provider: "opencode" | "codebuddy" | "custom";
+    startedAt: number;
+    promptTokens: number;
+    savedTokens: number;
+    settleQuota?: (actualTokens: number, authoritative?: boolean) => void;
+  },
+): Response {
+  const source = response.body;
+  let completionCharacters = 0;
+  let reportedPromptTokens: number | null = null;
+  let reportedCompletionTokens: number | null = null;
+  let buffer = "";
+  let finalized = false;
+  const decoder = new TextDecoder();
+
+  const addCompletionText = (value: unknown) => {
+    if (typeof value === "string") completionCharacters += value.length;
+  };
+
+  const isTokenCount = (value: unknown): value is number =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+  const consumeLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) return;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === "[DONE]") return;
+    try {
+      const event = JSON.parse(payload);
+      const providerUsage = event?.usage;
+      if (providerUsage && typeof providerUsage === "object") {
+        if (isTokenCount(providerUsage.prompt_tokens)) reportedPromptTokens = providerUsage.prompt_tokens;
+        if (isTokenCount(providerUsage.completion_tokens)) reportedCompletionTokens = providerUsage.completion_tokens;
+      }
+
+      const delta = event?.choices?.[0]?.delta;
+      if (!delta || typeof delta !== "object") return;
+
+      const content = delta.content;
+      if (typeof content === "string") addCompletionText(content);
+      else if (Array.isArray(content)) {
+        for (const part of content) addCompletionText(part?.text);
+      }
+
+      // Function/tool arguments are generated completion tokens too, even when
+      // the stream contains no assistant message content.
+      if (Array.isArray(delta.tool_calls)) {
+        for (const toolCall of delta.tool_calls) {
+          addCompletionText(toolCall?.function?.name);
+          addCompletionText(toolCall?.function?.arguments);
+        }
+      }
+      // Retain compatibility with the legacy Chat Completions function_call shape.
+      addCompletionText(delta.function_call?.name);
+      addCompletionText(delta.function_call?.arguments);
+    } catch {}
+  };
+
+  const finalize = () => {
+    if (finalized) return;
+    finalized = true;
+    const recorded = recordRequestUsage({
+      clientApiKeyId: usage.clientApiKeyId,
+      protocol: "openai",
+      model: usage.model,
+      provider: usage.provider,
+      status: response.status,
+      latencyMs: Date.now() - usage.startedAt,
+      promptTokens: reportedPromptTokens ?? usage.promptTokens,
+      completionTokens: reportedCompletionTokens ?? estimateTokensFromCharacterCount(completionCharacters),
+      savedTokens: usage.savedTokens,
+      stream: true,
+    });
+    usage.settleQuota?.(recorded.totalTokens, true);
+  };
+
+  if (!source) {
+    finalize();
+    return response;
+  }
+  const reader = source.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const result = await reader.read();
+        if (result.done) {
+          const tail = buffer + decoder.decode();
+          if (tail) consumeLine(tail);
+          controller.close();
+          finalize();
+          try { reader.releaseLock(); } catch {}
+          return;
+        }
+        buffer += decoder.decode(result.value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) consumeLine(line);
+        controller.enqueue(result.value);
+      } catch (error) {
+        controller.error(error);
+        finalize();
+        try { reader.releaseLock(); } catch {}
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        finalize();
+        try { reader.releaseLock(); } catch {}
+      }
+    },
+  });
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
 // ============================================================================
 // 1. OpenAI Chat Completions Handler (/v1/chat/completions)
 // ============================================================================
@@ -426,11 +739,12 @@ const handleOpenAIChat = async (c: any) => {
   }
 
   const isStream = Boolean(body.stream);
-  const res = await dispatchToUpstream(c.req.raw, body, targetModel, isStream, c.req.raw.signal);
+  const res = await dispatchWithPolicy(c, c.req.raw, body, targetModel, isStream, promptTokens, "openai", providerType, c.req.raw.signal);
 
   // Record Usage Telemetry
   if (!res.ok) {
-    recordRequestUsage({
+    recordGatewayUsage(c, {
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "openai",
       model: targetModel,
       provider: providerType,
@@ -442,31 +756,29 @@ const handleOpenAIChat = async (c: any) => {
       stream: isStream,
     });
   } else if (isStream) {
-    recordRequestUsage({
-      protocol: "openai",
+    return trackOpenAIStreamingUsage(res, {
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       model: targetModel,
       provider: providerType,
-      status: res.status,
-      latencyMs: Date.now() - startTime,
+      startedAt: startTime,
       promptTokens,
-      completionTokens: 25,
       savedTokens,
-      stream: true,
+      settleQuota: c.get("settlePolicyQuota"),
     });
   } else {
     try {
       const clone = res.clone();
       clone.json().then((json: any) => {
-        const compTokens = json?.usage?.completion_tokens || estimateTokensFromText(json?.choices?.[0]?.message?.content || "");
-        const actualPromptTokens = json?.usage?.prompt_tokens || promptTokens;
-        recordRequestUsage({
+        const usage = resolveOpenAIResponseUsage(json, promptTokens);
+        recordGatewayUsage(c, {
+          clientApiKeyId: c.get("managedApiKeyId") ?? null,
           protocol: "openai",
           model: targetModel,
           provider: providerType,
           status: res.status,
           latencyMs: Date.now() - startTime,
-          promptTokens: actualPromptTokens,
-          completionTokens: compTokens,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
           savedTokens,
           stream: false,
         });
@@ -536,10 +848,11 @@ const handleAnthropicMessages = async (c: any) => {
     : "opencode";
 
   const isStream = Boolean(body.stream);
-  const upstreamRes = await dispatchToUpstream(c.req.raw, openAIBody as any, targetModel, isStream, c.req.raw.signal);
+  const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "anthropic", providerType, c.req.raw.signal);
 
   if (!upstreamRes.ok) {
-    recordRequestUsage({
+    recordGatewayUsage(c, {
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "anthropic",
       model: targetModel,
       provider: providerType,
@@ -557,45 +870,89 @@ const handleAnthropicMessages = async (c: any) => {
   if (!isStream) {
     const openAIJson = await upstreamRes.json();
     const anthropicJson = openAIToAnthropicResponse(openAIJson, targetModel);
-    recordRequestUsage({
+    const usage = resolveOpenAIResponseUsage(openAIJson, promptTokens);
+    // Replace legacy translator placeholders with provider usage or AlphaWay estimates.
+    anthropicJson.usage = {
+      input_tokens: usage.promptTokens,
+      output_tokens: usage.completionTokens,
+    };
+    recordGatewayUsage(c, {
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "anthropic",
       model: targetModel,
       provider: providerType,
       status: 200,
       latencyMs: Date.now() - startTime,
-      promptTokens: anthropicJson.usage?.input_tokens || promptTokens,
-      completionTokens: anthropicJson.usage?.output_tokens || 20,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
       savedTokens,
       stream: false,
     });
     return c.json(anthropicJson);
   } else {
-    recordRequestUsage({
-      protocol: "anthropic",
-      model: targetModel,
-      provider: providerType,
-      status: 200,
-      latencyMs: Date.now() - startTime,
-      promptTokens,
-      completionTokens: 25,
-      savedTokens,
-      stream: true,
-    });
-    // Convert OpenAI SSE stream to Anthropic SSE stream
+    // Convert OpenAI SSE stream to Anthropic SSE stream and meter the actual text.
     const reader = upstreamRes.body?.getReader();
-    if (!reader) return upstreamRes;
+    if (!reader) {
+      recordGatewayUsage(c, {
+        clientApiKeyId: c.get("managedApiKeyId") ?? null,
+        protocol: "anthropic",
+        model: targetModel,
+        provider: providerType,
+        status: 200,
+        latencyMs: Date.now() - startTime,
+        promptTokens,
+        completionTokens: 0,
+        savedTokens,
+        stream: true,
+      });
+      return upstreamRes;
+    }
     const decoder = new TextDecoder();
     const frames = anthropicStreamFrames(targetModel);
 
     return streamSSE(c, async (stream) => {
       let started = false;
       let buffer = "";
-      let tokenCount = 0;
+      let completionCharacters = 0;
+      let upstreamEnded = false;
+      let usageFinalized = false;
+      let upstreamCancelPromise: Promise<void> | null = null;
+
+      const finalizeUsage = () => {
+        if (usageFinalized) return;
+        usageFinalized = true;
+        recordGatewayUsage(c, {
+          clientApiKeyId: c.get("managedApiKeyId") ?? null,
+          protocol: "anthropic",
+          model: targetModel,
+          provider: providerType,
+          status: 200,
+          latencyMs: Date.now() - startTime,
+          promptTokens,
+          completionTokens: estimateTokensFromCharacterCount(completionCharacters),
+          savedTokens,
+          stream: true,
+        });
+      };
+      const cancelUpstream = () => {
+        if (!upstreamCancelPromise) {
+          upstreamCancelPromise = reader.cancel("downstream client disconnected").then(() => {}).catch(() => {});
+        }
+        return upstreamCancelPromise;
+      };
+
+      stream.onAbort(() => {
+        finalizeUsage();
+        if (!upstreamEnded) void cancelUpstream();
+      });
 
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            upstreamEnded = true;
+            break;
+          }
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
@@ -613,7 +970,7 @@ const handleAnthropicMessages = async (c: any) => {
                     await stream.write(frames.start());
                     started = true;
                   }
-                  tokenCount++;
+                  completionCharacters += deltaContent.length;
                   await stream.write(frames.delta(deltaContent));
                 }
               } catch {}
@@ -624,8 +981,10 @@ const handleAnthropicMessages = async (c: any) => {
         if (!started) {
           await stream.write(frames.start());
         }
-        await stream.write(frames.end(Math.max(tokenCount, 1)));
+        await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
+        if (!upstreamEnded) await cancelUpstream();
+        finalizeUsage();
         reader.releaseLock();
       }
     });
@@ -686,10 +1045,11 @@ const handleResponses = async (c: any) => {
     : "opencode";
 
   const isStream = Boolean(body.stream);
-  const upstreamRes = await dispatchToUpstream(c.req.raw, openAIBody as any, targetModel, isStream, c.req.raw.signal);
+  const upstreamRes = await dispatchWithPolicy(c, c.req.raw, openAIBody as any, targetModel, isStream, promptTokens, "responses", providerType, c.req.raw.signal);
 
   if (!upstreamRes.ok) {
-    recordRequestUsage({
+    recordGatewayUsage(c, {
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "responses",
       model: targetModel,
       provider: providerType,
@@ -707,44 +1067,89 @@ const handleResponses = async (c: any) => {
   if (!isStream) {
     const openAIJson = await upstreamRes.json();
     const responsesJson = openAIToResponsesResponse(openAIJson, targetModel);
-    recordRequestUsage({
+    const usage = resolveOpenAIResponseUsage(openAIJson, promptTokens);
+    // Replace legacy translator placeholders with provider usage or AlphaWay estimates.
+    responsesJson.usage = {
+      input_tokens: usage.promptTokens,
+      output_tokens: usage.completionTokens,
+      total_tokens: usage.promptTokens + usage.completionTokens,
+    };
+    recordGatewayUsage(c, {
+      clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "responses",
       model: targetModel,
       provider: providerType,
       status: 200,
       latencyMs: Date.now() - startTime,
-      promptTokens: responsesJson.usage?.total_tokens ? Math.floor(responsesJson.usage.total_tokens / 2) : promptTokens,
-      completionTokens: 25,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
       savedTokens,
       stream: false,
     });
     return c.json(responsesJson);
   } else {
-    recordRequestUsage({
-      protocol: "responses",
-      model: targetModel,
-      provider: providerType,
-      status: 200,
-      latencyMs: Date.now() - startTime,
-      promptTokens,
-      completionTokens: 25,
-      savedTokens,
-      stream: true,
-    });
-    // Stream Responses format
+    // Translate Responses SSE and meter actual emitted text.
     const reader = upstreamRes.body?.getReader();
-    if (!reader) return upstreamRes;
+    if (!reader) {
+      recordGatewayUsage(c, {
+        clientApiKeyId: c.get("managedApiKeyId") ?? null,
+        protocol: "responses",
+        model: targetModel,
+        provider: providerType,
+        status: 200,
+        latencyMs: Date.now() - startTime,
+        promptTokens,
+        completionTokens: 0,
+        savedTokens,
+        stream: true,
+      });
+      return upstreamRes;
+    }
     const decoder = new TextDecoder();
     const frames = responsesStreamFrames(targetModel);
 
     return streamSSE(c, async (stream) => {
       let buffer = "";
-      let tokenCount = 0;
+      let completionCharacters = 0;
+      let upstreamEnded = false;
+      let usageFinalized = false;
+      let upstreamCancelPromise: Promise<void> | null = null;
+
+      const finalizeUsage = () => {
+        if (usageFinalized) return;
+        usageFinalized = true;
+        recordGatewayUsage(c, {
+          clientApiKeyId: c.get("managedApiKeyId") ?? null,
+          protocol: "responses",
+          model: targetModel,
+          provider: providerType,
+          status: 200,
+          latencyMs: Date.now() - startTime,
+          promptTokens,
+          completionTokens: estimateTokensFromCharacterCount(completionCharacters),
+          savedTokens,
+          stream: true,
+        });
+      };
+      const cancelUpstream = () => {
+        if (!upstreamCancelPromise) {
+          upstreamCancelPromise = reader.cancel("downstream client disconnected").then(() => {}).catch(() => {});
+        }
+        return upstreamCancelPromise;
+      };
+
+      stream.onAbort(() => {
+        finalizeUsage();
+        if (!upstreamEnded) void cancelUpstream();
+      });
 
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            upstreamEnded = true;
+            break;
+          }
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
@@ -758,15 +1163,17 @@ const handleResponses = async (c: any) => {
                 const parsed = JSON.parse(dataStr);
                 const deltaContent = parsed.choices?.[0]?.delta?.content;
                 if (deltaContent) {
-                  tokenCount++;
+                  completionCharacters += deltaContent.length;
                   await stream.write(frames.delta(deltaContent));
                 }
               } catch {}
             }
           }
         }
-        await stream.write(frames.end(Math.max(tokenCount, 1)));
+        await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
+        if (!upstreamEnded) await cancelUpstream();
+        finalizeUsage();
         reader.releaseLock();
       }
     });

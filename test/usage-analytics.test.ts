@@ -1,4 +1,5 @@
-import { dbGetRequestLogById, dbGetSetting } from "../src/core/database";
+import { dbGetRequestLogById, dbGetSetting, dbGetManagedKeyUsageWindow } from "../src/core/database";
+import { issueAPIKey } from "../src/core/api-keys";
 /**
  * Usage and Analytics Engine Tests
  */
@@ -112,6 +113,65 @@ describe("Usage and Token Analytics Engine", () => {
     expect(stats.byProvider.custom.requests).toBe(1);
     expect(stats.byProvider.codebuddy.requests).toBe(1);
     expect(stats.recentLogs.length).toBe(2);
+  });
+
+  it("aggregates persisted request usage by managed key over a bounded time window", async () => {
+    const key = issueAPIKey("Usage window key");
+    const from = new Date(Date.now() - 60_000).toISOString();
+
+    recordRequestUsage({
+      protocol: "openai",
+      model: "usage-window-model",
+      provider: "opencode",
+      status: 200,
+      latencyMs: 12,
+      promptTokens: 30,
+      completionTokens: 12,
+      clientApiKeyId: key.record.id,
+    });
+    recordRequestUsage({
+      protocol: "anthropic",
+      model: "usage-window-model",
+      provider: "custom",
+      status: 502,
+      latencyMs: 20,
+      promptTokens: 5,
+      completionTokens: 0,
+      clientApiKeyId: key.record.id,
+    });
+    recordRequestUsage({
+      protocol: "openai",
+      model: "environment-key-model",
+      provider: "opencode",
+      status: 200,
+      latencyMs: 10,
+      promptTokens: 100,
+      completionTokens: 20,
+    });
+
+    const to = new Date(Date.now() + 1_000).toISOString();
+    expect(() => dbGetManagedKeyUsageWindow(to, from)).toThrow("Usage window boundaries must be ordered canonical ISO-8601 timestamps");
+    const rows = dbGetManagedKeyUsageWindow(from, to);
+    expect(rows).toContainEqual({
+      clientApiKeyId: key.record.id,
+      requests: 2,
+      promptTokens: 35,
+      completionTokens: 12,
+      totalTokens: 47,
+    });
+    expect(rows).toHaveLength(1);
+
+    const response = await adminRequest("/api/keys/usage?window=24h");
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { window: string; items: Array<{ clientApiKeyId: string; requests: number; totalTokens: number }> };
+    expect(payload.window).toBe("24h");
+    expect(payload.items.find((item) => item.clientApiKeyId === key.record.id)).toMatchObject({
+      requests: 2,
+      totalTokens: 47,
+    });
+
+    const invalid = await adminRequest("/api/keys/usage?window=all");
+    expect(invalid.status).toBe(400);
   });
 
   it("exposes usage stats via /api/usage REST endpoint", async () => {

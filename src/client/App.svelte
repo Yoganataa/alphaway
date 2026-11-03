@@ -7,6 +7,7 @@
   import PlaygroundView from "./components/PlaygroundView.svelte";
   import UsageView from "./components/UsageView.svelte";
   import QuotaTrackerView from "./components/QuotaTrackerView.svelte";
+  import PlansView from "./components/PlansView.svelte";
   import SoulStudioView from "./components/SoulStudioView.svelte";
   import ProvidersView from "./components/ProvidersView.svelte";
   import TokenSaverView from "./components/TokenSaverView.svelte";
@@ -128,6 +129,8 @@
         <UsageView />
       {:else if activeTab === "quota"}
         <QuotaTrackerView />
+      {:else if activeTab === "plans"}
+        <PlansView />
       {:else if activeTab === "soul"}
         <SoulStudioView />
       {:else if activeTab === "providers"}

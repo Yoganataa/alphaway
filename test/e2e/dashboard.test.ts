@@ -202,4 +202,95 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const content = await editor.inputValue();
     expect(content.length).toBeGreaterThan(0);
   }, 15000);
+ 
+  it("shows an inherited Plan quota for a managed API key in the dashboard", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    const adminHeaders = {
+      Cookie: adminCookie,
+      Origin: baseURL,
+      "Content-Type": "application/json",
+    };
+
+    const planName = "Phase 3 E2E Starter";
+    const keyName = "Phase 3 E2E Managed Key";
+    const planResponse = await fetch(baseURL + "/api/plans", {
+      method: "POST",
+      headers: adminHeaders,
+      body: JSON.stringify({
+        name: planName,
+        description: "Dashboard policy regression",
+        rpmLimit: 5,
+        tpmLimit: 4000,
+        concurrencyLimit: 2,
+        tokenQuota: 1000,
+        allowedModels: ["e2e-model"],
+      }),
+    });
+    expect(planResponse.status).toBe(201);
+    const plan = (await planResponse.json()).plan;
+
+    const keyResponse = await fetch(baseURL + "/api/keys", {
+      method: "POST",
+      headers: adminHeaders,
+      body: JSON.stringify({ name: keyName }),
+    });
+    expect(keyResponse.status).toBe(201);
+    const key = (await keyResponse.json()).key;
+
+    await page.getByRole("button", { name: "Endpoint" }).click();
+    const planSelect = page.getByRole("combobox", { name: "Plan for " + keyName });
+    await planSelect.waitFor({ state: "visible", timeout: 10000 });
+    await planSelect.selectOption(plan.id);
+    await page.getByText("Plan assigned to API key", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+    await page.getByRole("button", { name: "Quota Tracker" }).click();
+    const row = page.locator("tbody tr").filter({ hasText: keyName });
+    await row.waitFor({ state: "visible", timeout: 10000 });
+    expect(await row.locator("td").nth(1).textContent()).toContain(planName);
+    expect(await row.locator("td").nth(5).textContent()).toContain("1,000");
+
+    const usageWindow = page.getByRole("combobox", { name: "Usage window" });
+    await usageWindow.selectOption("7d");
+    await page.getByText("Recorded usage (Last 7 days)", { exact: true }).waitFor({ state: "visible" });
+
+    await page.getByRole("button", { name: "Plans" }).click();
+    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.getByRole("heading", { name: planName }).waitFor({ state: "visible", timeout: 10000 });
+    const mainText = await page.textContent("main");
+    expect(mainText).toContain("Plans");
+    expect(mainText).toContain(planName);
+    expect(mainText).toContain("Allowed models");
+  }, 20000);
+
+  it("creates, edits, and deletes a Plan through the dashboard UI", async () => {
+    const { page } = dashboard;
+    await page.getByRole("button", { name: "Plans" }).click();
+    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+    const originalName = "Phase 3 UI Lifecycle";
+    const editedName = "Phase 3 UI Lifecycle Edited";
+    await page.getByLabel("Name", { exact: true }).fill(originalName);
+    await page.getByLabel("Description", { exact: true }).fill("Plan CRUD browser regression");
+    await page.getByLabel("RPM (0 = unlimited)", { exact: true }).fill("9");
+    await page.getByLabel("Prompt TPM (0 = unlimited)", { exact: true }).fill("900");
+    await page.getByLabel("Concurrency (0 = unlimited)", { exact: true }).fill("2");
+    await page.getByLabel("Lifetime tokens (0 = unlimited)", { exact: true }).fill("5000");
+    await page.getByLabel(/Allowed models/).fill("ui-lifecycle-*");
+    await page.getByRole("button", { name: "Create Plan" }).click();
+
+    await page.getByRole("heading", { name: originalName }).waitFor({ state: "visible", timeout: 10000 });
+    const originalCard = page.locator("article").filter({ hasText: originalName });
+    await originalCard.getByRole("button", { name: "Edit" }).click();
+    await page.getByLabel("Name", { exact: true }).fill(editedName);
+    await page.getByRole("button", { name: "Save Changes" }).click();
+
+    await page.getByRole("heading", { name: editedName }).waitFor({ state: "visible", timeout: 10000 });
+    const editedCard = page.locator("article").filter({ hasText: editedName });
+    page.once("dialog", async (dialog) => {
+      await dialog.accept();
+    });
+    await editedCard.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("heading", { name: editedName }).waitFor({ state: "detached", timeout: 10000 });
+  }, 20000);
+
 });

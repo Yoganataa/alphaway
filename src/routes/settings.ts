@@ -12,10 +12,12 @@ import {
   vacuumDatabase,
   dbGetSetting,
   dbSetSetting,
+  dbGetManagedKeyUsageWindow,
 } from "../core/database";
 import { getConsoleLogs, clearConsoleLogs, pushLog } from "../core/console-buffer";
 import { adminRequestError, readJsonRequestBody } from "../core/admin-guard";
-import { listAPIKeys, issueAPIKey, renameAPIKey, revokeAPIKey, rotateAPIKey } from "../core/api-keys";
+import { listAPIKeys, issueAPIKey, renameAPIKey, revokeAPIKey, rotateAPIKey, setAPIKeyPolicy } from "../core/api-keys";
+import { listPlans, getPlan, createPlan, updatePlan, deletePlan } from "../core/plans";
 
 export const settingsRoute = new Hono();
 
@@ -134,6 +136,132 @@ settingsRoute.put("/api/security/rules", async (c) => {
   dbSetSetting("security_rules", rules);
   pushLog("info", `[Security] Persisted ${rules.length} custom DLP rule(s)`);
   return c.json({ ok: true, rules });
+});
+
+
+/** Admin-only reusable Plan policy templates. */
+settingsRoute.get("/api/plans", (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+  return c.json({ plans: listPlans() });
+});
+
+settingsRoute.get("/api/plans/:id", (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+  const plan = getPlan(c.req.param("id"));
+  if (!plan) return c.json({ error: "Plan not found" }, 404);
+  return c.json({ plan });
+});
+
+settingsRoute.post("/api/plans", async (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+  let body: any;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    if (error?.statusCode === 413) return c.json({ error: "Request body exceeds the 10 MiB limit" }, 413);
+    return c.json({ error: "A valid JSON object is required" }, 400);
+  }
+  try {
+    const plan = createPlan(body);
+    pushLog("info", "[Plans] Created Plan '" + plan.name + "' (" + plan.id + ")");
+    return c.json({ ok: true, plan }, 201);
+  } catch (error: any) {
+    const message = String(error?.message || "Plan creation failed");
+    return c.json({ error: message.includes("UNIQUE") ? "A Plan with this name already exists" : message }, 400);
+  }
+});
+
+settingsRoute.put("/api/plans/:id", async (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+  let body: any;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    if (error?.statusCode === 413) return c.json({ error: "Request body exceeds the 10 MiB limit" }, 413);
+    return c.json({ error: "A valid JSON object is required" }, 400);
+  }
+  try {
+    const plan = updatePlan(c.req.param("id"), body);
+    if (!plan) return c.json({ error: "Plan not found" }, 404);
+    pushLog("info", "[Plans] Updated Plan '" + plan.name + "' (" + plan.id + ")");
+    return c.json({ ok: true, plan });
+  } catch (error: any) {
+    const message = String(error?.message || "Plan update failed");
+    return c.json({ error: message.includes("UNIQUE") ? "A Plan with this name already exists" : message }, 400);
+  }
+});
+
+settingsRoute.delete("/api/plans/:id", (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+  try {
+    const result = deletePlan(c.req.param("id"));
+    if (result.assignedKeyCount > 0) {
+      return c.json({ error: "Reassign or unassign keys before deleting this Plan", code: "plan_in_use", assignedKeyCount: result.assignedKeyCount }, 409);
+    }
+    if (!result.deleted) return c.json({ error: "Plan not found" }, 404);
+    pushLog("warn", "[Plans] Deleted Plan " + c.req.param("id"));
+    return c.json({ ok: true });
+  } catch {
+    return c.json({ error: "Plan deletion failed" }, 500);
+  }
+});
+
+settingsRoute.patch("/api/keys/:id/policy", async (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+  let body: any;
+  try {
+    body = await readJsonRequestBody(c.req);
+  } catch (error: any) {
+    if (error?.statusCode === 413) return c.json({ error: "Request body exceeds the 10 MiB limit" }, 413);
+    return c.json({ error: "A valid JSON object is required" }, 400);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return c.json({ error: "A JSON policy object is required" }, 400);
+  }
+  try {
+    const key = setAPIKeyPolicy(c.req.param("id"), body);
+    if (!key) return c.json({ error: "Active API key not found" }, 404);
+    pushLog("info", "[Security] Updated policy assignment for API key " + key.id);
+    return c.json({ ok: true, key });
+  } catch (error: any) {
+    return c.json({ error: error.message || "API key policy update failed" }, 400);
+  }
+});
+
+// GET /api/keys/usage?window=1h|24h|7d|30d — persisted per-key usage for a bounded window.
+settingsRoute.get("/api/keys/usage", (c) => {
+  const denied = adminRequestError(c);
+  if (denied) return c.json({ error: denied }, 403);
+
+  const windowName = c.req.query("window") || "24h";
+  const durationMs: Record<string, number> = {
+    "1h": 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
+    "30d": 30 * 24 * 60 * 60 * 1000,
+  };
+  const duration = durationMs[windowName];
+  if (!duration) {
+    return c.json({ error: "window must be one of: 1h, 24h, 7d, 30d" }, 400);
+  }
+
+  // The SQL range is half-open; add one millisecond so a request logged in
+  // the same millisecond as this handler is included in the current window.
+  const to = Date.now() + 1;
+  const fromIso = new Date(to - duration).toISOString();
+  const toIso = new Date(to).toISOString();
+  return c.json({
+    window: windowName,
+    from: fromIso,
+    to: toIso,
+    items: dbGetManagedKeyUsageWindow(fromIso, toIso),
+  });
 });
 
 // GET /api/keys — metadata only; the raw secret is never stored or returned.
