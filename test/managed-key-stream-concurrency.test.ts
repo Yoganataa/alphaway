@@ -59,9 +59,7 @@ describe("managed-key gateway concurrency releases streamed requests", () => {
     globalThis.fetch = (async () => {
       upstreamCalls += 1;
       const event = new TextEncoder().encode(
-        'data: {"choices":[{"index":0,"delta":{"content":"stream chunk"},"finish_reason":null}]}
-
-',
+        'data: {"choices":[{"index":0,"delta":{"content":"stream chunk"},"finish_reason":null}]}\n\n',
       );
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
