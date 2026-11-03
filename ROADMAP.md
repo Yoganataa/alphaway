@@ -165,7 +165,7 @@
 
 ### Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules
 
-**Status:** implementation in progress on `feat/phase-4-persona-security`, PR [#7](https://github.com/Yoganataa/alphaway/pull/7). Not merged. Phase 4 CI/CodeQL verification and project-owner merge decision are pending.  
+**Status:** implementation and PR-head verification complete on `feat/phase-4-persona-security`, PR [#7](https://github.com/Yoganataa/alphaway/pull/7). PR remains open and not merged; explicit project-owner merge decision and post-merge checks are pending.  
 **Priority:** P1 — prompt policy and data-loss prevention
 
 **Goal:** add first-class, opt-in model-bound Persona presets and make persisted Security Rules enforceable in live gateway traffic. Preserve the existing global SOUL.md engine and adapt reference behavior from 9router-go to AlphaWay's Bun/TypeScript/Hono/SQLite architecture.
@@ -196,18 +196,19 @@
 - [x] Validate rule IDs, uniqueness, bounded pattern/description lengths, actions, and enabled state. Do not execute user-supplied regular expressions.
 - [x] Apply mask/block rules to outbound textual content before provider dispatch; return a protocol-shaped 403 on a block and record the rejected request with zero tokens.
 - [x] Re-run custom rules after TokenSaver/Persona/SOUL injection. Run built-in DLP after generated prompts are composed so secrets in SOUL/Persona prompts are also masked.
-- [x] Apply custom rules to inbound provider text alongside the existing built-in response sanitizer.
+- [x] Apply custom rules to inbound provider text, tool-call arguments, and legacy function-call arguments alongside the existing built-in response sanitizer for JSON and streaming provider paths.
 - [x] Add a backend inspection endpoint and connect the Security dashboard sandbox to the same runtime matcher; allow individual rules to be enabled/disabled.
 
 **4.4 — Dashboard and regression coverage**
 - [x] Add Persona navigation with preset editor, exact model bindings, global exclusions, resolver preview, and a SOUL Studio inner tab.
 - [x] Add Security Rule enabled-state controls and backend-backed preview.
-- [x] Add unit/API/migration regression tests for Persona precedence/injection, generated-prompt DLP, Security Rules validation, mask/block, Unicode text matching, legacy settings import, intentional empty legacy rules, and disabled rules.
-- [ ] Pass Bun 1.4.4 frozen install, unit/protocol CI, dashboard browser tests, UI/standalone build, installer smoke, and both CodeQL analyzers on the final PR head.
+- [x] Add unit/API/migration/integration regressions for Persona precedence/injection, generated-prompt DLP, Security Rules validation, mask/block, Unicode text matching, legacy settings import, intentional empty legacy rules, disabled rules, nested tool-call arguments, `__proto__` JSON keys, and fail-closed inspection-depth limits.
+- [x] Add request-level tests proving `block` returns 403 before upstream dispatch on OpenAI Chat, Anthropic Messages, and Codex Responses and records one zero-token usage row per blocked request.
+- [x] Pass Bun 1.4.4 frozen install, unit/protocol CI, dashboard browser tests, UI/standalone build, installer smoke, and both CodeQL analyzers on exact PR head `4c0b7ccf3fcee7efdf1886392ed605563e796dd9`: CI [#41726640964](https://github.com/Yoganataa/alphaway/actions/runs/41726640964) passed all four mandatory jobs; optional live upstream drill skipped by design. CodeQL [#41726632602](https://github.com/Yoganataa/alphaway/actions/runs/41726632602) passed JavaScript/TypeScript and Actions analyzers.
 
 **Known limitations / deferred**
 - No URL/repository/file import for Persona presets. Do not fetch arbitrary user-supplied URLs without an explicit SSRF-safe importer design.
-- Inbound custom Security Rules are applied to provider text segments as current stream translators emit them. A literal split across separate SSE delta boundaries is not guaranteed to match; add a buffered streaming sanitizer before claiming cross-delta coverage.
+- Inbound custom Security Rules are applied to text and tool-argument segments as current stream translators emit them; final aggregated non-streaming tool-call results are rechecked. A literal split across separate SSE delta boundaries is not guaranteed to match; add a buffered streaming sanitizer before claiming cross-delta coverage.
 - Model IDs are entered explicitly; model catalog auto-completion and batch binding are deferred.
 - Windows ACL verification remains Phase 7.
 

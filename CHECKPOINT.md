@@ -256,18 +256,16 @@ Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9
 - Persona admin API is mounted under `/api/persona` and the compatibility alias `/api/jailbreak`. It exposes preset CRUD, exact binding CRUD, global excludes, dry resolution, and prompt preview.
 - Existing SOUL engine and SOUL REST API are preserved. Soul Studio is now an inner section of Persona instead of a separate sidebar item.
 - Security Rules are persisted in normalized SQLite rows. Literal matching is case-insensitive and bounded to 100 rules / 128 characters per pattern. `mask` replaces matched text; `block` rejects outbound prompts with HTTP 403 before provider dispatch. Rules are checked before and after SOUL/Persona injection. The existing built-in DLP sanitizer runs after generated prompts are composed.
-- Security Rules also sanitize inbound provider text. The Security dashboard preview uses the same backend matcher and exposes per-rule enabled state.
+- Security Rules also sanitize inbound provider text, OpenAI-style tool-call function names/arguments, and legacy function-call names/arguments. JSON responses, custom OpenAI/CodeBuddy SSE deltas, OpenCode Chat SSE deltas, Responses argument deltas, and final aggregated Responses messages use the same sanitizer. The Security dashboard preview uses the same backend matcher and exposes per-rule enabled state.
 - Known limitation: inbound custom Security Rules currently inspect provider text segments as the stream translators emit them. A literal split across separate SSE delta boundaries is not guaranteed to match; buffered cross-delta matching remains follow-up work.
 - Remote repository/URL/file prompt imports are excluded. They need a separate SSRF-safe importer and file-validation design.
-- Regression tests added/updated for migration v7, legacy custom/empty Security Rules, Persona precedence, model injection, DLP of generated Persona prompts, Security Rules validation/mask/block/preview/Unicode matching, and disabled rules.
-- Phase 4 CI and CodeQL have not yet been verified. Do not claim tests pass until the exact PR checks complete.
+- Regression tests added/updated for migration v7, legacy custom/empty Security Rules, Persona precedence, model injection, DLP of generated Persona prompts, Security Rules validation/mask/block/preview/Unicode matching, disabled rules, nested tool arguments, special JSON keys, inbound tool-call/legacy function-call arguments, and request-level 403/zero-usage behavior on all three protocols.
+- Current verified PR head: `4c0b7ccf3fcee7efdf1886392ed605563e796dd9`. CI [#41726640964](https://github.com/Yoganataa/alphaway/actions/runs/41726640964) passed all four mandatory jobs (unit/protocol, dashboard E2E, UI/standalone build, installer smoke); optional live-upstream drill skipped by design. CodeQL [#41726632602](https://github.com/Yoganataa/alphaway/actions/runs/41726632602) passed both JavaScript/TypeScript and Actions analyzers. The P2 inbound tool-call-argument review thread was answered and resolved. PR #7 remains open and requires explicit owner authorization to merge.
 
 Next actions:
-1. Inspect CI, CodeQL, review threads, and the exact PR head for PR #7.
-2. Fix test, CodeQL, review, or merge-blocking findings without weakening assertions.
-3. Wait for explicit project-owner instruction before merging PR #7.
-4. After merge, verify post-merge CI and CodeQL on `main` before starting Phase 5.
-5. Keep Windows ACL verification in Phase 7.
+1. Wait for explicit project-owner instruction before merging PR #7; do not merge implicitly.
+2. After merge, verify post-merge CI and CodeQL on `main` before starting Phase 5.
+3. Keep Windows ACL verification in Phase 7.
 
 Do not reopen or recreate Phase 0–3 work unless a verified regression is found.
 
