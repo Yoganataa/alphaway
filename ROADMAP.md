@@ -92,7 +92,7 @@
 
 ### Phase 3 — Plans, Limits, and Request Enforcement
 
-**Status:** Phase 3 implementation and acceptance tests are complete on [PR #6 — Plans, limits, and request enforcement](https://github.com/Yoganataa/alphaway/pull/6); PR is still Draft pending documentation sync and Ready-for-review transition. Latest verified source head: `9996474261aeb8b4154846a27ce5427cc1bcf46b`; Phase 3 base `main`: `a28ed9baef0c698ec879d649a24726706d1eee3d`. CI #461 and PR CodeQL #246 passed on that exact source head. The owner-supplied GitHub Security screenshot (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed** alerts on `main`.
+**Status:** Phase 3 implementation and acceptance tests are complete on [PR #6 — Plans, limits, and request enforcement](https://github.com/Yoganataa/alphaway/pull/6); PR is **Ready for review** and has not been merged. Latest verified implementation source head: `9996474261aeb8b4154846a27ce5427cc1bcf46b`; Phase 3 base `main`: `a28ed9baef0c698ec879d649a24726706d1eee3d`. CI #461 and PR CodeQL #246 passed on that exact implementation head. The checkpoint/roadmap metadata update is a later documentation-only commit; inspect its live Actions results before further changes. The owner-supplied GitHub Security screenshot (2026-11-02), filter `is:open branch:main`, confirms **0 Open / 14 Closed** alerts on `main`.
 
 **Goal:** Add enforceable, reusable policy tiers for managed AlphaWay API keys without changing legacy environment-key behavior or the OpenAI/Anthropic/Codex protocol contracts. Keep one effective-policy resolver as the only source of truth for key-scoped model access, rate limits, concurrency, and token allowances.
 
@@ -148,7 +148,7 @@
 - [x] Dashboard browser tests cover Plan create/edit/delete, key assignment, inherited Plan quota display, and selectable usage windows.
 - [x] CI #461 passed on PR #6 source head `9996474`: Bun 1.4.4 frozen install, unit/protocol tests, fingerprint check, dashboard E2E, UI/standalone build, and installer smoke. The optional live upstream drill was skipped by design. PR CodeQL #246 passed both JavaScript/TypeScript and Actions analyzers.
 
-**Current implementation boundary (PR #6):** All Phase 3 acceptance criteria in 3.1–3.5 are implemented and verified; the remaining step is PR review/merge, not additional implementation. RPM, prompt TPM, and in-flight concurrency state are process-local and reset on restart; lifetime token totals and completed-request usage windows are persisted in SQLite. Token metering uses provider-reported totals when available and an AlphaWay text estimator fallback, not a billing-grade tokenizer. No USD spend budget, period rollover, provider quota probing, or queueing is implemented.
+**Current implementation boundary (PR #6):** All Phase 3 acceptance criteria in 3.1–3.5 are implemented and verified. PR #6 is Ready for review; merge remains a separate maintainer decision. RPM, prompt TPM, and in-flight concurrency state are process-local and reset on restart; lifetime token totals and completed-request usage windows are persisted in SQLite. Token metering uses provider-reported totals when available and an AlphaWay text estimator fallback, not a billing-grade tokenizer. No USD spend budget, period rollover, provider quota probing, or queueing is implemented.
 
 **Out of scope / deferred**
 - Provider-specific quota probing unless an upstream API provides authoritative quota values.
