@@ -100,13 +100,16 @@ function normalizePlanInput(input: unknown, existing?: Plan): PlanInput {
 }
 
 function mapPlan(row: any): Plan {
-  let allowedModels: string[] = [];
+  let parsedModels: unknown;
   try {
-    const parsed = JSON.parse(String(row.allowed_models || "[]"));
-    if (Array.isArray(parsed)) allowedModels = normalizeAllowedModels(parsed);
+    parsedModels = JSON.parse(String(row.allowed_models ?? "[]"));
   } catch {
-    allowedModels = [];
+    throw new Error("Stored Plan model allowlist contains invalid JSON");
   }
+  if (!Array.isArray(parsedModels)) {
+    throw new Error("Stored Plan model allowlist must be an array");
+  }
+  const allowedModels = normalizeAllowedModels(parsedModels);
   return {
     id: String(row.id),
     name: String(row.name),
