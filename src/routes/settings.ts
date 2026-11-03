@@ -251,7 +251,9 @@ settingsRoute.get("/api/keys/usage", (c) => {
     return c.json({ error: "window must be one of: 1h, 24h, 7d, 30d" }, 400);
   }
 
-  const to = Date.now();
+  // The SQL range is half-open; add one millisecond so a request logged in
+  // the same millisecond as this handler is included in the current window.
+  const to = Date.now() + 1;
   const fromIso = new Date(to - duration).toISOString();
   const toIso = new Date(to).toISOString();
   return c.json({
