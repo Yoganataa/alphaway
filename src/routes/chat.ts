@@ -55,6 +55,56 @@ function estimateTokensFromCharacterCount(characters: number): number {
   return characters > 0 ? Math.max(1, Math.ceil(characters / 3.8)) : 0;
 }
 
+function isNonNegativeTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function extractOpenAICompletionText(message: any): string {
+  if (!message || typeof message !== "object" || Array.isArray(message)) return "";
+  const parts: string[] = [];
+  const add = (value: unknown) => {
+    if (typeof value === "string" && value.length > 0) parts.push(value);
+  };
+
+  add(message.content);
+  if (Array.isArray(message.content)) {
+    for (const part of message.content) add(part?.text);
+  }
+  add(message.reasoning_content);
+  add(message.refusal);
+  if (Array.isArray(message.tool_calls)) {
+    for (const toolCall of message.tool_calls) {
+      add(toolCall?.function?.name);
+      add(toolCall?.function?.arguments);
+    }
+  }
+  add(message.function_call?.name);
+  add(message.function_call?.arguments);
+  return parts.join("\\n");
+}
+
+/**
+ * Resolve non-streaming OpenAI-style usage without inventing provider metrics.
+ * Valid provider values, including zero, are authoritative. Missing or invalid
+ * fields fall back to AlphaWay's text estimator, including tool-call payloads.
+ */
+export function resolveOpenAIResponseUsage(
+  response: any,
+  promptTokenFallback: number,
+): { promptTokens: number; completionTokens: number } {
+  const providerUsage = response?.usage;
+  const message = response?.choices?.[0]?.message;
+  const promptFallback = isNonNegativeTokenCount(promptTokenFallback) ? promptTokenFallback : 0;
+  return {
+    promptTokens: isNonNegativeTokenCount(providerUsage?.prompt_tokens)
+      ? providerUsage.prompt_tokens
+      : promptFallback,
+    completionTokens: isNonNegativeTokenCount(providerUsage?.completion_tokens)
+      ? providerUsage.completion_tokens
+      : estimateTokensFromText(extractOpenAICompletionText(message)),
+  };
+}
+
 function computePromptChars(messages: any[]): number {
   if (!Array.isArray(messages)) return 0;
   return messages.reduce((acc, m) => {
@@ -719,17 +769,16 @@ const handleOpenAIChat = async (c: any) => {
     try {
       const clone = res.clone();
       clone.json().then((json: any) => {
-        const compTokens = json?.usage?.completion_tokens || estimateTokensFromText(json?.choices?.[0]?.message?.content || "");
-        const actualPromptTokens = json?.usage?.prompt_tokens || promptTokens;
+        const usage = resolveOpenAIResponseUsage(json, promptTokens);
         recordGatewayUsage(c, {
-      clientApiKeyId: c.get("managedApiKeyId") ?? null,
+          clientApiKeyId: c.get("managedApiKeyId") ?? null,
           protocol: "openai",
           model: targetModel,
           provider: providerType,
           status: res.status,
           latencyMs: Date.now() - startTime,
-          promptTokens: actualPromptTokens,
-          completionTokens: compTokens,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
           savedTokens,
           stream: false,
         });
@@ -821,6 +870,12 @@ const handleAnthropicMessages = async (c: any) => {
   if (!isStream) {
     const openAIJson = await upstreamRes.json();
     const anthropicJson = openAIToAnthropicResponse(openAIJson, targetModel);
+    const usage = resolveOpenAIResponseUsage(openAIJson, promptTokens);
+    // Replace legacy translator placeholders with provider usage or AlphaWay estimates.
+    anthropicJson.usage = {
+      input_tokens: usage.promptTokens,
+      output_tokens: usage.completionTokens,
+    };
     recordGatewayUsage(c, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "anthropic",
@@ -828,8 +883,8 @@ const handleAnthropicMessages = async (c: any) => {
       provider: providerType,
       status: 200,
       latencyMs: Date.now() - startTime,
-      promptTokens: anthropicJson.usage?.input_tokens || promptTokens,
-      completionTokens: anthropicJson.usage?.output_tokens ?? estimateTokensFromText(typeof openAIJson?.choices?.[0]?.message?.content === "string" ? openAIJson.choices[0].message.content : ""),
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
       savedTokens,
       stream: false,
     });
@@ -1012,6 +1067,13 @@ const handleResponses = async (c: any) => {
   if (!isStream) {
     const openAIJson = await upstreamRes.json();
     const responsesJson = openAIToResponsesResponse(openAIJson, targetModel);
+    const usage = resolveOpenAIResponseUsage(openAIJson, promptTokens);
+    // Replace legacy translator placeholders with provider usage or AlphaWay estimates.
+    responsesJson.usage = {
+      input_tokens: usage.promptTokens,
+      output_tokens: usage.completionTokens,
+      total_tokens: usage.promptTokens + usage.completionTokens,
+    };
     recordGatewayUsage(c, {
       clientApiKeyId: c.get("managedApiKeyId") ?? null,
       protocol: "responses",
@@ -1019,8 +1081,8 @@ const handleResponses = async (c: any) => {
       provider: providerType,
       status: 200,
       latencyMs: Date.now() - startTime,
-      promptTokens: responsesJson.usage?.input_tokens ?? openAIJson?.usage?.prompt_tokens ?? promptTokens,
-      completionTokens: responsesJson.usage?.output_tokens ?? openAIJson?.usage?.completion_tokens ?? estimateTokensFromText(typeof openAIJson?.choices?.[0]?.message?.content === "string" ? openAIJson.choices[0].message.content : ""),
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
       savedTokens,
       stream: false,
     });

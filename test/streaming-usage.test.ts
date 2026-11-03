@@ -2,9 +2,46 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { issueAPIKey } from "../src/core/api-keys";
 import { getDatabase } from "../src/core/database";
 import { resetUsageStats } from "../src/core/usage-tracker";
-import { trackOpenAIStreamingUsage } from "../src/routes/chat";
+import { resolveOpenAIResponseUsage, trackOpenAIStreamingUsage } from "../src/routes/chat";
 
 describe("managed-key OpenAI stream metering", () => {
+  it("estimates non-streaming tool-call output when provider usage is absent", () => {
+    const toolArguments = JSON.stringify({ city: "Paris" });
+    const result = resolveOpenAIResponseUsage({
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            function: { name: "lookup_weather", arguments: toolArguments },
+          }],
+        },
+      }],
+    }, 11);
+
+    expect(result.promptTokens).toBe(11);
+    expect(result.completionTokens).toBeGreaterThan(0);
+    expect(result.completionTokens).toBe(Math.ceil(("lookup_weather" + toolArguments).length / 3.8));
+  });
+
+  it("preserves authoritative provider usage values of zero", () => {
+    const result = resolveOpenAIResponseUsage({
+      usage: { prompt_tokens: 0, completion_tokens: 0 },
+      choices: [{ message: { content: "This must not replace authoritative zero usage." } }],
+    }, 19);
+
+    expect(result).toEqual({ promptTokens: 0, completionTokens: 0 });
+  });
+
+  it("falls back to text estimation when non-streaming provider usage is missing", () => {
+    const content = "Estimated answer";
+    const result = resolveOpenAIResponseUsage({
+      choices: [{ message: { content } }],
+    }, 7);
+
+    expect(result.promptTokens).toBe(7);
+    expect(result.completionTokens).toBe(Math.ceil(content.length / 3.8));
+  });
+
   beforeEach(() => {
     resetUsageStats();
   });
