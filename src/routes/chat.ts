@@ -801,11 +801,35 @@ const handleAnthropicMessages = async (c: any) => {
       let buffer = "";
       let completionCharacters = 0;
       let upstreamEnded = false;
+      let usageFinalized = false;
+      let upstreamCancelPromise: Promise<void> | null = null;
+
+      const finalizeUsage = () => {
+        if (usageFinalized) return;
+        usageFinalized = true;
+        recordGatewayUsage(c, {
+          clientApiKeyId: c.get("managedApiKeyId") ?? null,
+          protocol: "anthropic",
+          model: targetModel,
+          provider: providerType,
+          status: 200,
+          latencyMs: Date.now() - startTime,
+          promptTokens,
+          completionTokens: estimateTokensFromCharacterCount(completionCharacters),
+          savedTokens,
+          stream: true,
+        });
+      };
+      const cancelUpstream = () => {
+        if (!upstreamCancelPromise) {
+          upstreamCancelPromise = reader.cancel("downstream client disconnected").then(() => {}).catch(() => {});
+        }
+        return upstreamCancelPromise;
+      };
 
       stream.onAbort(() => {
-        if (!upstreamEnded) {
-          void reader.cancel("downstream client disconnected").catch(() => {});
-        }
+        finalizeUsage();
+        if (!upstreamEnded) void cancelUpstream();
       });
 
       try {
@@ -845,21 +869,8 @@ const handleAnthropicMessages = async (c: any) => {
         }
         await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
-        if (!upstreamEnded) {
-          try { await reader.cancel("downstream stream closed"); } catch {}
-        }
-        recordGatewayUsage(c, {
-          clientApiKeyId: c.get("managedApiKeyId") ?? null,
-          protocol: "anthropic",
-          model: targetModel,
-          provider: providerType,
-          status: 200,
-          latencyMs: Date.now() - startTime,
-          promptTokens,
-          completionTokens: estimateTokensFromCharacterCount(completionCharacters),
-          savedTokens,
-          stream: true,
-        });
+        if (!upstreamEnded) await cancelUpstream();
+        finalizeUsage();
         reader.releaseLock();
       }
     });
@@ -980,11 +991,35 @@ const handleResponses = async (c: any) => {
       let buffer = "";
       let completionCharacters = 0;
       let upstreamEnded = false;
+      let usageFinalized = false;
+      let upstreamCancelPromise: Promise<void> | null = null;
+
+      const finalizeUsage = () => {
+        if (usageFinalized) return;
+        usageFinalized = true;
+        recordGatewayUsage(c, {
+          clientApiKeyId: c.get("managedApiKeyId") ?? null,
+          protocol: "responses",
+          model: targetModel,
+          provider: providerType,
+          status: 200,
+          latencyMs: Date.now() - startTime,
+          promptTokens,
+          completionTokens: estimateTokensFromCharacterCount(completionCharacters),
+          savedTokens,
+          stream: true,
+        });
+      };
+      const cancelUpstream = () => {
+        if (!upstreamCancelPromise) {
+          upstreamCancelPromise = reader.cancel("downstream client disconnected").then(() => {}).catch(() => {});
+        }
+        return upstreamCancelPromise;
+      };
 
       stream.onAbort(() => {
-        if (!upstreamEnded) {
-          void reader.cancel("downstream client disconnected").catch(() => {});
-        }
+        finalizeUsage();
+        if (!upstreamEnded) void cancelUpstream();
       });
 
       try {
@@ -1016,21 +1051,8 @@ const handleResponses = async (c: any) => {
         }
         await stream.write(frames.end(estimateTokensFromCharacterCount(completionCharacters)));
       } finally {
-        if (!upstreamEnded) {
-          try { await reader.cancel("downstream stream closed"); } catch {}
-        }
-        recordGatewayUsage(c, {
-          clientApiKeyId: c.get("managedApiKeyId") ?? null,
-          protocol: "responses",
-          model: targetModel,
-          provider: providerType,
-          status: 200,
-          latencyMs: Date.now() - startTime,
-          promptTokens,
-          completionTokens: estimateTokensFromCharacterCount(completionCharacters),
-          savedTokens,
-          stream: true,
-        });
+        if (!upstreamEnded) await cancelUpstream();
+        finalizeUsage();
         reader.releaseLock();
       }
     });
