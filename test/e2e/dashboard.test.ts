@@ -263,4 +263,35 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(mainText).toContain("Allowed models");
   }, 20000);
 
+  it("creates, edits, and deletes a Plan through the dashboard UI", async () => {
+    const { page } = dashboard;
+    await page.getByRole("button", { name: "Plans" }).click();
+    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+    const originalName = "Phase 3 UI Lifecycle";
+    const editedName = "Phase 3 UI Lifecycle Edited";
+    await page.getByLabel("Name", { exact: true }).fill(originalName);
+    await page.getByLabel("Description", { exact: true }).fill("Plan CRUD browser regression");
+    await page.getByLabel("RPM (0 = unlimited)", { exact: true }).fill("9");
+    await page.getByLabel("Prompt TPM (0 = unlimited)", { exact: true }).fill("900");
+    await page.getByLabel("Concurrency (0 = unlimited)", { exact: true }).fill("2");
+    await page.getByLabel("Lifetime tokens (0 = unlimited)", { exact: true }).fill("5000");
+    await page.getByLabel(/Allowed models/).fill("ui-lifecycle-*");
+    await page.getByRole("button", { name: "Create Plan" }).click();
+
+    await page.getByRole("heading", { name: originalName }).waitFor({ state: "visible", timeout: 10000 });
+    const originalCard = page.locator("article").filter({ hasText: originalName });
+    await originalCard.getByRole("button", { name: "Edit" }).click();
+    await page.getByLabel("Name", { exact: true }).fill(editedName);
+    await page.getByRole("button", { name: "Save Changes" }).click();
+
+    await page.getByRole("heading", { name: editedName }).waitFor({ state: "visible", timeout: 10000 });
+    const editedCard = page.locator("article").filter({ hasText: editedName });
+    page.once("dialog", async (dialog) => {
+      await dialog.accept();
+    });
+    await editedCard.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("heading", { name: editedName }).waitFor({ state: "detached", timeout: 10000 });
+  }, 20000);
+
 });
