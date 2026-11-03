@@ -282,10 +282,29 @@ describe("Plan management and effective managed-key policy", () => {
     });
     expect(responsesModel.status).toBe(403);
     expect((await responsesModel.json()).error.code).toBe("model_not_allowed");
+
+    const legacyAliases = [
+      { path: "/chat/completions", body: { model: "blocked-model", messages: [{ role: "user", content: "hello" }] } },
+      { path: "/api/chat", body: { model: "blocked-model", messages: [{ role: "user", content: "hello" }] } },
+      { path: "/messages", body: { model: "blocked-model", max_tokens: 64, messages: [{ role: "user", content: "hello" }] } },
+      { path: "/responses", body: { model: "blocked-model", input: "hello" } },
+      { path: "/response", body: { model: "blocked-model", input: "hello" } },
+      { path: "/v1/response", body: { model: "blocked-model", input: "hello" } },
+    ];
+    for (const alias of legacyAliases) {
+      const response = await app.request(alias.path, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + modelKey.secret, "Content-Type": "application/json" },
+        body: JSON.stringify(alias.body),
+      });
+      expect(response.status).toBe(403);
+      expect((await response.json()).error.code).toBe("model_not_allowed");
+    }
+
     const rejectedUsage = getDatabase().prepare(
       "SELECT COUNT(*) AS count, SUM(total_tokens) AS tokens FROM request_logs WHERE client_api_key_id = ?"
     ).get(modelKey.record.id);
-    expect(rejectedUsage.count).toBe(3);
+    expect(rejectedUsage.count).toBe(9);
     expect(rejectedUsage.tokens).toBe(0);
 
 
