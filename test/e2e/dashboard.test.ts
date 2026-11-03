@@ -181,6 +181,9 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     await page.getByRole("button", { name: "Persona" }).click();
     await page.getByText("Model Personas").waitFor({ state: "visible" });
+    // Wait for the asynchronous Persona API request to finish before checking
+    // the preset editor, which is not rendered while the view is loading.
+    await page.getByText("Preset Library").waitFor({ state: "visible" });
     const personaText = await page.textContent("main");
     expect(personaText).toContain("Preset Library");
 
