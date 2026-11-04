@@ -66,12 +66,33 @@ export interface ModelItem {
 }
 
 export interface TokenSaverConfig {
-  aggressiveCompression: boolean;
+  rtkEnabled: boolean;
+  rtkMaxLines: number;
+  rtkDeduplicate: boolean;
+  cavemanEnabled: boolean;
+  cavemanLevel: "lite" | "full" | "ultra";
+  cavemanLang: "auto" | "en" | "id";
+  cavemanAutoClarity: boolean;
+  cavemanInputMode: boolean;
+  adhdEnabled: boolean;
+  adhdLevel: "lite" | "full";
+  soulEnabled: boolean;
+  soulMode: "auto" | "preset" | "custom";
+  soulPreset: string;
+  soulFilePath: string;
+  soulCustomContent: string;
+  dlpEnabled: boolean;
+  maskSecrets: boolean;
+  maskPaths: boolean;
+  sanitizeMarkdownImages: boolean;
+  blockDangerousCommands: boolean;
+}
+
+export interface TokenSaverHealthSummary {
+  rtkEnabled: boolean;
   cavemanEnabled: boolean;
   adhdEnabled: boolean;
-  dlpRedaction: boolean;
-  maxTokensFloor: number;
-  rtkLinesCap: number;
+  dlpEnabled: boolean;
 }
 
 export interface HealthGateStatus {
@@ -172,7 +193,7 @@ export interface HealthResponse {
     mode: string;
     proxy: EgressHealthDescription;
   };
-  tokensaver: TokenSaverConfig;
+  tokensaver: TokenSaverHealthSummary;
   identity: {
     userAgent: string;
     updateMode: string;
