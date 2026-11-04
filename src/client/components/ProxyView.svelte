@@ -6,12 +6,7 @@
   import { fetchProxyStatus, updateProxy, testProxy } from "../lib/api";
   import type { ProxyStatus, ProxyTestResult } from "../lib/types";
 
-  let proxyStatus = $state<ProxyStatus>({
-    url: null,
-    mode: "direct",
-    locked: false,
-    source: "none",
-  });
+  let proxyStatus = $state<ProxyStatus | null>(null);
 
   let proxyInput = $state<string>("");
   let isTesting = $state<boolean>(false);
@@ -22,7 +17,6 @@
   onMount(async () => {
     try {
       proxyStatus = await fetchProxyStatus();
-      if (proxyStatus.url) proxyInput = proxyStatus.url;
     } catch {}
   });
 
@@ -68,8 +62,8 @@
       <div>
         <div class="flex items-center gap-2">
           <h2 class="text-lg font-bold text-text-main tracking-tight">Egress Proxy Configuration</h2>
-          <Badge tone={proxyStatus.mode === "direct" ? "neutral" : "primary"} size="sm" dot>
-            {proxyStatus.mode === "direct" ? "Direct Connection" : "Proxy Routed"}
+          <Badge tone={proxyStatus?.mode === "direct" ? "neutral" : "primary"} size="sm" dot>
+            {proxyStatus?.mode === "direct" ? "Direct Connection" : proxyStatus?.mode === "pool" ? "Pool Routed" : "Proxy Routed"}
           </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
@@ -79,12 +73,12 @@
 
       <div class="flex items-center gap-2">
         <span class="text-xs px-2.5 py-1 rounded-[8px] bg-surface-2 text-text-muted font-mono border border-border capitalize">
-          Mode: {proxyStatus.mode}
+          Mode: {proxyStatus?.mode ?? "loading"}
         </span>
       </div>
     </div>
 
-    {#if proxyStatus.locked}
+    {#if proxyStatus?.locked}
       <div class="p-3.5 rounded-[10px] bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
         Proxy is currently locked by the <code class="font-mono bg-black/40 px-1 py-0.5 rounded">UPSTREAM_PROXY_URL</code> environment variable.
       </div>
@@ -100,7 +94,7 @@
             type="text"
             bind:value={proxyInput}
             placeholder="http://user:pass@proxy-host:port"
-            disabled={proxyStatus.locked || isSaving || isTesting}
+            disabled={Boolean(proxyStatus?.locked) || isSaving || isTesting}
             class="flex-1 bg-surface-2 border border-border-subtle rounded-[10px] px-4 py-2.5 text-xs text-text-main font-mono focus:outline-none focus:border-brand-500/50 disabled:opacity-50"
           />
 
@@ -125,7 +119,7 @@
               type="button"
               id="proxy-save-btn"
               class="px-4 py-2.5 rounded-[10px] bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-              disabled={proxyStatus.locked || isSaving}
+              disabled={Boolean(proxyStatus?.locked) || isSaving}
               onclick={handleSaveProxy}
             >
               {#if isSaving}
@@ -141,7 +135,7 @@
               <button
                 type="button"
                 onclick={handleClearProxy}
-                disabled={proxyStatus.locked || isSaving}
+                disabled={Boolean(proxyStatus?.locked) || isSaving}
                 class="px-3 py-2.5 rounded-[10px] bg-surface-2 hover:bg-surface-3 text-text-muted hover:text-red-400 text-xs font-medium border border-border transition-colors cursor-pointer"
                 title="Reset to Direct"
               >
@@ -166,15 +160,14 @@
             <span class={testResult.ok ? 'text-emerald-400' : 'text-red-400'}>
               {testResult.ok ? "✓ Connection Successful" : "✗ Connection Failed"}
             </span>
-            {#if testResult.rttMs}
-              <span class="text-text-muted">{testResult.rttMs}ms</span>
+            {#if testResult.latencyMs !== undefined && testResult.latencyMs !== null}
+              <span class="text-text-muted">{testResult.latencyMs}ms</span>
             {/if}
           </div>
 
           {#if testResult.exitIp}
             <div class="text-text-main">
               Exit IP: <span class="text-brand-400 font-bold">{testResult.exitIp}</span>
-              {#if testResult.loc} ({testResult.loc}){/if}
             </div>
           {/if}
 
