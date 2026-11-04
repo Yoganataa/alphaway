@@ -17,6 +17,14 @@ describe("Hono application engine", () => {
     expect(json.tls).toBe("BoringSSL Native Parity");
     expect(json.providers.codebuddy).toBeDefined();
     expect(json.providers.opencode).toBeDefined();
+    expect(typeof json.uptimeSeconds).toBe("number");
+    expect(json.uptimeSeconds).toBeGreaterThanOrEqual(0);
+    expect(typeof json.endpoint.publicUrl).toBe("string");
+    expect(typeof json.endpoint.tunnel).toBe("boolean");
+    expect(["direct", "proxy", "relay", "pool"]).toContain(json.egress.mode);
+    expect(["open", "throttled", "ip-blocked"]).toContain(json.identity.gate.status);
+    expect(json).not.toHaveProperty("tunnel");
+    expect(json).not.toHaveProperty("daemon");
   });
 
   it("lists both OpenCode and CodeBuddy models on /v1/models with a managed key", async () => {
