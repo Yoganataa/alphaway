@@ -253,18 +253,18 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 
 ### Phase 6 — 9router-go Dashboard Migration and UI/UX Parity
 
-**Status:** In progress. First UI-truthfulness slice [PR #12](https://github.com/Yoganataa/alphaway/pull/12) merged at `786b7f3353a95d26f9f06f3c260ba55d5df2281b`. PR CI [#41769338132](https://github.com/Yoganataa/alphaway/actions/runs/41769338132), PR CodeQL, post-merge CI [#41769488886](https://github.com/Yoganataa/alphaway/actions/runs/41769488886), and post-merge CodeQL [#41769489120](https://github.com/Yoganataa/alphaway/actions/runs/41769489120) passed.
+**Status:** In progress. Runtime-truthfulness slice [PR #12](https://github.com/Yoganataa/alphaway/pull/12) merged at `786b7f3353a95d26f9f06f3c260ba55d5df2281b`; navigation grouping slice [PR #14](https://github.com/Yoganataa/alphaway/pull/14) merged at `61b5489bba4f05c1d45806984c9abc0c61941b82`. PR CI/CodeQL and post-merge CI/CodeQL passed for both slices. PR #14 evidence: PR CI [#41771053548](https://github.com/Yoganataa/alphaway/actions/runs/41771053548), PR CodeQL [#41771046849](https://github.com/Yoganataa/alphaway/actions/runs/41771046849), post-merge CI [#41771264497](https://github.com/Yoganataa/alphaway/actions/runs/41771264497), post-merge CodeQL [#41771264335](https://github.com/Yoganataa/alphaway/actions/runs/41771264335).
 
 **Goal:** migrate the remaining 9router-go-inspired dashboard screens and interaction patterns to AlphaWay while mapping every visible control to an existing, verified AlphaWay backend contract. Preserve AlphaWay runtime behavior and persistence.
 
 **Reference pin:** `luqman-v1/9router-go@e328decc174015514f49c7046d4bde57690bedc9`. Treat this commit as the initial design baseline; re-pin deliberately if the reference moves.
 
-**Initial capability matrix (AlphaWay `main` at `786b7f3`)**
+**Initial capability matrix (AlphaWay `main` at `892bd13`)**
 
 | 9router-go screen / capability | AlphaWay implementation / API | Canonical state | Runtime meaning / gap |
 |---|---|---|---|
 | Endpoint & Key | `EndpointView`; `/health`, `/v1/models`, `/api/keys`, `/api/keys/:id`, rotate/policy endpoints | Managed keys and gateway configuration in SQLite; browser client key is session-scoped | Existing. Endpoint view is the active default dashboard; do not wire only the unused `OverviewView`. |
-| Connections / Providers | `ProvidersView`; `/api/custom-providers`, `/api/custom-providers/test`, `/api/codebuddy/oauth/start`, `/api/codebuddy/oauth/poll`, `/v1/models` | Custom providers and OAuth credentials in SQLite with encrypted secrets | Existing partial equivalent. Registration/configuration and explicit probe results are not interchangeable with connected/upstream-healthy. |
+| Connections / Providers | `ProvidersView`; `/api/custom-providers` GET/POST/DELETE, `/api/custom-providers/test` POST, `/api/codebuddy/oauth/start`, `/api/codebuddy/oauth/poll`, global `/v1/models` | SQLite `custom_providers` plus encrypted CodeBuddy credential | Partial equivalent only. One custom-provider record represents one URL/credential/protocol/model list; it is not a provider node with multiple credential connections. No generic provider-node/connection CRUD, per-connection priority/proxy binding/usage, node limits, per-connection model catalog, capability registry, or model batch-management API. Full operation-by-operation mapping: [PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md](PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md). Existing probe feedback displays unsupported `0ms` latency and entered-model count as validated models; fix that UI contract before further provider parity. |
 | Combos & Vision Adapter | No `/api/combos` route or combo execution service in AlphaWay | No combo definition/state model identified | **Backend gap.** Requires combo schema, adapter selection semantics, validation, execution/routing and usage attribution before UI. |
 | Analytics / Usage | `UsageView`; `/api/usage`, `/api/usage/chart`, `/api/usage/heatmap`, `/api/usage/details/:id` | SQLite request/usage logs | Existing. Values represent AlphaWay-recorded traffic and estimates where documented, not provider billing truth. |
 | Quota Tracker | `QuotaTrackerView`; `/api/keys`, `/api/keys/usage`, `/api/plans` | SQLite managed-key counters, Plan policies and request records | Existing partial equivalent. AlphaWay-enforced per-key limits are not upstream provider quota probes. |
@@ -299,8 +299,12 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 
 **Suggested work sequence**
 - [x] Pin the reference frontend at `luqman-v1/9router-go@e328decc174015514f49c7046d4bde57690bedc9` and create the initial screen/control capability matrix above. Remaining component-by-component interaction audit continues below.
-- [ ] Classify each gap as UI-only parity, existing API wiring, or genuine backend capability gap.
-- [ ] Implement UI-only parity against existing endpoints first; keep changes independently reviewable and regression-tested.
+- [x] Classify initial screen gaps as UI-only parity, existing API wiring, or genuine backend capability gaps.
+- [x] Complete the detailed Connections/Providers interaction audit and record the route, DTO, persistence, runtime-semantic, and backend-gap mapping in [PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md](PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md).
+- [ ] Correct the existing custom-provider probe feedback so it reports only backend-returned HTTP status/result; do not display fabricated latency or model-validation counts.
+- [ ] Decide whether AlphaWay requires the full provider-node + multi-connection domain or a lighter custom-provider registry. Do not design schema or connection routing until this product boundary is explicit.
+- [ ] After the decision, design any required SQLite entities and secured API contracts before adding corresponding provider/model controls.
+- [ ] Implement remaining UI-only parity against existing endpoints in independently reviewable slices with regression coverage.
 - [ ] Add backend work only when the desired behavior is specified, persistable, secured, and covered by protocol/API tests.
 - [ ] Verify responsive behavior, loading/empty/error states, keyboard interaction, and dashboard browser tests.
 
