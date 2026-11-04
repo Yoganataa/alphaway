@@ -186,7 +186,7 @@
       title="Click to copy OpenAI Base URL"
     >
       <span class="material-symbols-outlined text-[16px] text-text-subtle">content_copy</span>
-      <span>{copied ? "Copied!" : "http://127.0.0.1:20129/v1"}</span>
+      <span>{copied ? "Copied!" : currentOrigin ? `${currentOrigin}/v1` : "Resolving origin…"}</span>
     </button>
 
     {#if onLogout}
