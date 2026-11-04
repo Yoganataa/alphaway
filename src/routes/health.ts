@@ -89,7 +89,6 @@ healthRoute.get("/health", (c) => {
       },
       codebuddy: {
         status: codebuddyKey ? "connected" : "unauthenticated",
-        user: codebuddy.extractJwtSub(codebuddyKey) || null,
         models: codebuddy.CODEBUDDY_MODELS.length,
       },
     },
@@ -98,7 +97,6 @@ healthRoute.get("/health", (c) => {
       configured: Boolean(codebuddyKey),
       endpoint: process.env.CODEBUDDY_INTL_URL || codebuddy.CODEBUDDY_INTL_URL,
       models: codebuddy.CODEBUDDY_MODELS.map((m: any) => m.id),
-      user: codebuddy.extractJwtSub(codebuddyKey) || null,
     },
     egress: {
       mode: proxyState.mode.includes("pool")
