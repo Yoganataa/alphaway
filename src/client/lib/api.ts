@@ -98,9 +98,12 @@ export interface SecurityKeywordRule {
 
 export async function fetchSecurityRules(): Promise<SecurityKeywordRule[]> {
   const res = await fetch(`${BASE_URL}/api/security/rules`);
-  if (!res.ok) throw new Error(`Fetch security rules failed: ${res.statusText}`);
-  const data = await res.json();
-  return data.rules || [];
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Fetch security rules failed (${res.status})`);
+  if (!data || typeof data !== "object" || Array.isArray(data) || !Array.isArray(data.rules)) {
+    throw new Error("Fetch security rules returned an invalid response");
+  }
+  return data.rules as SecurityKeywordRule[];
 }
 
 export async function saveSecurityRules(
@@ -115,8 +118,11 @@ export async function saveSecurityRules(
     const data = await res.json().catch(() => null);
     throw new Error(data?.error || `Save security rules failed: ${res.statusText}`);
   }
-  const data = await res.json();
-  return data.rules || [];
+  const data = await res.json().catch(() => null);
+  if (!data || typeof data !== "object" || Array.isArray(data) || !Array.isArray(data.rules)) {
+    throw new Error("Save security rules returned an invalid response");
+  }
+  return data.rules as SecurityKeywordRule[];
 }
 
 export interface PersonaKeyword {
