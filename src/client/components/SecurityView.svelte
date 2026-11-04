@@ -25,6 +25,10 @@
   });
 
   let rules = $state<SecurityKeywordRule[]>([]);
+  let isRulesLoading = $state(true);
+  let rulesLoaded = $state(false);
+  let rulesLoadError = $state<string | null>(null);
+  let isSavingRules = $state(false);
   let isConfigLoading = $state(true);
   let configLoaded = $state(false);
   let configLoadError = $state<string | null>(null);
@@ -67,13 +71,23 @@
     }
   }
 
-  onMount(async () => {
-    await loadConfig();
+  async function loadRules() {
+    isRulesLoading = true;
+    rulesLoaded = false;
+    rulesLoadError = null;
     try {
       rules = await fetchSecurityRules();
-    } catch {
-      notifications.error("Failed to load custom security rules");
+      rulesLoaded = true;
+    } catch (error) {
+      rulesLoadError = getErrorMessage(error, "Unknown Security Rules load error");
+      notifications.error(rulesLoadError);
+    } finally {
+      isRulesLoading = false;
     }
+  }
+
+  onMount(async () => {
+    await Promise.all([loadConfig(), loadRules()]);
     runSecurityTest();
   });
 
@@ -93,7 +107,7 @@
   }
 
   async function handleAddRule() {
-    if (!newPattern.trim()) return;
+    if (!newPattern.trim() || !rulesLoaded || isRulesLoading || isSavingRules) return;
     const rule: SecurityKeywordRule = {
       id: `rule-${crypto.randomUUID()}`,
       pattern: newPattern.trim(),
@@ -102,6 +116,7 @@
       enabled: true,
     };
 
+    isSavingRules = true;
     try {
       rules = await saveSecurityRules([...rules, rule]);
       isAddModalOpen = false;
@@ -111,20 +126,28 @@
       runSecurityTest();
     } catch (error) {
       notifications.error(error instanceof Error ? error.message : "Failed to save security rule");
+    } finally {
+      isSavingRules = false;
     }
   }
 
   async function handleDeleteRule(id: string) {
+    if (!rulesLoaded || isRulesLoading || isSavingRules) return;
+    isSavingRules = true;
     try {
       rules = await saveSecurityRules(rules.filter((r) => r.id !== id));
       notifications.info("Rule removed");
       runSecurityTest();
     } catch (error) {
       notifications.error(error instanceof Error ? error.message : "Failed to remove security rule");
+    } finally {
+      isSavingRules = false;
     }
   }
 
   async function handleToggleRule(id: string, enabled: boolean) {
+    if (!rulesLoaded || isRulesLoading || isSavingRules) return;
+    isSavingRules = true;
     try {
       rules = await saveSecurityRules(rules.map((rule) =>
         rule.id === id ? { ...rule, enabled } : rule
@@ -133,6 +156,8 @@
       runSecurityTest();
     } catch (error) {
       notifications.error(error instanceof Error ? error.message : "Failed to update security rule");
+    } finally {
+      isSavingRules = false;
     }
   }
 
@@ -185,6 +210,7 @@
           variant="primary"
           size="sm"
           onclick={() => (isAddModalOpen = true)}
+          disabled={!rulesLoaded || isRulesLoading || isSavingRules}
         >
           <span class="material-symbols-outlined text-[16px]">add_moderator</span>
           <span>Add Rule</span>
@@ -411,54 +437,89 @@
   <Card padding="none" elev class="overflow-hidden border-border-subtle">
     <div class="p-4 border-b border-border-subtle flex items-center justify-between bg-surface-2/40">
       <h3 class="text-sm font-bold text-text-main">Active Keyword Rules & Guardrail Patterns</h3>
-      <span class="text-xs text-text-muted font-mono">{rules.filter((rule) => rule.enabled).length} / {rules.length} enabled</span>
+      <span id="security-rules-count" class="text-xs text-text-muted font-mono">
+        {#if isRulesLoading}
+          Loading...
+        {:else if rulesLoadError}
+          Unavailable
+        {:else}
+          {rules.filter((rule) => rule.enabled).length} / {rules.length} enabled
+        {/if}
+      </span>
     </div>
 
     <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs font-mono">
-        <thead class="bg-surface-2 text-text-muted uppercase tracking-wider border-b border-border-subtle">
-          <tr>
-            <th class="px-5 py-3 font-semibold font-sans">Pattern / Signature</th>
-            <th class="px-5 py-3 font-semibold font-sans">Description</th>
-            <th class="px-5 py-3 font-semibold font-sans">Action</th>
-            <th class="px-5 py-3 font-semibold font-sans">Enabled</th>
-            <th class="px-5 py-3 font-semibold font-sans text-right">Remove</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-border-subtle">
-          {#each rules as r (r.id)}
-            <tr class="hover:bg-surface-2/40 transition-colors">
-              <td class="px-5 py-3.5 text-brand-400 font-bold">
-                {r.pattern}
-              </td>
-              <td class="px-5 py-3.5 text-text-main font-sans">
-                {r.description}
-              </td>
-              <td class="px-5 py-3.5 font-sans">
-                <Badge tone={r.action === 'block' ? 'error' : 'primary'} size="sm">
-                  {r.action.toUpperCase()}
-                </Badge>
-              </td>
-              <td class="px-5 py-3.5 font-sans">
-                <Toggle
-                  checked={r.enabled}
-                  onchange={(enabled) => handleToggleRule(r.id, enabled)}
-                />
-              </td>
-              <td class="px-5 py-3.5 text-right font-sans">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  class="text-red-400 hover:text-red-300"
-                  onclick={() => handleDeleteRule(r.id)}
-                >
-                  <span class="material-symbols-outlined text-[14px]">delete</span>
-                </Button>
-              </td>
+      {#if isRulesLoading}
+        <p id="security-rules-loading" role="status" aria-live="polite" class="p-5 text-xs text-text-muted">
+          Loading saved Security Rules...
+        </p>
+      {:else if rulesLoadError}
+        <div id="security-rules-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5">
+          <p class="text-xs text-red-500">Could not load saved Security Rules: {rulesLoadError}. Existing rules have not been changed.</p>
+          <Button
+            type="button"
+            id="security-rules-retry-btn"
+            variant="secondary"
+            size="sm"
+            onclick={loadRules}
+            disabled={isRulesLoading}
+          >
+            Retry Rules
+          </Button>
+        </div>
+      {:else if rules.length === 0}
+        <p id="security-rules-empty" class="p-5 text-xs text-text-muted">
+          No custom Security Rules are configured.
+        </p>
+      {:else}
+        <table class="w-full text-left text-xs font-mono">
+          <thead class="bg-surface-2 text-text-muted uppercase tracking-wider border-b border-border-subtle">
+            <tr>
+              <th class="px-5 py-3 font-semibold font-sans">Pattern / Signature</th>
+              <th class="px-5 py-3 font-semibold font-sans">Description</th>
+              <th class="px-5 py-3 font-semibold font-sans">Action</th>
+              <th class="px-5 py-3 font-semibold font-sans">Enabled</th>
+              <th class="px-5 py-3 font-semibold font-sans text-right">Remove</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
+          </thead>
+          <tbody class="divide-y divide-border-subtle">
+            {#each rules as r (r.id)}
+              <tr class="hover:bg-surface-2/40 transition-colors">
+                <td class="px-5 py-3.5 text-brand-400 font-bold">
+                  {r.pattern}
+                </td>
+                <td class="px-5 py-3.5 text-text-main font-sans">
+                  {r.description}
+                </td>
+                <td class="px-5 py-3.5 font-sans">
+                  <Badge tone={r.action === 'block' ? 'error' : 'primary'} size="sm">
+                    {r.action.toUpperCase()}
+                  </Badge>
+                </td>
+                <td class="px-5 py-3.5 font-sans">
+                  <Toggle
+                    checked={r.enabled}
+                    disabled={isSavingRules}
+                    label={`Security rule ${r.pattern}`}
+                    onchange={(enabled) => handleToggleRule(r.id, enabled)}
+                  />
+                </td>
+                <td class="px-5 py-3.5 text-right font-sans">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    class="text-red-400 hover:text-red-300"
+                    disabled={isSavingRules}
+                    onclick={() => handleDeleteRule(r.id)}
+                  >
+                    <span class="material-symbols-outlined text-[14px]">delete</span>
+                  </Button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
     </div>
   </Card>
 </div>
@@ -515,7 +576,7 @@
       <Button variant="ghost" onclick={() => (isAddModalOpen = false)}>
         Cancel
       </Button>
-      <Button variant="primary" type="submit" disabled={!newPattern.trim()}>
+      <Button variant="primary" type="submit" disabled={!newPattern.trim() || !rulesLoaded || isRulesLoading || isSavingRules}>
         Save Rule
       </Button>
     </div>
