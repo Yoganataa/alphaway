@@ -10,7 +10,7 @@
 
   let { health = null }: { health?: HealthResponse | null } = $props();
 
-  let localOrigin = $state("http://127.0.0.1:20129");
+  let localOrigin = $state(typeof window !== "undefined" ? window.location.origin : "");
   let showLocalUrl = $state(true);
   let showTunnelUrl = $state(true);
   let showKey = $state(false);
@@ -19,11 +19,22 @@
   const publicEndpointUrl = $derived(health?.endpoint?.tunnel ? health.endpoint.publicUrl : "");
   const publicEndpointConfigured = $derived(publicEndpointUrl.length > 0);
   const requiresApiKey = $derived(health?.auth?.required ?? health?.authRequired ?? false);
+  const gateStatus = $derived(health?.identity?.gate?.status ?? "unknown");
+  const gateTone = $derived(gateStatus === "open" ? "success" : gateStatus === "unknown" ? "neutral" : "warning");
+  const gateLabel = $derived(
+    gateStatus === "open"
+      ? "No active local block"
+      : gateStatus === "ip-blocked"
+        ? "IP blocked"
+        : gateStatus === "throttled"
+          ? "Throttled"
+          : "Not reported"
+  );
 
   let activeCodeTab = $state<"cursor" | "continue" | "claude" | "curl" | "anthropic" | "python" | "node">("cursor");
   let copiedSnippet = $state(false);
 
-  const localEndpoint = $derived(`${localOrigin}/v1`);
+  const localEndpoint = $derived(localOrigin ? `${localOrigin}/v1` : "/v1");
   const apiKey = $derived(getActiveApiKey() || "<YOUR_API_KEY>");
 
   onMount(() => {
@@ -127,63 +138,58 @@ console.log(res.choices[0].message.content);`,
 </script>
 
 <div class="space-y-6">
-  <!-- Top 4 Metric Cards (9Router Card Style) -->
+  <!-- Gateway metrics backed by the health response -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    <!-- Card 1: TLS Fingerprint -->
     <Card padding="md" hover>
       <div class="flex items-center justify-between text-xs text-text-muted mb-2">
-        <span class="font-medium">TLS Fingerprint</span>
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="font-medium">TLS Profile</span>
+        <span class="w-2 h-2 rounded-full {health?.tls ? 'bg-emerald-500' : 'bg-zinc-500'}"></span>
       </div>
       <div class="text-lg font-bold text-text-main tracking-tight">
-        BoringSSL Parity
+        {health?.tls || "Not reported"}
       </div>
-      <p class="text-xs text-emerald-400 font-mono mt-1 flex items-center gap-1">
-        <span class="material-symbols-outlined text-[14px]">verified</span>
-        <span>17 ciphers · 12 extensions</span>
+      <p class="text-xs text-text-muted mt-1">
+        Runtime health metadata; not an upstream connectivity test.
       </p>
     </Card>
 
-    <!-- Card 2: Upstream Gate -->
     <Card padding="md" hover>
       <div class="flex items-center justify-between text-xs text-text-muted mb-2">
-        <span class="font-medium">Upstream Gate</span>
-        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="font-medium">Local Retry Gate</span>
+        <span class="w-2 h-2 rounded-full {gateTone === 'success' ? 'bg-emerald-500' : gateTone === 'warning' ? 'bg-amber-500' : 'bg-zinc-500'}"></span>
       </div>
       <div class="text-lg font-bold text-text-main tracking-tight flex items-center gap-2">
-        <span>GATE OPEN</span>
-        <Badge tone="success" size="sm">Active</Badge>
+        <span>{gateStatus.toUpperCase()}</span>
+        <Badge tone={gateTone} size="sm">{gateLabel}</Badge>
       </div>
-      <p class="text-xs text-text-muted mt-1 font-mono">
-        Active Anchors: {Object.values(health?.providers?.opencode?.gate?.anchors || {}).filter(Boolean).length || 5}/5
+      <p class="text-xs text-text-muted mt-1">
+        Local retry/abuse state; it does not probe upstream availability.
       </p>
     </Card>
 
-    <!-- Card 3: Egress Mode -->
     <Card padding="md" hover>
       <div class="flex items-center justify-between text-xs text-text-muted mb-2">
         <span class="font-medium">Egress Mode</span>
         <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
       </div>
       <div class="text-lg font-bold text-text-main tracking-tight capitalize">
-        {health?.egress?.mode || "Direct"}
+        {health?.egress?.mode || "Unknown"}
       </div>
       <p class="text-xs text-text-muted truncate mt-1 font-mono" title={egressProxyDisplay}>
         {egressProxyDisplay}
       </p>
     </Card>
 
-    <!-- Card 4: Active Free Models -->
     <Card padding="md" hover>
       <div class="flex items-center justify-between text-xs text-text-muted mb-2">
-        <span class="font-medium">Active Free Models</span>
+        <span class="font-medium">Model Catalog</span>
         <span class="w-2 h-2 rounded-full bg-purple-500"></span>
       </div>
       <div class="text-lg font-bold text-text-main tracking-tight">
-        {health?.discoveredModels || (health?.providers?.opencode?.freeModels?.length || 0) + (health?.providers?.codebuddy?.models || 0)} Models
+        {(health?.discoveredModels ?? 0) + (health?.providers?.codebuddy?.models ?? 0)} Models
       </div>
       <p class="text-xs text-text-muted mt-1 font-mono">
-        {health?.discoveredModels || 0} OpenCode &middot; {health?.providers?.codebuddy?.models || 0} CodeBuddy
+        {health?.discoveredModels ?? 0} OpenCode · {health?.providers?.codebuddy?.models ?? 0} CodeBuddy
       </p>
     </Card>
   </div>
@@ -296,14 +302,14 @@ console.log(res.choices[0].message.content);`,
               <span>{copiedId === "tunnel" ? "Copied" : "Copy"}</span>
             </Button>
           {:else}
-            <span class="text-[11px] text-text-muted font-sans">Zero Trust Ready</span>
+            <span class="text-[11px] text-text-muted font-sans">No public endpoint configured</span>
           {/if}
         </div>
       </div>
     </div>
   </Card>
 
-  <!-- Client Integration Snippets (Matches E2E assertions for 'OpenAI Client Integration' & 'http://127.0.0.1:20129/v1') -->
+  <!-- Client Integration Snippets -->
   <Card padding="none" elev class="overflow-hidden border-border-subtle">
     <div class="p-5 border-b border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface-2/40">
       <div>
