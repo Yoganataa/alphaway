@@ -619,7 +619,7 @@
       {:else if providersLoaded}
         <div class="grid grid-cols-1 gap-3">
           {#each customProviders as p}
-            <div class="p-4 rounded-[12px] bg-surface-2 border border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-border transition-all">
+            <div id={`custom-provider-row-${p.id}`} class="p-4 rounded-[12px] bg-surface-2 border border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-border transition-all">
               <div class="space-y-1.5 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                   <h3 class="font-bold text-text-main text-sm">{p.name}</h3>
