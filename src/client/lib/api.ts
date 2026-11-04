@@ -311,8 +311,21 @@ export async function updateTokenSaverConfig(
 
 export async function fetchProxyStatus(): Promise<ProxyStatus> {
   const res = await fetch(`${BASE_URL}/api/proxy`);
-  if (!res.ok) throw new Error(`Fetch proxy failed: ${res.statusText}`);
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error || `Fetch proxy failed (HTTP ${res.status})`);
+  }
+  if (
+    !data ||
+    !["direct", "proxy", "pool"].includes(data.mode) ||
+    typeof data.locked !== "boolean" ||
+    !data.pool ||
+    !Array.isArray(data.pool.entries) ||
+    typeof data.pool.strategy !== "string"
+  ) {
+    throw new Error("Invalid proxy configuration response");
+  }
+  return data as ProxyStatus;
 }
 
 export async function updateProxy(url: string): Promise<ProxyStatus> {
