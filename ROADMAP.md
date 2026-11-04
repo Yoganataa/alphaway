@@ -218,3 +218,59 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 
 **Reference:** 9router-go Persona/Jailbreak preset resolution and UI are behavioral references only. Do not port Go types, repositories, HTTP handlers, or persistence; retain AlphaWay's native SQLite and Bun/Hono runtime.
 
+### Phase 5 — Accurate Backend Feature Contracts
+
+**Status:** Phase 5 is **merged** in two PRs: [#9 — Proxy Pool backend contracts](https://github.com/Yoganataa/alphaway/pull/9), merge commit `cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393`; and [#10 — Health/dashboard contracts](https://github.com/Yoganataa/alphaway/pull/10), merge commit `dc1c82afbf91ec34a57809b9003318b5b35acdd6`. PR CI and CodeQL passed for both. Post-merge CI [#41766711401](https://github.com/Yoganataa/alphaway/actions/runs/41766711401) passed for PR #9 and [#41766990569](https://github.com/Yoganataa/alphaway/actions/runs/41766990569) passed all four required jobs for PR #10. Post-merge CodeQL [#41766990065](https://github.com/Yoganataa/alphaway/actions/runs/41766990065) passed both JavaScript/TypeScript and Actions analyzers on the merge commit.
+
+**Goal:** make dashboard-visible controls and system status reflect real backend capabilities, canonical SQLite state, and actual runtime semantics. Do not invent state or actions in the UI.
+
+**5.1 — Proxy Pool backend and dashboard contract**
+- [x] Persist pool entries, strategy, cooldown configuration, and relay credentials through the existing SQLite proxy configuration. Keep credentials encrypted at rest.
+- [x] Return credential-free pool metadata; never return proxy URLs containing credentials or relay tokens. Preserve encrypted configuration when updating an existing entry by ID using metadata only.
+- [x] Expose pool configuration through `/api/proxy`, rejecting combined single-proxy and pool updates rather than applying partial changes.
+- [x] Expose bounded per-entry probes through `POST /api/proxy/pool/test`; use the matching direct/proxy/relay transport, return measured latency/status, and do not report an empty pool as successful.
+- [x] Replace seeded Proxy Pools UI state and random latency estimates with persisted API-backed entries, strategy, CRUD/toggles, import validation, and actual probe results.
+- [x] Reject unsupported SOCKS5 entries instead of presenting a transport the current Bun fetch path cannot use.
+
+**5.2 — Health response and dashboard contract**
+- [x] Align `HealthResponse` TypeScript types with the actual `GET /health` response and add measured `uptimeSeconds`.
+- [x] Correct Overview, Providers, Endpoint, and Tunnel views to consume the actual health fields. Do not describe provider credentials as a live upstream connection.
+- [x] Remove the client-only API-key toggle that implied a local UI state change controlled backend authentication. Display server authentication policy read-only.
+- [x] Distinguish public endpoint configuration from a verified active tunnel process; the current health contract does not provide daemon PID or tunnel process connectivity.
+- [x] Return only safe TokenSaver status flags from public `/health`; omit custom SOUL prompt content, local SOUL path, CodeBuddy JWT subject claims, and raw upstream error text.
+- [x] Preserve bounded upstream status and Cloudflare diagnostic metadata, while keeping raw failure messages private.
+- [x] Align the admin TokenSaver TypeScript configuration and initial UI state with the SQLite-backed backend configuration.
+- [x] Label the browser TokenSaver sandbox as a local illustration with approximate token counts, not a gateway execution or provider-tokenizer result.
+- [x] Add regression tests for the health response schema, privacy redaction, provider status semantics, dynamic dashboard origin, and the proxy-pool API/transport cases above.
+
+**Implementation boundaries and known limitations**
+- The health endpoint derives public URL configuration from environment settings; it does not prove that a tunnel process is connected. No daemon PID/lifecycle telemetry is exposed by the current contract.
+- The TokenSaver browser sandbox is still a local approximation and does not execute the complete runtime Security Rules pipeline or a provider tokenizer.
+- Phase 5 did not port the 9router-go backend or rebuild unrelated dashboard screens. Remaining UI migration/parity belongs to Phase 6.
+- Windows ACL verification remains Phase 7.
+
+**Reference:** use 9router-go as a behavioral/UI reference only. Retain AlphaWay's Bun + TypeScript + Hono + native SQLite architecture.
+
+### Phase 6 — 9router-go Dashboard Migration and UI/UX Parity
+
+**Status:** Next.
+
+**Goal:** migrate the remaining 9router-go-inspired dashboard screens and interaction patterns to AlphaWay while mapping every visible control to an existing, verified AlphaWay backend contract. Preserve AlphaWay runtime behavior and persistence.
+
+**Design boundaries**
+- Do not port Go repositories, HTTP handlers, data models, or persistence. Reuse existing Bun/Hono routes and native SQLite services.
+- Treat the existing AlphaWay backend as the source of truth. If a target control has no supported endpoint or persisted state, record it as a backend gap instead of implementing a fake frontend toggle.
+- Keep status wording precise: configured, registered, authenticated, probed, and connected are distinct states.
+- Keep provider quota, usage, and health values authoritative only where the backend can support them. Do not infer upstream quota or connectivity from static constants.
+- Preserve admin session protections, gateway API-key scopes, secret redaction, and server-side validation for every new control.
+- For each screen, document endpoint, request/response schema, persistence owner, error/loading/empty states, and regression coverage before implementation.
+
+**Suggested work sequence**
+- [ ] Inventory the target 9router-go screens/components against current AlphaWay routes, views, and API client methods. Produce a screen/control capability matrix.
+- [ ] Classify each gap as UI-only parity, existing API wiring, or genuine backend capability gap.
+- [ ] Implement UI-only parity against existing endpoints first; keep changes independently reviewable and regression-tested.
+- [ ] Add backend work only when the desired behavior is specified, persistable, secured, and covered by protocol/API tests.
+- [ ] Verify responsive behavior, loading/empty/error states, keyboard interaction, and dashboard browser tests.
+
+**Exit criteria:** every displayed control has a working and authorized action or is explicitly read-only; no mock metrics/status are presented as runtime facts; API and persistence semantics remain documented; all CI and CodeQL checks pass on the exact merge head.
+

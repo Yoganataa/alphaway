@@ -4,8 +4,10 @@
 >
 > **Checkpoint date:** 2026-11-04 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Next workstream:** Phase 5 — Accurate Backend Feature Contracts. Phase 4 is merged and post-merge CI/CodeQL are green.  
-> **Current `main`:** `4494d2c3371ec723d76f8289485cdebdcb2a988d`.  
+> **Next workstream:** Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Phases 0–5 are merged; Phase 5 post-merge CI and CodeQL are green.  
+> **Current `main`:** `dc1c82afbf91ec34a57809b9003318b5b35acdd6`.  
+> **Phase 5 Proxy Pool merge:** PR [#9](https://github.com/Yoganataa/alphaway/pull/9) merged at `cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393`; PR CI [#41763299308](https://github.com/Yoganataa/alphaway/actions/runs/41763299308) and CodeQL [#41763294572](https://github.com/Yoganataa/alphaway/actions/runs/41763294572) passed. Post-merge CI [#41766711401](https://github.com/Yoganataa/alphaway/actions/runs/41766711401) and Push on main [#41766711028](https://github.com/Yoganataa/alphaway/actions/runs/41766711028) passed.  
+> **Phase 5 Health/Dashboard merge:** PR [#10](https://github.com/Yoganataa/alphaway/pull/10) merged at `dc1c82afbf91ec34a57809b9003318b5b35acdd6`; PR CI [#41766842269](https://github.com/Yoganataa/alphaway/actions/runs/41766842269) and CodeQL [#41766837339](https://github.com/Yoganataa/alphaway/actions/runs/41766837339) passed. Post-merge CI [#41766990569](https://github.com/Yoganataa/alphaway/actions/runs/41766990569) passed all four required jobs; post-merge CodeQL [#41766990065](https://github.com/Yoganataa/alphaway/actions/runs/41766990065) passed both JavaScript/TypeScript and Actions analyzers.  
 > **Phase 3 merge:** PR [#6](https://github.com/Yoganataa/alphaway/pull/6) merged on 2026-11-03 at commit `145230a69c0b9295a0ac8ee3966aa669196094fa`.  
 > **Phase 3 post-merge CI:** [#41719318611](https://github.com/Yoganataa/alphaway/actions/runs/41719318611) passed all four mandatory jobs; the optional live-upstream drill was skipped by design.  
 > **Phase 3 post-merge CodeQL:** [#41719315494](https://github.com/Yoganataa/alphaway/actions/runs/41719315494) passed both JavaScript/TypeScript and Actions analyzers on the merge commit.  
@@ -16,14 +18,14 @@
 
 ## 1. Current Status
 
-**Phase 0 through Phase 4 are merged into `main`. Phase 4 PR #7 merged at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. Its implementation adds normalized SQLite Persona presets, deterministic exact-model/keyword resolution, preserves SOUL, and enforces normalized Security Rules on outbound and inbound text/tool-call data. PR-head CI [#41727468557](https://github.com/Yoganataa/alphaway/actions/runs/41727468557) passed all four required jobs and PR CodeQL [#41727027847](https://github.com/Yoganataa/alphaway/actions/runs/41727027847) passed both analyzers. Post-merge CI [#41743465576](https://github.com/Yoganataa/alphaway/actions/runs/41743465576) passed all four mandatory jobs and post-merge CodeQL [#41743465102](https://github.com/Yoganataa/alphaway/actions/runs/41743465102) passed both analyzers on the merge commit. Phase 4 is complete. Phase 5 — Accurate Backend Feature Contracts — is next; its detailed work breakdown must be derived from the actual backend/dashboard contracts before implementation.
+**Phase 0 through Phase 5 are merged into `main`. Phase 5 completed as two PRs: #9 adds persisted Proxy Pool API/UI contracts, and #10 aligns `/health`, dashboard consumers, TypeScript types, and public diagnostic redaction. PR #9 merged at `cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393`; PR #10 merged at `dc1c82afbf91ec34a57809b9003318b5b35acdd6`. PR-head CI/CodeQL passed for both PRs. Post-merge CI for PR #9 [#41766711401](https://github.com/Yoganataa/alphaway/actions/runs/41766711401) passed; post-merge CI for PR #10 [#41766990569](https://github.com/Yoganataa/alphaway/actions/runs/41766990569) passed all four required jobs. Post-merge CodeQL [#41766990065](https://github.com/Yoganataa/alphaway/actions/runs/41766990065) passed both JavaScript/TypeScript and Actions analyzers. Phase 5 is complete. Phase 6 — 9router-go Dashboard Migration and UI/UX Parity — is next.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
 - [x] Phase 2 — Authentication, API Keys, and Administrative Access (PR #4 merged; PR and post-merge CI/CodeQL checks passed).
 - [x] Phase 3 — Plans, Limits, and Request Enforcement (PR #6 merged; post-merge CI and CodeQL passed).
 - [x] Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules (PR #7 merged; post-merge CI and CodeQL passed).
-- [ ] Phase 5 — Accurate Backend Feature Contracts.
+- [x] Phase 5 — Accurate Backend Feature Contracts (PRs #9 and #10 merged; required CI and PR CodeQL passed; post-merge CI passed).
 - [ ] Phase 6 — 9router-go Dashboard Migration and UI/UX Parity.
 - [ ] Phase 7 — Hardening, Documentation, and Release.
 
@@ -261,12 +263,25 @@ Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9
 - Post-merge CI [#41743465576](https://github.com/Yoganataa/alphaway/actions/runs/41743465576) passed all four mandatory jobs on `4494d2c3371ec723d76f8289485cdebdcb2a988d`; optional live-upstream drill was skipped by design. Post-merge CodeQL [#41743465102](https://github.com/Yoganataa/alphaway/actions/runs/41743465102) passed JavaScript/TypeScript and Actions analyzers on the same merge commit.
 - Known limitations remain: inbound custom-rule matching is segment-based and does not guarantee a match when a literal is split across separate SSE deltas; Persona URL/repository/file imports are excluded pending SSRF-safe import and file-validation design; model catalog autocomplete/batch binding is deferred; Windows ACL verification remains Phase 7.
 
-Next actions:
-1. Begin Phase 5 — Accurate Backend Feature Contracts — by auditing the actual backend endpoints, persisted state, provider behavior, and dashboard assumptions before defining acceptance criteria.
-2. Keep Windows ACL verification in Phase 7.
-3. Preserve the Bun + TypeScript + Hono + SQLite architecture; do not port the 9router-go backend.
+### Completed Phase 5 implementation and merge
 
-Do not reopen or recreate Phase 0–4 work unless a verified regression is found.
+- PR [#9 — Phase 5: accurate proxy pool backend contracts](https://github.com/Yoganataa/alphaway/pull/9) merged at `cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393`.
+- Proxy Pool configuration is persisted through the existing SQLite-backed proxy configuration, with secrets encrypted at rest. The public status endpoint exposes metadata only; proxy URLs and relay tokens are not returned. Metadata-only updates by entry ID preserve the server-side encrypted URL/token.
+- `/api/proxy` now exposes real persisted pool state and validates exclusive single-proxy versus pool updates. `/api/proxy/pool/test` performs bounded live probes per entry, uses the corresponding direct/proxy/relay transport, reports real latency/status, and fails with 409 for an empty pool. Relay credentials are sent in the relay auth header and are never returned in API responses.
+- `ProxyPoolsView.svelte` is backend-driven: persisted entries, strategy, enable/disable, add/remove, bulk import, and actual probe results replace seeded local entries and random latency estimates. SOCKS5 is rejected because the current Bun fetch transport does not support it.
+- PR [#10 — Phase 5: align dashboard with actual health contracts](https://github.com/Yoganataa/alphaway/pull/10) merged at `dc1c82afbf91ec34a57809b9003318b5b35acdd6`.
+- `HealthResponse` now describes the actual `/health` payload. Health exposes measured `uptimeSeconds`; dashboard views consume `identity.gate`, the real egress description, auth policy, provider registration/configuration status, and actual endpoint fields.
+- The Endpoint view no longer presents a local-only API-key toggle as a backend setting. Tunnel/daemon views distinguish a configured public URL from a verified running process; the `/health` contract does not currently expose tunnel process connectivity or daemon PID state.
+- Public `/health` returns only safe TokenSaver flags and redacted upstream/gate diagnostics. It omits custom SOUL prompt content, local SOUL path, CodeBuddy JWT `sub` claims, and raw upstream error text. Upstream status, Cloudflare Ray ID, and placement metadata remain available.
+- TokenSaver dashboard types and initial state match the full SQLite-backed configuration. Its client-side sandbox is explicitly labelled a local illustration with estimated tokens, not a runtime/gateway/tokenizer result.
+- PR #9 CI [#41763299308](https://github.com/Yoganataa/alphaway/actions/runs/41763299308), PR CodeQL [#41763294572](https://github.com/Yoganataa/alphaway/actions/runs/41763294572), and post-merge CI [#41766711401](https://github.com/Yoganataa/alphaway/actions/runs/41766711401) passed. PR #10 CI [#41766842269](https://github.com/Yoganataa/alphaway/actions/runs/41766842269), PR CodeQL [#41766837339](https://github.com/Yoganataa/alphaway/actions/runs/41766837339), and post-merge CI [#41766990569](https://github.com/Yoganataa/alphaway/actions/runs/41766990569) passed. Optional live upstream gate drill was skipped by design. Post-merge CodeQL #41766990065 passed both JavaScript/TypeScript and Actions analyzers.
+- **Deferred boundaries:** active Cloudflare process/daemon lifecycle telemetry is not exposed by `/health`; do not claim connectivity from a configured URL. Phase 6 should audit any additional dashboard views that still use presentation-only/local preview state before wiring new feature behavior. Windows ACL verification remains Phase 7.
+
+Next actions:
+1. Begin Phase 6 — 9router-go Dashboard Migration and UI/UX Parity — by comparing the current dashboard with the agreed 9router-go target, mapping each screen/control to existing AlphaWay APIs and persisted state before implementing any missing UI.
+3. Keep Windows ACL verification in Phase 7 and preserve Bun + TypeScript + Hono + native SQLite. Do not port the 9router-go Go backend.
+
+Do not reopen or recreate Phase 0–5 work unless a verified regression is found.
 
 ## 6. Working Rules for the Next Session
 
@@ -275,7 +290,7 @@ Do not reopen or recreate Phase 0–4 work unless a verified regression is found
 - Keep the backend Bun >=1.4.4 + TypeScript + Hono + native SQLite. Do not port the Go backend from 9router-go; use it only as a behavioral/UI reference.
 - SQLite is the only canonical application-state store. Do not reintroduce flat-file JSON persistence or import paths.
 - Do not weaken or delete tests to make CI green. Do not claim checks passed unless the exact workflow/job result has been inspected.
-- Phase 0–4 are complete and merged. Start Phase 5 only after inspecting the current backend contracts and establishing explicit acceptance criteria.
+- Phase 0–5 are complete and merged. Phase 6 is the next workstream: 9router-go dashboard migration and UI/UX parity. Re-audit the latest backend before wiring each remaining dashboard feature.
 - Preserve the existing SOUL behavior and TokenSaver features. Avoid rebuilding existing Phase 0–3 capabilities.
 - Update this checkpoint and roadmap after meaningful work, including exact branch/PR state, changed paths, verification evidence, open risks, and next action.
 - Branch protection is mandatory: use PRs, resolve review threads, and do not force-push.
@@ -286,11 +301,11 @@ Do not reopen or recreate Phase 0–4 work unless a verified regression is found
 Lanjutkan AlphaWay dari https://github.com/Yoganataa/alphaway.
 Baca CHECKPOINT.md terlebih dahulu, kemudian ROADMAP.md. Periksa live main, branch, PR, Ruleset Protect main, dan workflow GitHub sebelum mengubah apa pun.
 
-Phase 0–4 sudah merged. Phase 4 PR #7 merge commit: 4494d2c3371ec723d76f8289485cdebdcb2a988d. Post-merge CI #41743465576 passed keempat job wajib dan CodeQL #41743465102 passed kedua analyzer pada commit yang sama. Main saat checkpoint ini berada pada 4494d2c3371ec723d76f8289485cdebdcb2a988d.
+Phase 0–5 sudah merged. Phase 4 PR #7 merge commit: 4494d2c3371ec723d76f8289485cdebdcb2a988d. Phase 5 PR #9 merge commit: cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393. Phase 5 PR #10 merge commit: dc1c82afbf91ec34a57809b9003318b5b35acdd6. PR #9 and #10 CI/CodeQL passed; post-merge CI #41766990569 and post-merge CodeQL #41766990065 both passed on main. Main saat checkpoint ini berada pada dc1c82afbf91ec34a57809b9003318b5b35acdd6.
 
-Berikutnya Phase 5 — Accurate Backend Feature Contracts. Mulai dengan audit faktual seluruh backend routes, response schema, persisted state, provider-specific behavior, serta kontrak dashboard saat ini. Jangan membuat asumsi atau mengganti backend. Susun acceptance criteria dan matriks capability/contract sebelum implementasi.
+Berikutnya Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Mulai dengan membandingkan screen dan kontrol dashboard yang dituju dengan API, persisted state, dan kemampuan runtime AlphaWay yang sudah ada. Buat matriks screen/control → endpoint → persistence → runtime semantics. Jangan meniru status atau aksi yang backend tidak dukung; pisahkan kebutuhan UI dari backend gap.
 
-Backend tetap Bun >=1.4.4 + TypeScript + Hono + SQLite. Jangan port backend Go dari 9router-go. SQLite satu-satunya persistence store. Pertahankan behavior SOUL dan TokenSaver. Jangan ulang Phase 0–4 tanpa regression terverifikasi.
+Backend tetap Bun >=1.4.4 + TypeScript + Hono + SQLite. Jangan port backend Go dari 9router-go. SQLite satu-satunya persistence store. Pertahankan behavior SOUL dan TokenSaver. Jangan ulang Phase 0–5 tanpa regression terverifikasi.
 
-Known limitations: inbound Security Rule matching saat streaming memeriksa tiap SSE segment; literal yang terpecah antar delta belum tentu terdeteksi. Persona URL/repository/file import belum termasuk, sampai tersedia desain SSRF-safe importer dan validasi file. Model catalog autocomplete/batch binding ditunda. Windows ACL verification tetap Phase 7.
+Known limitations: public `/health` only indicates a configured public URL, not a live tunnel process; daemon PID/lifecycle state is not exposed. TokenSaver browser sandbox remains an explicitly labelled local illustration. Inbound Security Rule matching saat streaming memeriksa tiap SSE segment; literal yang terpecah antar delta belum tentu terdeteksi. Persona URL/repository/file import belum termasuk, sampai tersedia desain SSRF-safe importer dan validasi file. Model catalog autocomplete/batch binding ditunda. Windows ACL verification tetap Phase 7.
 ```
