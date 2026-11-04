@@ -30,6 +30,10 @@
   let rotationMode = $state<ProxyPoolStrategy>("round-robin");
   let proxyInput = $state("");
   let isLoading = $state(true);
+  let hasLoaded = $state(false);
+  let loadError = $state<string | null>(null);
+  let lastLoadedAt = $state<number | null>(null);
+  let refreshInFlight = false;
   let isTesting = $state(false);
   let isSaving = $state(false);
   let isPoolTesting = $state(false);
@@ -48,17 +52,31 @@
     void refreshProxyStatus();
   });
 
+  function formatProxyStatusTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
   async function refreshProxyStatus() {
+    // Pool reads can be triggered by both the initial load and a live probe.
+    // Keep only one refresh in flight so an older response cannot overwrite a newer snapshot.
+    if (refreshInFlight) return;
+    refreshInFlight = true;
     isLoading = true;
     try {
       const status = await fetchProxyStatus();
       proxyStatus = status;
       pools = status.pool.entries;
       rotationMode = status.pool.strategy;
+      hasLoaded = true;
+      loadError = null;
+      lastLoadedAt = Date.now();
     } catch (error: any) {
-      notifications.error(`Unable to load proxy configuration: ${error.message}`);
+      // Never replace an unread/known persisted pool with an assumed empty list.
+      // Retain the last successful snapshot until a fresh read succeeds.
+      loadError = error instanceof Error ? error.message : "Unknown proxy configuration error";
     } finally {
       isLoading = false;
+      refreshInFlight = false;
     }
   }
 
@@ -90,6 +108,7 @@
   }
 
   async function savePool(nextEntries: EditablePoolEntry[] = pools): Promise<boolean> {
+    if (!hasLoaded || loadError || isSaving) return false;
     isSaving = true;
     statusMessage = null;
     try {
@@ -137,6 +156,7 @@
   }
 
   async function handleSaveProxy() {
+    if (!hasLoaded || loadError || isSaving) return;
     isSaving = true;
     statusMessage = null;
     try {
@@ -231,8 +251,12 @@
       <div>
         <div class="flex items-center gap-2">
           <h2 class="text-lg font-bold text-text-main tracking-tight">Egress Proxy Configuration</h2>
-          <Badge tone={proxyStatus?.mode === "direct" ? "neutral" : "primary"} size="sm" dot>
-            {proxyStatus?.mode === "pool" ? "Pool Routed" : proxyStatus?.mode === "proxy" ? "Single Proxy" : proxyStatus?.mode === "direct" ? "Direct Connection" : "Loading"}
+          <Badge
+            tone={!hasLoaded || loadError ? "warning" : proxyStatus?.mode === "direct" ? "neutral" : "primary"}
+            size="sm"
+            dot
+          >
+            {!hasLoaded ? (isLoading ? "Loading" : "Unavailable") : loadError ? "Stale Data" : proxyStatus?.mode === "pool" ? "Pool Routed" : proxyStatus?.mode === "proxy" ? "Single Proxy" : "Direct Connection"}
           </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
@@ -240,9 +264,32 @@
         </p>
       </div>
       <span class="text-xs px-2.5 py-1 rounded-[8px] bg-surface-2 text-text-muted border border-border font-mono">
-        Mode: {proxyStatus?.mode ?? "loading"}
+        Mode: {proxyStatus?.mode ?? (isLoading ? "loading" : "unavailable")}
       </span>
     </div>
+
+    {#if loadError}
+      <div
+        id="proxy-config-load-error"
+        role="alert"
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[10px] border border-amber-500/30 bg-amber-500/5 p-3"
+      >
+        <div class="min-w-0">
+          <p class="text-xs font-semibold text-amber-400">
+            {hasLoaded
+              ? "Proxy configuration refresh failed. Showing the last successful snapshot."
+              : "Persisted proxy configuration could not be loaded. Changes are blocked until the saved state can be read."}
+          </p>
+          <p class="mt-1 break-words text-xs text-text-muted">{loadError}</p>
+          {#if lastLoadedAt !== null}
+            <p class="mt-1 text-[11px] text-text-muted">Last successful refresh: {formatProxyStatusTime(lastLoadedAt)}</p>
+          {/if}
+        </div>
+        <Button id="proxy-config-retry" variant="secondary" size="sm" onclick={refreshProxyStatus} disabled={isLoading}>
+          {isLoading ? "Retrying..." : "Retry Load"}
+        </Button>
+      </div>
+    {/if}
 
     {#if proxyStatus?.locked}
       <div class="p-3.5 rounded-[10px] bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
@@ -282,12 +329,12 @@
             <span class="material-symbols-outlined text-[16px] {isTesting ? 'animate-spin' : ''}">speed</span>
             <span>{isTesting ? "Testing..." : "Test URL"}</span>
           </Button>
-          <Button id="proxy-save-btn" variant="primary" size="sm" onclick={handleSaveProxy} disabled={isSaving || Boolean(proxyStatus?.locked)}>
+          <Button id="proxy-save-btn" variant="primary" size="sm" onclick={handleSaveProxy} disabled={!hasLoaded || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>
             <span class="material-symbols-outlined text-[16px]">save</span>
             <span>{isSaving ? "Saving..." : "Save Fallback"}</span>
           </Button>
           {#if proxyInput.trim()}
-            <Button variant="ghost" size="sm" onclick={() => { proxyInput = ""; void handleSaveProxy(); }} disabled={isSaving || Boolean(proxyStatus?.locked)}>
+            <Button variant="ghost" size="sm" onclick={() => { proxyInput = ""; void handleSaveProxy(); }} disabled={!hasLoaded || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>
               Clear
             </Button>
           {/if}
@@ -323,7 +370,7 @@
         <select
           bind:value={rotationMode}
           onchange={handleStrategyChange}
-          disabled={Boolean(proxyStatus?.locked) || isSaving}
+          disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}
           class="px-2.5 py-1.5 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-medium focus:outline-hidden"
         >
           <option value="round-robin">Strategy: Round-Robin</option>
@@ -334,11 +381,11 @@
           <span class="material-symbols-outlined text-[14px] {isPoolTesting ? 'animate-spin' : ''}">network_check</span>
           <span>{isPoolTesting ? "Probing..." : "Ping All"}</span>
         </Button>
-        <Button variant="secondary" size="xs" onclick={() => (isBulkModalOpen = true)} disabled={Boolean(proxyStatus?.locked) || isSaving}>
+        <Button variant="secondary" size="xs" onclick={() => (isBulkModalOpen = true)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
           <span class="material-symbols-outlined text-[14px]">file_upload</span>
           <span>Bulk Import</span>
         </Button>
-        <Button variant="primary" size="xs" onclick={() => (isAddModalOpen = true)} disabled={Boolean(proxyStatus?.locked) || isSaving}>
+        <Button variant="primary" size="xs" onclick={() => (isAddModalOpen = true)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
           <span class="material-symbols-outlined text-[14px]">add</span>
           <span>Add Node</span>
         </Button>
@@ -351,8 +398,13 @@
       </div>
     {/if}
 
-    {#if isLoading}
+    {#if isLoading && !hasLoaded}
       <p class="p-6 text-center text-xs text-text-muted">Loading persisted proxy pool…</p>
+    {:else if !hasLoaded}
+      <div id="proxy-pool-unavailable" class="p-8 rounded-[12px] bg-surface-2 border border-border-subtle text-center space-y-2">
+        <p class="text-sm font-semibold text-text-main">Persisted proxy pool is unavailable</p>
+        <p class="text-xs text-text-muted">No configuration changes have been made. Retry loading the saved pool before adding, importing, or saving entries.</p>
+      </div>
     {:else if pools.length === 0}
       <div class="p-8 rounded-[12px] bg-surface-2 border border-border-subtle text-center space-y-2">
         <p class="text-sm font-semibold text-text-main">No proxy pool entries configured</p>
@@ -416,14 +468,14 @@
                         type="checkbox"
                         checked={entry.enabled}
                         onchange={(event) => handleToggleEntry(entry, (event.currentTarget as HTMLInputElement).checked)}
-                        disabled={Boolean(proxyStatus?.locked) || isSaving}
+                        disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}
                       />
                       Enabled
                     </label>
                     <Button variant="ghost" size="xs" onclick={() => runPoolTest(entry.id)} disabled={isPoolTesting || !entry.enabled}>
                       Ping
                     </Button>
-                    <Button variant="ghost" size="xs" class="text-red-400" onclick={() => handleRemoveEntry(entry)} disabled={Boolean(proxyStatus?.locked) || isSaving}>
+                    <Button variant="ghost" size="xs" class="text-red-400" onclick={() => handleRemoveEntry(entry)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
                       <span class="material-symbols-outlined text-[14px]">delete</span>
                     </Button>
                   </div>
@@ -460,7 +512,7 @@
     <p class="text-[11px] text-text-subtle">SOCKS5 is not supported by Bun fetch. Existing credentials remain in SQLite when editing or removing pool entries by ID.</p>
     <div class="flex justify-end gap-2 pt-2">
       <Button variant="ghost" onclick={() => (isAddModalOpen = false)}>Cancel</Button>
-      <Button variant="primary" type="submit" disabled={!newUrl.trim() || isSaving}>Add Node</Button>
+      <Button variant="primary" type="submit" disabled={!newUrl.trim() || !hasLoaded || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>Add Node</Button>
     </div>
   </form>
 </Modal>
@@ -486,7 +538,7 @@
     </div>
     <div class="flex justify-end gap-2 pt-2">
       <Button variant="ghost" onclick={() => (isBulkModalOpen = false)}>Cancel</Button>
-      <Button variant="primary" type="submit" disabled={!bulkInput.trim() || isSaving}>Import List</Button>
+      <Button variant="primary" type="submit" disabled={!bulkInput.trim() || !hasLoaded || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>Import List</Button>
     </div>
   </form>
 </Modal>
