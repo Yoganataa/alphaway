@@ -96,6 +96,39 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.getByText("Egress Proxy Configuration", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
   }, 20000);
 
+  it("keeps TopBar titles aligned with implemented navigation labels", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    const expectedTitles = [
+      "Endpoint & Key",
+      "Providers",
+      "Usage",
+      "Quota Tracker",
+      "Token Saver",
+      "Security",
+      "Persona",
+      "Plans",
+      "Proxy Pools",
+      "Playground",
+      "Console Log",
+      "Tunnel & Daemon",
+      "Profile & Settings",
+    ];
+
+    const headerTitle = page.locator("header h1");
+    for (const title of expectedTitles) {
+      const navigationItem = page.locator("aside button").filter({ hasText: title }).first();
+      await navigationItem.click();
+      await page.waitForFunction(
+        (expected) => document.querySelector("header h1")?.textContent?.includes(expected) ?? false,
+        title,
+        { timeout: 10000 }
+      );
+      expect(await headerTitle.textContent()).toContain(title);
+    }
+  }, 20000);
+
   it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
     const { page, baseURL } = dashboard;
     const expectedTls = "AlphaWay E2E TLS profile sentinel";
