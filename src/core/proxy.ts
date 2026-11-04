@@ -802,12 +802,10 @@ function describe(now = Date.now()) {
     mode: poolActive ? "pool" : singleActive ? "proxy" : "direct",
     proxy: poolActive ? `${active.length} proxy` : displayHost(current.url),
     hasCredentials: poolActive
-      ? entries.some((e) => /\/\/[^/@]+@/.test(e.url))
+      ? entries.some((e) => Boolean(e.token) || /\\/\\/[^/@]+@/.test(e.url))
       : current.url
-        ? /\/\/[^/@]+@/.test(current.url)
+        ? /\\/\\/[^/@]+@/.test(current.url)
         : false,
-    source: poolActive ? pool.source : current.source,
-    locked: (poolActive ? pool.source : current.source) === "env",
     configPath: CONFIG_SETTING_LABEL,
     error: current.error || pool.error || null,
     pool: poolView,
@@ -1184,7 +1182,9 @@ async function testPool({ probeUrl = null, timeoutMs = 15000, entryId = null } =
   if (entryId && entries.length === 0) {
     return { ok: false, entries: [], error: "Proxy pool entry not found." };
   }
-  if (entries.length === 0) return { ok: true, entries: [] };
+  if (entries.length === 0) {
+    return { ok: false, entries: [], error: "No proxy pool entries are configured." };
+  }
 
   const boundedTimeout = Number.isFinite(Number(timeoutMs))
     ? Math.min(30000, Math.max(1000, Number(timeoutMs)))
