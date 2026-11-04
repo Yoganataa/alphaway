@@ -6,6 +6,7 @@
   import Button from "../lib/ui/Button.svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Toggle from "../lib/ui/Toggle.svelte";
+  import { notifications } from "../lib/notifications";
 
   let loading = $state(true);
   let loaded = $state(false);
@@ -185,17 +186,21 @@
         <Badge variant={!loaded ? "neutral" : soul.enabled ? "success" : "neutral"}>
           {!loaded ? "SOUL Status Unknown" : soul.enabled ? "Active Personality Injection" : "Injection Disabled"}
         </Badge>
-        {#if soul.source === "workspace"}
+        {#if loaded && soul.source === "workspace"}
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span>📁</span> ./SOUL.md (Workspace)
           </span>
-        {:else if soul.source === "global"}
+        {:else if loaded && soul.source === "global"}
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
             <span>🌍</span> $DATA_DIR/SOUL.md (Global)
           </span>
-        {:else if soul.source === "preset"}
+        {:else if loaded && soul.source === "preset"}
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">
             <span>⚡</span> Preset: {soul.preset.toUpperCase()}
+          </span>
+        {:else if !loaded}
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-surface-2 text-text-muted border border-border">
+            SOUL source unknown
           </span>
         {/if}
       </div>
