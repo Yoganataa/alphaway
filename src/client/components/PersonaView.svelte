@@ -142,7 +142,9 @@
         notifications.warning("Persona preset was saved, but the library could not be refreshed. Retry before making further changes.");
       }
     } catch (error) {
-      statusError = getErrorMessage(error, "Failed to save Persona preset");
+      const message = getErrorMessage(error, "Failed to save Persona preset");
+      await load();
+      statusError = message;
     } finally {
       saving = false;
     }
@@ -159,7 +161,9 @@
       if (await load()) notifications.info("Persona preset removed");
       else notifications.warning("Persona preset was deleted, but the library could not be refreshed. Retry before making further changes.");
     } catch (error) {
-      statusError = getErrorMessage(error, "Failed to delete preset");
+      const message = getErrorMessage(error, "Failed to delete preset");
+      await load();
+      statusError = message;
     } finally {
       mutating = false;
     }
@@ -179,7 +183,9 @@
       if (await load()) notifications.success("Model Persona binding saved");
       else notifications.warning("Model binding was saved, but the library could not be refreshed. Retry before making further changes.");
     } catch (error) {
-      statusError = getErrorMessage(error, "Failed to save model binding");
+      const message = getErrorMessage(error, "Failed to save model binding");
+      await load();
+      statusError = message;
     } finally {
       mutating = false;
     }
@@ -194,7 +200,9 @@
       if (await load()) notifications.info("Model Persona binding removed");
       else notifications.warning("Model binding was removed, but the library could not be refreshed. Retry before making further changes.");
     } catch (error) {
-      statusError = getErrorMessage(error, "Failed to remove model binding");
+      const message = getErrorMessage(error, "Failed to remove model binding");
+      await load();
+      statusError = message;
     } finally {
       mutating = false;
     }
@@ -211,9 +219,10 @@
         .join("\n");
       notifications.success("Global Persona exclusions saved");
     } catch (error) {
-      statusError = getErrorMessage(error, "Failed to save global exclusions");
+      const message = getErrorMessage(error, "Failed to save global exclusions");
       // PUT replaces the full list; re-read the canonical state before enabling another write.
       await load();
+      statusError = message;
     } finally {
       mutating = false;
     }
