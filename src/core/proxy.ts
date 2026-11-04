@@ -777,6 +777,15 @@ function describeEntry(entry, now = Date.now()) {
   };
 }
 
+function hasUrlCredentials(value) {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return Boolean(parsed.username || parsed.password);
+  } catch {
+    return false;
+  }
+}
 function describe(now = Date.now()) {
   const entries = pool.entries;
   const active = entries.filter((e) => e.enabled);
@@ -802,10 +811,8 @@ function describe(now = Date.now()) {
     mode: poolActive ? "pool" : singleActive ? "proxy" : "direct",
     proxy: poolActive ? `${active.length} proxy` : displayHost(current.url),
     hasCredentials: poolActive
-      ? entries.some((e) => Boolean(e.token) || /\\/\\/[^/@]+@/.test(e.url))
-      : current.url
-        ? /\\/\\/[^/@]+@/.test(current.url)
-        : false,
+      ? entries.some((entry) => Boolean(entry.token) || hasUrlCredentials(entry.url))
+      : hasUrlCredentials(current.url),
     configPath: CONFIG_SETTING_LABEL,
     error: current.error || pool.error || null,
     pool: poolView,
