@@ -396,7 +396,7 @@ describe("proxy HTTP surface", () => {
       global.fetch = async (url, init) => {
         if (String(url).includes("cdn-cgi/trace")) {
           assert.equal(init.proxy, "http://127.0.0.1:3128");
-          return { ok: true, text: async () => "ip=198.51.100.42\\n" };
+          return { ok: true, text: async () => "ip=198.51.100.42\n" };
         }
         assert.equal(init.proxy, "http://127.0.0.1:3128");
         return { ok: true, status: 200 };
