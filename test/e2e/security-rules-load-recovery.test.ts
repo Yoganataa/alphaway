@@ -42,11 +42,12 @@ describe("Security Rules configuration load recovery", () => {
         const method = route.request().method();
         if (method === "PUT") {
           writes += 1;
-          lastWrite = route.request().postDataJSON() as { rules?: unknown };
+          const payload = route.request().postDataJSON() as { rules?: unknown };
+          lastWrite = payload;
           await route.fulfill({
             status: 200,
             contentType: "application/json",
-            body: JSON.stringify({ ok: true, rules: lastWrite.rules }),
+            body: JSON.stringify({ ok: true, rules: payload.rules }),
           });
           return;
         }
