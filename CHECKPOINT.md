@@ -4,8 +4,9 @@
 >
 > **Checkpoint date:** 2026-11-04 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Next workstream:** Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Phases 0–5 are merged; Phase 5 post-merge CI and CodeQL are green.  
-> **Current `main`:** `dc1c82afbf91ec34a57809b9003318b5b35acdd6`.  
+> **Workstream in progress:** Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Phase 0–5 are merged; Phase 6 first UI-truthfulness slice is merged and verified.  
+> **Current `main`:** `786b7f3353a95d26f9f06f3c260ba55d5df2281b`.  
+> **Phase 6 first slice:** PR [#12](https://github.com/Yoganataa/alphaway/pull/12) merged at `786b7f3353a95d26f9f06f3c260ba55d5df2281b`. PR CI [#41769338132](https://github.com/Yoganataa/alphaway/actions/runs/41769338132) passed four required jobs and both CodeQL analyzers; post-merge CI [#41769488886](https://github.com/Yoganataa/alphaway/actions/runs/41769488886) passed all four required jobs; post-merge CodeQL [#41769489120](https://github.com/Yoganataa/alphaway/actions/runs/41769489120) passed both analyzers.  
 > **Phase 5 Proxy Pool merge:** PR [#9](https://github.com/Yoganataa/alphaway/pull/9) merged at `cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393`; PR CI [#41763299308](https://github.com/Yoganataa/alphaway/actions/runs/41763299308) and CodeQL [#41763294572](https://github.com/Yoganataa/alphaway/actions/runs/41763294572) passed. Post-merge CI [#41766711401](https://github.com/Yoganataa/alphaway/actions/runs/41766711401) and Push on main [#41766711028](https://github.com/Yoganataa/alphaway/actions/runs/41766711028) passed.  
 > **Phase 5 Health/Dashboard merge:** PR [#10](https://github.com/Yoganataa/alphaway/pull/10) merged at `dc1c82afbf91ec34a57809b9003318b5b35acdd6`; PR CI [#41766842269](https://github.com/Yoganataa/alphaway/actions/runs/41766842269) and CodeQL [#41766837339](https://github.com/Yoganataa/alphaway/actions/runs/41766837339) passed. Post-merge CI [#41766990569](https://github.com/Yoganataa/alphaway/actions/runs/41766990569) passed all four required jobs; post-merge CodeQL [#41766990065](https://github.com/Yoganataa/alphaway/actions/runs/41766990065) passed both JavaScript/TypeScript and Actions analyzers.  
 > **Phase 3 merge:** PR [#6](https://github.com/Yoganataa/alphaway/pull/6) merged on 2026-11-03 at commit `145230a69c0b9295a0ac8ee3966aa669196094fa`.  
@@ -18,7 +19,7 @@
 
 ## 1. Current Status
 
-**Phase 0 through Phase 5 are merged into `main`. Phase 5 completed as two PRs: #9 adds persisted Proxy Pool API/UI contracts, and #10 aligns `/health`, dashboard consumers, TypeScript types, and public diagnostic redaction. PR #9 merged at `cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393`; PR #10 merged at `dc1c82afbf91ec34a57809b9003318b5b35acdd6`. PR-head CI/CodeQL passed for both PRs. Post-merge CI for PR #9 [#41766711401](https://github.com/Yoganataa/alphaway/actions/runs/41766711401) passed; post-merge CI for PR #10 [#41766990569](https://github.com/Yoganataa/alphaway/actions/runs/41766990569) passed all four required jobs. Post-merge CodeQL [#41766990065](https://github.com/Yoganataa/alphaway/actions/runs/41766990065) passed both JavaScript/TypeScript and Actions analyzers. Phase 5 is complete. Phase 6 — 9router-go Dashboard Migration and UI/UX Parity — is next.
+**Phase 0 through Phase 5 are merged into `main`. Phase 5 completed in PRs #9 and #10; both PRs and their post-merge CI/CodeQL checks passed. Phase 6 is in progress. Its first UI-truthfulness slice, PR [#12](https://github.com/Yoganataa/alphaway/pull/12), merged at `786b7f3353a95d26f9f06f3c260ba55d5df2281b`. PR CI [#41769338132](https://github.com/Yoganataa/alphaway/actions/runs/41769338132) passed all four required CI jobs and both CodeQL analyzers. Post-merge CI [#41769488886](https://github.com/Yoganataa/alphaway/actions/runs/41769488886) passed all four required jobs, and post-merge CodeQL [#41769489120](https://github.com/Yoganataa/alphaway/actions/runs/41769489120) passed JavaScript/TypeScript and Actions analyzers. Phase 6 continues with the screen/control capability matrix and backend-gap classification.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
@@ -278,10 +279,24 @@ Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9
 - **Deferred boundaries:** active Cloudflare process/daemon lifecycle telemetry is not exposed by `/health`; do not claim connectivity from a configured URL. Phase 6 should audit any additional dashboard views that still use presentation-only/local preview state before wiring new feature behavior. Windows ACL verification remains Phase 7.
 
 Next actions:
-1. Begin Phase 6 — 9router-go Dashboard Migration and UI/UX Parity — by comparing the current dashboard with the agreed 9router-go target, mapping each screen/control to existing AlphaWay APIs and persisted state before implementing any missing UI.
+1. Complete and maintain the Phase 6 screen/control capability matrix against the pinned 9router-go frontend commit and current AlphaWay API/persistence contracts.
+2. Implement the next independently reviewable UI-parity slice only where AlphaWay already has an authorized backend contract; record Combos, Skills, CLI Tools, Terminal, and Media Providers as backend gaps until their behavior and persistence are specified.
 3. Keep Windows ACL verification in Phase 7 and preserve Bun + TypeScript + Hono + native SQLite. Do not port the 9router-go Go backend.
 
 Do not reopen or recreate Phase 0–5 work unless a verified regression is found.
+
+
+### Phase 6 progress — first UI-truthfulness slice
+
+- Reference frontend: `luqman-v1/9router-go`, pinned at `e328decc174015514f49c7046d4bde57690bedc9`. This is a UI/behavior reference only; no Go backend code is to be ported.
+- PR [#12 — Phase 6: make dashboard runtime indicators truthful](https://github.com/Yoganataa/alphaway/pull/12) merged at `786b7f3353a95d26f9f06f3c260ba55d5df2281b`.
+- The active default dashboard view is `EndpointView.svelte` (the Overview tab aliases it); `OverviewView.svelte` is not rendered. Do not implement a feature only in the unused Overview component.
+- Sidebar/TopBar now derive health, TLS profile, gate metadata, and dashboard origin from runtime state. Providers shows actual registered/configured state and reported tool/header anchors rather than static cipher/anchor claims. Endpoint cards call the gate a local retry/abuse gate, not a live upstream probe. TopBar and Command Palette copy the current `window.location.origin`.
+- Profile identifies the API key as browser-session client state, not a server master key. SQLite journal/engine/size/path diagnostics use the actual database stats endpoint instead of static WAL/concurrency claims.
+- E2E intercepts `/health` with a distinct TLS sentinel so a hardcoded former TLS label cannot pass; it checks live host, gate, configured anchors, and DB stats.
+- PR CI [#41769338132](https://github.com/Yoganataa/alphaway/actions/runs/41769338132) passed all four required jobs and both CodeQL analyzers. Post-merge CI [#41769488886](https://github.com/Yoganataa/alphaway/actions/runs/41769488886) and CodeQL [#41769489120](https://github.com/Yoganataa/alphaway/actions/runs/41769489120) both passed.
+- **Remaining Phase 6 scope:** complete the screen/control matrix in `ROADMAP.md`; distinguish existing endpoints from backend gaps before adding screens or controls. No backend capability was added in PR #12.
+
 
 ## 6. Working Rules for the Next Session
 
@@ -290,7 +305,7 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 - Keep the backend Bun >=1.4.4 + TypeScript + Hono + native SQLite. Do not port the Go backend from 9router-go; use it only as a behavioral/UI reference.
 - SQLite is the only canonical application-state store. Do not reintroduce flat-file JSON persistence or import paths.
 - Do not weaken or delete tests to make CI green. Do not claim checks passed unless the exact workflow/job result has been inspected.
-- Phase 0–5 are complete and merged. Phase 6 is the next workstream: 9router-go dashboard migration and UI/UX parity. Re-audit the latest backend before wiring each remaining dashboard feature.
+- Phase 0–5 are complete and merged. Phase 6 is in progress. PR #12 established the first runtime-truthfulness baseline; continue from the capability matrix and do not reopen completed Phase 0–5 work without a verified regression.
 - Preserve the existing SOUL behavior and TokenSaver features. Avoid rebuilding existing Phase 0–3 capabilities.
 - Update this checkpoint and roadmap after meaningful work, including exact branch/PR state, changed paths, verification evidence, open risks, and next action.
 - Branch protection is mandatory: use PRs, resolve review threads, and do not force-push.
@@ -301,9 +316,9 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 Lanjutkan AlphaWay dari https://github.com/Yoganataa/alphaway.
 Baca CHECKPOINT.md terlebih dahulu, kemudian ROADMAP.md. Periksa live main, branch, PR, Ruleset Protect main, dan workflow GitHub sebelum mengubah apa pun.
 
-Phase 0–5 sudah merged. Phase 4 PR #7 merge commit: 4494d2c3371ec723d76f8289485cdebdcb2a988d. Phase 5 PR #9 merge commit: cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393. Phase 5 PR #10 merge commit: dc1c82afbf91ec34a57809b9003318b5b35acdd6. PR #9 and #10 CI/CodeQL passed; post-merge CI #41766990569 and post-merge CodeQL #41766990065 both passed on main. Main saat checkpoint ini berada pada dc1c82afbf91ec34a57809b9003318b5b35acdd6.
+Phase 0–5 sudah merged. Phase 4 PR #7 merge commit: 4494d2c3371ec723d76f8289485cdebdcb2a988d. Phase 5 PR #9 merge commit: cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393. Phase 5 PR #10 merge commit: dc1c82afbf91ec34a57809b9003318b5b35acdd6. Phase 6 first slice PR #12 merge commit: 786b7f3353a95d26f9f06f3c260ba55d5df2281b. PR #12 CI/CodeQL passed; post-merge CI #41769488886 and CodeQL #41769489120 both passed. Main saat checkpoint ini berada pada 786b7f3353a95d26f9f06f3c260ba55d5df2281b.
 
-Berikutnya Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Mulai dengan membandingkan screen dan kontrol dashboard yang dituju dengan API, persisted state, dan kemampuan runtime AlphaWay yang sudah ada. Buat matriks screen/control → endpoint → persistence → runtime semantics. Jangan meniru status atau aksi yang backend tidak dukung; pisahkan kebutuhan UI dari backend gap.
+Phase 6 sedang berlangsung. Referensi frontend 9router-go dipin pada commit `e328decc174015514f49c7046d4bde57690bedc9`. PR #12 sudah menyinkronkan indikator Sidebar, TopBar, Endpoint/Providers, dan Profile dengan data aktual serta menambahkan E2E regresi. Lanjutkan dari matriks screen/control → endpoint → persistence → runtime semantics di ROADMAP.md. Jangan menambahkan menu atau aksi untuk backend yang belum tersedia.
 
 Backend tetap Bun >=1.4.4 + TypeScript + Hono + SQLite. Jangan port backend Go dari 9router-go. SQLite satu-satunya persistence store. Pertahankan behavior SOUL dan TokenSaver. Jangan ulang Phase 0–5 tanpa regression terverifikasi.
 

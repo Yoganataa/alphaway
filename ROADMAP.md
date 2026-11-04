@@ -253,9 +253,41 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 
 ### Phase 6 — 9router-go Dashboard Migration and UI/UX Parity
 
-**Status:** Next.
+**Status:** In progress. First UI-truthfulness slice [PR #12](https://github.com/Yoganataa/alphaway/pull/12) merged at `786b7f3353a95d26f9f06f3c260ba55d5df2281b`. PR CI [#41769338132](https://github.com/Yoganataa/alphaway/actions/runs/41769338132), PR CodeQL, post-merge CI [#41769488886](https://github.com/Yoganataa/alphaway/actions/runs/41769488886), and post-merge CodeQL [#41769489120](https://github.com/Yoganataa/alphaway/actions/runs/41769489120) passed.
 
 **Goal:** migrate the remaining 9router-go-inspired dashboard screens and interaction patterns to AlphaWay while mapping every visible control to an existing, verified AlphaWay backend contract. Preserve AlphaWay runtime behavior and persistence.
+
+**Reference pin:** `luqman-v1/9router-go@e328decc174015514f49c7046d4bde57690bedc9`. Treat this commit as the initial design baseline; re-pin deliberately if the reference moves.
+
+**Initial capability matrix (AlphaWay `main` at `786b7f3`)**
+
+| 9router-go screen / capability | AlphaWay implementation / API | Canonical state | Runtime meaning / gap |
+|---|---|---|---|
+| Endpoint & Key | `EndpointView`; `/health`, `/v1/models`, `/api/keys`, `/api/keys/:id`, rotate/policy endpoints | Managed keys and gateway configuration in SQLite; browser client key is session-scoped | Existing. Endpoint view is the active default dashboard; do not wire only the unused `OverviewView`. |
+| Connections / Providers | `ProvidersView`; `/api/custom-providers`, `/api/custom-providers/test`, `/api/codebuddy/oauth/start`, `/api/codebuddy/oauth/poll`, `/v1/models` | Custom providers and OAuth credentials in SQLite with encrypted secrets | Existing partial equivalent. Registration/configuration and explicit probe results are not interchangeable with connected/upstream-healthy. |
+| Combos & Vision Adapter | No `/api/combos` route or combo execution service in AlphaWay | No combo definition/state model identified | **Backend gap.** Requires combo schema, adapter selection semantics, validation, execution/routing and usage attribution before UI. |
+| Analytics / Usage | `UsageView`; `/api/usage`, `/api/usage/chart`, `/api/usage/heatmap`, `/api/usage/details/:id` | SQLite request/usage logs | Existing. Values represent AlphaWay-recorded traffic and estimates where documented, not provider billing truth. |
+| Quota Tracker | `QuotaTrackerView`; `/api/keys`, `/api/keys/usage`, `/api/plans` | SQLite managed-key counters, Plan policies and request records | Existing partial equivalent. AlphaWay-enforced per-key limits are not upstream provider quota probes. |
+| Token Saver | `TokenSaverView`; `GET/POST /api/tokensaver` | SQLite `tokensaver_config` | Existing. Browser sandbox is explicitly a local approximation, not full gateway execution or provider tokenization. |
+| CLI Tools | No browser-facing CLI tool registry/API in AlphaWay; `src/cli` contains local maintenance/operation commands | No dashboard-managed CLI tool state | **Backend gap.** Do not expose install/run/permission controls until a bounded, authenticated command catalog and execution policy exist. |
+| Security | `SecurityView`; `/api/security/rules`, `/api/security/inspect` | Normalized SQLite Security Rules | Existing. Runtime enforcement is part of gateway request/response processing. |
+| Persona / Jailbreak | `PersonaView`; `/api/persona` presets/models/excludes/resolve/preview; legacy `/api/jailbreak` alias | Normalized SQLite Persona presets, bindings and keyword rules; SOUL remains separate | Existing. Persona is model-bound; do not reintroduce an unscoped global jailbreak switch. |
+| Plans & managed keys | `PlansView`, key views; `/api/plans`, `/api/keys` and policy endpoints | SQLite Plan and managed-key tables | Existing. Single-tenant local policy, not billing/subscription management. |
+| Media Providers (Embedding, Image, TTS, STT, Video, Web Fetch) | No matching media-provider routes, typed provider adapters or model execution endpoints | No media-provider state model identified | **Backend gap.** Each media modality needs protocol, adapter, credential, model catalog, timeout/streaming and quota semantics. |
+| Proxy Pools | `ProxyPoolsView`; `/api/proxy`, `POST /api/proxy/pool/test` | SQLite proxy/pool config; credentials encrypted at rest | Existing (Phase 5). Status metadata is credential-free; probes use real bounded transport checks. |
+| Skills | No Skills registry, API or invocation runtime in AlphaWay | No skill package/permission/persistence model identified | **Backend gap.** Needs packaging, trust/signature, grants, execution isolation and audit design. |
+| Console Log | `ConsoleLogStream`; `/api/console-logs`, `/api/console-logs/clear` | Bounded in-process console buffer | Existing, process-local (not durable history). |
+| Terminal | No browser terminal/shell execution API in AlphaWay | No terminal session/process model | **Backend gap.** Requires explicit command allowlisting, process lifecycle, isolation, output limits, cancellation and audit policy; do not add a generic shell endpoint as a UI shortcut. |
+| Settings / Storage | `ProfileSettingsView`, `SettingsView`; `/api/settings/database`, `/api/settings/database/stats`, backup and vacuum endpoints; admin auth/session routes | SQLite database and server configuration; dashboard client API key in browser session storage | Existing partial equivalent. Browser key is not the server environment key or a managed API key. |
+| Navigation visibility/order presets | Current static AlphaWay `Sidebar` navigation; no dedicated saved nav-preference API found | No persisted per-user/nav preference contract identified | UI parity only if kept ephemeral; persistent visibility/order presets require an explicit settings schema and authorized API. |
+
+**Initial classification**
+- Existing API wiring / semantic correction: Endpoint, Providers, Usage, Quota Tracker, Token Saver, Security, Persona, Plans, Proxy Pools, Console Log, Settings.
+- Genuine backend gaps: Combos, Media Providers, Skills, Terminal, and browser-managed CLI Tools.
+- UI-only parity candidates: responsive navigation, command palette affordances, grouping/spacing, and view layout where no persistence or backend action is implied.
+- Do not add navigation entries for backend-gap screens as if they were operational. Any future design-only preview must be visibly marked as unavailable and must not accept fake configuration.
+
+
 
 **Design boundaries**
 - Do not port Go repositories, HTTP handlers, data models, or persistence. Reuse existing Bun/Hono routes and native SQLite services.
@@ -266,7 +298,7 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 - For each screen, document endpoint, request/response schema, persistence owner, error/loading/empty states, and regression coverage before implementation.
 
 **Suggested work sequence**
-- [ ] Inventory the target 9router-go screens/components against current AlphaWay routes, views, and API client methods. Produce a screen/control capability matrix.
+- [x] Pin the reference frontend at `luqman-v1/9router-go@e328decc174015514f49c7046d4bde57690bedc9` and create the initial screen/control capability matrix above. Remaining component-by-component interaction audit continues below.
 - [ ] Classify each gap as UI-only parity, existing API wiring, or genuine backend capability gap.
 - [ ] Implement UI-only parity against existing endpoints first; keep changes independently reviewable and regression-tested.
 - [ ] Add backend work only when the desired behavior is specified, persistable, secured, and covered by protocol/API tests.
