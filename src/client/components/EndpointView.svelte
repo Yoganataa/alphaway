@@ -275,7 +275,7 @@ console.log(res.choices[0].message.content);`,
         </div>
 
         <div class="flex items-center gap-2 shrink-0 font-sans">
-          {#if tunnelRunning && tunnelUrl}
+          {#if publicEndpointConfigured}
             <Button
               variant="ghost"
               size="xs"
