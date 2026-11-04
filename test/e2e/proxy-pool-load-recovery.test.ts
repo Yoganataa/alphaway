@@ -159,7 +159,7 @@ describe("Proxy pool configuration load recovery", () => {
     expect(await page.locator("#proxy-add-node").isDisabled()).toBe(true);
 
     await page.locator("#proxy-config-retry").click();
-    await page.getByText("Existing primary", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("tbody tr").filter({ hasText: "Existing primary" }).waitFor({ state: "visible", timeout: 10000 });
     expect(await loadError.count()).toBe(0);
     expect(await page.locator("#proxy-add-node").isEnabled()).toBe(true);
 
@@ -174,13 +174,13 @@ describe("Proxy pool configuration load recovery", () => {
     await loadError.waitFor({ state: "visible", timeout: 10000 });
     expect(await loadError.textContent()).toContain("last successful snapshot");
     expect(await loadError.textContent()).toContain("Simulated proxy configuration outage");
-    expect(await page.getByText("Existing primary", { exact: true }).isVisible()).toBe(true);
+    expect(await page.locator("tbody tr").filter({ hasText: "Existing primary" }).isVisible()).toBe(true);
     expect(await page.locator("#proxy-add-node").isDisabled()).toBe(true);
     expect(await page.locator("#proxy-bulk-import").isDisabled()).toBe(true);
     expect(await page.locator("#proxy-save-btn").isDisabled()).toBe(true);
 
     await page.locator("#proxy-config-retry").click();
-    await page.getByText("Recovered primary", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("tbody tr").filter({ hasText: "Recovered primary" }).waitFor({ state: "visible", timeout: 10000 });
     expect(await loadError.count()).toBe(0);
     expect(await page.locator("#proxy-add-node").isEnabled()).toBe(true);
     expect(statusReads).toBe(5);
