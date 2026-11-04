@@ -148,7 +148,13 @@
   <div class="flex flex-col gap-1">
     <div class="flex items-center gap-2">
       <h2 class="text-lg font-bold text-text-main">Plans</h2>
-      <Badge tone="primary" size="sm">{plans.length} configured</Badge>
+      {#if hasLoaded}
+        <Badge tone="primary" size="sm">{plans.length} configured</Badge>
+      {:else if loading}
+        <Badge tone="neutral" size="sm">Loading</Badge>
+      {:else}
+        <Badge tone="warning" size="sm">Unavailable</Badge>
+      {/if}
     </div>
     <p class="text-xs text-text-muted">Reusable policies for managed API keys. Unassigned keys remain unrestricted.</p>
   </div>
