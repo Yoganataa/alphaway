@@ -308,7 +308,10 @@ describe("AlphaWay Web Dashboard E2E", () => {
       }, undefined, { timeout: 8000 });
       expect(await page.locator("#tokensaver-load-error").count()).toBe(0);
 
-      await rtkToggle.setChecked(true);
+      if (!(await rtkToggle.isChecked())) {
+        await page.locator("label").filter({ has: rtkToggle }).click();
+      }
+      expect(await rtkToggle.isChecked()).toBe(true);
       const saveButton = page.locator("#tokensaver-save-btn");
       await saveButton.click();
       const saveError = page.locator("#tokensaver-save-error");
@@ -353,7 +356,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
         });
       }
     }
-  }, 45000);
+  }, 25000);
 
   it("navigates to Proxy Pools and tests proxy configuration form", async () => {
     const { page } = dashboard;
