@@ -37,6 +37,8 @@
     items: NavItem[];
   }
 
+  let collapsedSections = $state<Set<string>>(new Set());
+
   const sections: NavSection[] = [
     {
       title: "Main",
@@ -67,6 +69,15 @@
       ],
     },
   ];
+
+  function toggleSection(title: string) {
+    const next = new Set(collapsedSections);
+    if (next.has(title)) next.delete(title);
+    else next.add(title);
+    collapsedSections = next;
+  }
+
+
 
   function selectTab(id: string) {
     activeTab = id;
@@ -127,11 +138,24 @@
 
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
   <div class="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
-    {#each sections as section}
-      <div class="space-y-1" data-nav-section={section.title}>
-        <div class="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-subtle">
-          {section.title}
-        </div>
+    {#each sections as section (section.title)}
+      {@const sectionId = section.title.toLowerCase().replaceAll(" ", "-")}
+      {@const isCollapsed = collapsedSections.has(section.title)}
+      <section class="space-y-1" data-nav-section={section.title}>
+        <button
+          type="button"
+          aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${section.title} navigation group`}
+          aria-expanded={!isCollapsed}
+          aria-controls={`nav-items-${sectionId}`}
+          onclick={() => toggleSection(section.title)}
+          class="w-full flex items-center justify-between px-3 py-1.5 rounded-[8px] text-[10px] font-semibold uppercase tracking-wider text-text-subtle hover:text-text-main hover:bg-surface-2 transition-colors"
+        >
+          <span>{section.title}</span>
+          <span class="material-symbols-outlined text-[16px]" aria-hidden="true">
+            {isCollapsed ? "expand_more" : "expand_less"}
+          </span>
+        </button>
+        <div id={`nav-items-${sectionId}`} class="space-y-1" hidden={isCollapsed}>
         {#each section.items as item}
           {@const isActive =
             activeTab === item.id ||
@@ -156,7 +180,8 @@
             {/if}
           </button>
         {/each}
-      </div>
+        </div>
+      </section>
     {/each}
   </div>
 
