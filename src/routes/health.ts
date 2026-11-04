@@ -40,6 +40,7 @@ healthRoute.get("/health", (c) => {
 
   return c.json({
     status: "ok",
+    uptimeSeconds: Math.floor(process.uptime()),
     provider: "alphaway",
     service: "alphaway",
     version: "0.0.1",
