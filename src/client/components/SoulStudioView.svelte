@@ -8,6 +8,10 @@
   import Toggle from "../lib/ui/Toggle.svelte";
 
   let loading = $state(true);
+  let loaded = $state(false);
+  let loadError = $state<string | null>(null);
+  let lastLoadedAt = $state<number | null>(null);
+  let loadInFlight = false;
   let saving = $state(false);
   let testing = $state(false);
   let statusMessage = $state<{ type: "success" | "error"; text: string } | null>(null);
@@ -33,7 +37,6 @@
   let selectedPreset = $state("atlas");
   let customFilePath = $state("");
 
-  // Sandbox state
   let testPrompt = $state("Can you please help me write a quick function to validate an email address?");
   let testResult = $state<{
     prompt: string;
@@ -45,41 +48,64 @@
   const wordCount = $derived(editContent.trim() ? editContent.trim().split(/\s+/).length : 0);
   const lineCount = $derived(editContent.split("\n").length);
   const tokenEst = $derived(Math.ceil(editContent.length / 4));
+  const writesBlocked = () => !loaded || loading || loadError !== null || saving;
 
-  onMount(async () => {
-    await loadData();
+  function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  function formatLoadedTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
+  onMount(() => {
+    void loadData();
   });
 
-  async function loadData() {
+  async function loadData(): Promise<boolean> {
+    if (loadInFlight) return false;
+    loadInFlight = true;
+    loading = true;
+    loadError = null;
+    statusMessage = null;
     try {
-      loading = true;
       const res = await fetchSoulConfig();
       soul = res;
-      editContent = res.content || "";
+      editContent = res.content;
       selectedMode = res.mode;
       selectedPreset = res.preset || "atlas";
       customFilePath = res.filePath || "";
-    } catch (err: any) {
-      statusMessage = { type: "error", text: `Failed to load SOUL.md configuration: ${err.message}` };
+      loaded = true;
+      lastLoadedAt = Date.now();
+      return true;
+    } catch (error) {
+      loadError = getErrorMessage(error, "Unknown SOUL configuration loading error");
+      return false;
     } finally {
       loading = false;
+      loadInFlight = false;
     }
   }
 
   async function handleToggle(enabled: boolean) {
+    if (writesBlocked()) return;
+    saving = true;
     try {
-      saving = true;
       const res = await updateSoulConfig({ enabled });
-      soul.enabled = res.enabled;
-      showStatus("success", enabled ? "SOUL.md personality injection enabled" : "SOUL.md personality injection disabled");
-    } catch (err: any) {
-      showStatus("error", err.message);
+      soul = { ...res, presets: res.presets ?? soul.presets };
+      notifications.success(enabled ? "SOUL.md personality injection enabled" : "SOUL.md personality injection disabled");
+      statusMessage = null;
+    } catch (error) {
+      const message = getErrorMessage(error, "SOUL configuration update failed");
+      await loadData();
+      statusMessage = { type: "error", text: message };
     } finally {
       saving = false;
     }
   }
 
   function applyPreset(presetKey: "atlas" | "minimalist" | "socratic") {
+    if (writesBlocked()) return;
     selectedMode = "preset";
     selectedPreset = presetKey;
     if (soul.presets && soul.presets[presetKey]) {
@@ -89,10 +115,10 @@
   }
 
   async function handleSave(saveToDisk: boolean = false) {
+    if (writesBlocked()) return;
+    saving = true;
     try {
-      saving = true;
       const targetPath = saveToDisk ? (customFilePath || "./SOUL.md") : undefined;
-
       const res = await updateSoulConfig({
         enabled: soul.enabled,
         mode: selectedMode,
@@ -104,22 +130,37 @@
         content: editContent,
       });
 
-      soul = res;
-      showStatus("success", saveToDisk ? `Saved to disk (${res.filePath || targetPath}) and applied live!` : "Soul configuration applied live!");
-    } catch (err: any) {
-      showStatus("error", err.message);
+      // POST /api/soul intentionally returns the resolved config without the
+      // preset catalog. Preserve the last validated GET catalog for the editor.
+      soul = { ...res, presets: res.presets ?? soul.presets };
+      editContent = res.content;
+      selectedMode = res.mode;
+      selectedPreset = res.preset || "atlas";
+      customFilePath = res.filePath || customFilePath;
+      lastLoadedAt = Date.now();
+      showStatus(
+        "success",
+        saveToDisk
+          ? `Saved to disk (${res.filePath || targetPath}) and applied live!`
+          : "SOUL configuration applied live!",
+      );
+    } catch (error) {
+      const message = getErrorMessage(error, "SOUL configuration could not be saved");
+      await loadData();
+      showStatus("error", message);
     } finally {
       saving = false;
     }
   }
 
   async function runSandboxTest() {
+    if (!loaded || loading || loadError !== null || testing) return;
     try {
       testing = true;
       const res = await previewSoulPrompt(testPrompt, editContent);
       testResult = res;
-    } catch (err: any) {
-      showStatus("error", `Sandbox preview failed: ${err.message}`);
+    } catch (error) {
+      showStatus("error", `Sandbox preview failed: ${getErrorMessage(error, "Unknown preview error")}`);
     } finally {
       testing = false;
     }
@@ -141,8 +182,8 @@
         <h2 class="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <span class="text-2xl">✨</span> Soul Studio
         </h2>
-        <Badge variant={soul.enabled ? "success" : "neutral"}>
-          {soul.enabled ? "Active Personality Injection" : "Injection Disabled"}
+        <Badge variant={!loaded ? "neutral" : soul.enabled ? "success" : "neutral"}>
+          {!loaded ? "SOUL Status Unknown" : soul.enabled ? "Active Personality Injection" : "Injection Disabled"}
         </Badge>
         {#if soul.source === "workspace"}
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -169,13 +210,35 @@
       <Toggle
         checked={soul.enabled}
         onchange={handleToggle}
-        disabled={loading || saving}
+        disabled={writesBlocked()}
       />
     </div>
   </div>
 
+  {#if loadError}
+    <div id="soul-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+      <div class="min-w-0">
+        <p class="text-xs font-semibold text-amber-400">
+          {loaded
+            ? "SOUL configuration refresh failed. The last successful configuration is shown; editing and saving are blocked."
+            : "SOUL configuration could not be loaded. The editor and Save to Disk action are blocked to protect the existing SOUL.md."}
+        </p>
+        <p class="mt-1 break-words text-xs text-text-muted">{loadError}</p>
+        {#if lastLoadedAt !== null}
+          <p class="mt-1 text-[11px] text-text-muted">Last successful load: {formatLoadedTime(lastLoadedAt)}</p>
+        {/if}
+      </div>
+      <Button id="soul-load-retry" variant="secondary" onclick={loadData} disabled={loading || saving}>
+        {loading ? "Retrying…" : "Retry Load"}
+      </Button>
+    </div>
+  {:else if loading && loaded}
+    <p id="soul-refreshing" role="status" class="text-xs text-muted-foreground">Refreshing saved SOUL configuration…</p>
+  {/if}
   {#if statusMessage}
     <div
+      id="soul-action-status"
+      role={statusMessage.type === "error" ? "alert" : "status"}
       class="p-4 rounded-xl border text-sm font-medium transition-all {statusMessage.type === 'success'
         ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
         : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}"
@@ -184,8 +247,18 @@
     </div>
   {/if}
 
-  <!-- Main Grid -->
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+  {#if loading && !loaded}
+    <p id="soul-loading" role="status" class="text-sm text-muted-foreground">Loading persisted SOUL.md configuration…</p>
+  {:else if !loaded && loadError}
+    <p id="soul-unavailable" class="text-sm text-muted-foreground">The saved SOUL.md state is unavailable. Retry the load before editing or saving to disk.</p>
+  {:else if loaded}
+    <div class="mb-3 flex justify-end">
+      <Button id="soul-refresh" variant="secondary" onclick={loadData} disabled={loading || saving}>
+        {loading ? "Refreshing…" : "Refresh"}
+      </Button>
+    </div>
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
     <!-- Left Column: Editor & Presets (7 cols) -->
     <div class="lg:col-span-7 space-y-6">
       <Card class="p-5 space-y-5">
@@ -198,7 +271,7 @@
           <div class="grid grid-cols-3 gap-2">
             <button
               type="button"
-              onclick={() => applyPreset("atlas")}
+              onclick={() => applyPreset("atlas")} disabled={writesBlocked()}
               class="px-3 py-2.5 rounded-lg border text-left transition-all text-xs {selectedPreset === 'atlas'
                 ? 'bg-primary/10 border-primary text-primary font-semibold'
                 : 'bg-muted/40 border-border text-foreground hover:bg-muted/80'}"
@@ -211,7 +284,7 @@
 
             <button
               type="button"
-              onclick={() => applyPreset("minimalist")}
+              onclick={() => applyPreset("minimalist")} disabled={writesBlocked()}
               class="px-3 py-2.5 rounded-lg border text-left transition-all text-xs {selectedPreset === 'minimalist'
                 ? 'bg-primary/10 border-primary text-primary font-semibold'
                 : 'bg-muted/40 border-border text-foreground hover:bg-muted/80'}"
@@ -224,7 +297,7 @@
 
             <button
               type="button"
-              onclick={() => applyPreset("socratic")}
+              onclick={() => applyPreset("socratic")} disabled={writesBlocked()}
               class="px-3 py-2.5 rounded-lg border text-left transition-all text-xs {selectedPreset === 'socratic'
                 ? 'bg-primary/10 border-primary text-primary font-semibold'
                 : 'bg-muted/40 border-border text-foreground hover:bg-muted/80'}"
@@ -256,6 +329,7 @@
             <textarea
               id="soul-editor"
               bind:value={editContent}
+              disabled={writesBlocked()}
               rows="14"
               placeholder="# Core Truths&#10;- Be genuinely helpful, not performatively helpful...&#10;&#10;# Tone & Style&#10;- Ultra-concise, active voice..."
               class="w-full bg-transparent p-4 font-mono text-xs sm:text-sm text-foreground focus:outline-hidden resize-y leading-relaxed"
@@ -269,14 +343,14 @@
             <Button
               variant="primary"
               onclick={() => handleSave(false)}
-              disabled={saving}
+              disabled={writesBlocked()}
             >
               <span>💾</span> {saving ? "Saving..." : "Apply Live (In-Memory)"}
             </Button>
             <Button
               variant="outline"
               onclick={() => handleSave(true)}
-              disabled={saving}
+              disabled={writesBlocked()}
               title="Writes content to ./SOUL.md file on disk"
             >
               <span>📁</span> Save to ./SOUL.md
@@ -286,7 +360,7 @@
           <Button
             variant="ghost"
             onclick={() => loadData()}
-            disabled={loading}
+            disabled={loading || saving}
           >
             <span>🔄</span> Reload from Disk
           </Button>
@@ -337,6 +411,7 @@
           <textarea
             id="test-prompt-input"
             bind:value={testPrompt}
+            disabled={!loaded || loading || loadError !== null || testing}
             rows="3"
             class="w-full rounded-lg border border-border bg-card p-3 text-xs text-foreground focus:outline-hidden focus:border-primary"
             placeholder="Type sample prompt..."
@@ -347,7 +422,7 @@
           variant="primary"
           class="w-full"
           onclick={runSandboxTest}
-          disabled={testing}
+          disabled={testing || !loaded || loading || loadError !== null}
         >
           {testing ? "Analyzing Framing..." : "Preview System Prompt Framing"}
         </Button>
@@ -375,5 +450,6 @@
         {/if}
       </Card>
     </div>
-  </div>
+    </div>
+  {/if}
 </div>
