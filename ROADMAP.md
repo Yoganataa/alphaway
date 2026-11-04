@@ -253,7 +253,7 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 
 ### Phase 6 — 9router-go Dashboard Migration and UI/UX Parity
 
-**Status:** In progress. First UI-truthfulness slice [PR #12](https://github.com/Yoganataa/alphaway/pull/12) merged at `786b7f3353a95d26f9f06f3c260ba55d5df2281b`. PR CI [#41769338132](https://github.com/Yoganataa/alphaway/actions/runs/41769338132), PR CodeQL, post-merge CI [#41769488886](https://github.com/Yoganataa/alphaway/actions/runs/41769488886), and post-merge CodeQL [#41769489120](https://github.com/Yoganataa/alphaway/actions/runs/41769489120) passed.
+**Status:** In progress. Runtime-truthfulness slice [PR #12](https://github.com/Yoganataa/alphaway/pull/12) merged at `786b7f3353a95d26f9f06f3c260ba55d5df2281b`; navigation grouping slice [PR #14](https://github.com/Yoganataa/alphaway/pull/14) merged at `61b5489bba4f05c1d45806984c9abc0c61941b82`. PR CI/CodeQL and post-merge CI/CodeQL passed for both slices. PR #14 evidence: PR CI [#41771053548](https://github.com/Yoganataa/alphaway/actions/runs/41771053548), PR CodeQL [#41771046849](https://github.com/Yoganataa/alphaway/actions/runs/41771046849), post-merge CI [#41771264497](https://github.com/Yoganataa/alphaway/actions/runs/41771264497), post-merge CodeQL [#41771264335](https://github.com/Yoganataa/alphaway/actions/runs/41771264335).
 
 **Goal:** migrate the remaining 9router-go-inspired dashboard screens and interaction patterns to AlphaWay while mapping every visible control to an existing, verified AlphaWay backend contract. Preserve AlphaWay runtime behavior and persistence.
 
@@ -264,7 +264,7 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 | 9router-go screen / capability | AlphaWay implementation / API | Canonical state | Runtime meaning / gap |
 |---|---|---|---|
 | Endpoint & Key | `EndpointView`; `/health`, `/v1/models`, `/api/keys`, `/api/keys/:id`, rotate/policy endpoints | Managed keys and gateway configuration in SQLite; browser client key is session-scoped | Existing. Endpoint view is the active default dashboard; do not wire only the unused `OverviewView`. |
-| Connections / Providers | `ProvidersView`; `/api/custom-providers`, `/api/custom-providers/test`, `/api/codebuddy/oauth/start`, `/api/codebuddy/oauth/poll`, `/v1/models` | Custom providers and OAuth credentials in SQLite with encrypted secrets | Existing partial equivalent. Registration/configuration and explicit probe results are not interchangeable with connected/upstream-healthy. |
+| Connections / Providers | `ProvidersView`; `/api/custom-providers` GET/POST/DELETE, `/api/custom-providers/test` POST, `/api/codebuddy/oauth/start`, `/api/codebuddy/oauth/poll`, `/v1/models` | Custom providers and OAuth credentials in SQLite with encrypted secrets | Existing partial equivalent: fixed OpenCode/CodeBuddy cards, custom-provider CRUD and explicit endpoint probe. 9router-go also has provider-node CRUD, per-provider bulk toggles, node limits, connection credential/provider types, per-node proxy association, full model search/filter/batch operations, custom model import, and provider/model capability metadata. AlphaWay does not yet expose a matching generic provider-node/model-management contract; audit every target operation before claiming parity. |
 | Combos & Vision Adapter | No `/api/combos` route or combo execution service in AlphaWay | No combo definition/state model identified | **Backend gap.** Requires combo schema, adapter selection semantics, validation, execution/routing and usage attribution before UI. |
 | Analytics / Usage | `UsageView`; `/api/usage`, `/api/usage/chart`, `/api/usage/heatmap`, `/api/usage/details/:id` | SQLite request/usage logs | Existing. Values represent AlphaWay-recorded traffic and estimates where documented, not provider billing truth. |
 | Quota Tracker | `QuotaTrackerView`; `/api/keys`, `/api/keys/usage`, `/api/plans` | SQLite managed-key counters, Plan policies and request records | Existing partial equivalent. AlphaWay-enforced per-key limits are not upstream provider quota probes. |
@@ -299,7 +299,8 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 
 **Suggested work sequence**
 - [x] Pin the reference frontend at `luqman-v1/9router-go@e328decc174015514f49c7046d4bde57690bedc9` and create the initial screen/control capability matrix above. Remaining component-by-component interaction audit continues below.
-- [ ] Classify each gap as UI-only parity, existing API wiring, or genuine backend capability gap.
+- [x] Classify initial screen gaps as UI-only parity, existing API wiring, or genuine backend capability gaps.
+- [ ] Complete the detailed Connections/Providers interaction audit: map each 9router-go operation (node create/edit/delete, bulk enable/disable, API-key/provider auth types, proxy binding, probe outcomes, model search/filter/batch test, custom-model import, capability/usage metadata) to an AlphaWay route and persistence owner; mark unsupported operations as backend gaps.
 - [ ] Implement UI-only parity against existing endpoints first; keep changes independently reviewable and regression-tested.
 - [ ] Add backend work only when the desired behavior is specified, persistable, secured, and covered by protocol/API tests.
 - [ ] Verify responsive behavior, loading/empty/error states, keyboard interaction, and dashboard browser tests.
