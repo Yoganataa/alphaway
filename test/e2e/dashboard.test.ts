@@ -372,6 +372,83 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 25000);
 
+  it("loads Security settings safely and persists the outbound DLP master switch", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    const originalResponse = await fetch(`${baseURL}/api/tokensaver`, {
+      headers: { Cookie: adminCookie },
+    });
+    expect(originalResponse.status).toBe(200);
+    const originalConfig = await originalResponse.json();
+
+    const seedResponse = await fetch(`${baseURL}/api/tokensaver`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ dlpEnabled: false }),
+    });
+    expect(seedResponse.status).toBe(200);
+
+    let failInitialLoad = true;
+    await page.route("**/api/tokensaver", async (route) => {
+      if (route.request().method() === "GET" && failInitialLoad) {
+        failInitialLoad = false;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Temporary security settings read failure" }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    try {
+      await page.getByRole("button", { name: "Security" }).click();
+      const loadError = page.locator("#security-config-load-error");
+      await loadError.waitFor({ state: "visible", timeout: 10000 });
+      expect(await loadError.textContent()).toContain("Temporary security settings read failure");
+
+      const dlpSwitch = page.getByRole("switch", { name: "Outbound Prompt DLP" });
+      expect(await dlpSwitch.isDisabled()).toBe(true);
+      await page.locator("#security-config-load-retry-btn").click();
+
+      await page.waitForFunction(() => {
+        const control = document.querySelector<HTMLButtonElement>(
+          '[role="switch"][aria-label="Outbound Prompt DLP"]'
+        );
+        return Boolean(control && !control.disabled);
+      }, undefined, { timeout: 8000 });
+
+      expect(await loadError.count()).toBe(0);
+      expect(await dlpSwitch.getAttribute("aria-checked")).toBe("false");
+      await page.getByText("Outbound DLP Disabled", { exact: true }).waitFor({ state: "visible" });
+
+      await dlpSwitch.click();
+      await page.getByText("Outbound DLP Enabled", { exact: true }).waitFor({ state: "visible" });
+      await page.waitForFunction(async () => {
+        const response = await fetch("/api/tokensaver");
+        if (!response.ok) return false;
+        const config = await response.json();
+        return config.dlpEnabled === true;
+      }, undefined, { timeout: 8000 });
+
+      const persistedResponse = await fetch(`${baseURL}/api/tokensaver`, {
+        headers: { Cookie: adminCookie },
+      });
+      expect(persistedResponse.status).toBe(200);
+      expect((await persistedResponse.json()).dlpEnabled).toBe(true);
+      expect(failInitialLoad).toBe(false);
+    } finally {
+      await page.unroute("**/api/tokensaver");
+      await fetch(`${baseURL}/api/tokensaver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: adminCookie },
+        body: JSON.stringify({ dlpEnabled: originalConfig.dlpEnabled }),
+      });
+    }
+  }, 25000);
+
   it("navigates to Proxy Pools and tests proxy configuration form", async () => {
     const { page } = dashboard;
 
