@@ -35,15 +35,15 @@ describe("Endpoint clipboard feedback", () => {
       .waitFor({ state: "visible", timeout: 5000 });
     expect(await page.getByText("OpenAI Base URL copied to clipboard", { exact: true }).count()).toBe(0);
 
-    await page.getByTestId("copy-local-endpoint").click();
+    await page.locator("#copy-local-endpoint").click();
     await page.getByText("Could not copy to clipboard: clipboard denied", { exact: true })
       .waitFor({ state: "visible", timeout: 5000 });
     expect(await page.getByText("Copied to clipboard", { exact: true }).count()).toBe(0);
 
-    await page.getByTestId("copy-client-snippet").click();
+    await page.locator("#copy-client-snippet").click();
     await page.getByText("Could not copy to clipboard: clipboard denied", { exact: true })
       .waitFor({ state: "visible", timeout: 5000 });
-    expect(await page.getByTestId("copy-client-snippet").textContent()).not.toContain("Copied");
+    expect(await page.locator("#copy-client-snippet").textContent()).not.toContain("Copied");
 
     await page.evaluate(() => {
       const target = window as typeof window & { __clipboardWrites?: string[] };
@@ -61,11 +61,11 @@ describe("Endpoint clipboard feedback", () => {
     await page.getByTestId("copy-base-url").click();
     await page.getByText("OpenAI Base URL copied to clipboard", { exact: true })
       .waitFor({ state: "visible", timeout: 5000 });
-    await page.getByTestId("copy-local-endpoint").click();
+    await page.locator("#copy-local-endpoint").click();
     await page.getByText("Copied to clipboard", { exact: true })
       .waitFor({ state: "visible", timeout: 5000 });
-    await page.getByTestId("copy-client-snippet").click();
-    await page.getByTestId("copy-client-snippet").getByText("Copied").waitFor({ state: "visible", timeout: 5000 });
+    await page.locator("#copy-client-snippet").click();
+    await page.locator("#copy-client-snippet").getByText("Copied").waitFor({ state: "visible", timeout: 5000 });
 
     const writes = await page.evaluate(() => {
       return (window as typeof window & { __clipboardWrites?: string[] }).__clipboardWrites ?? [];
