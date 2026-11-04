@@ -233,9 +233,6 @@
         <div class="flex items-center gap-2">
           <span class="material-symbols-outlined text-brand-500 text-[18px]">shield_lock</span>
           <span class="text-xs font-bold text-text-main">Outbound Prompt DLP</span>
-          <Badge tone={config.dlpEnabled !== false ? "success" : "warning"} size="sm">
-            {config.dlpEnabled !== false ? "Enabled" : "Disabled"}
-          </Badge>
         </div>
         <p class="text-[11px] text-text-muted mt-0.5">
           Master switch for outbound secret and local-path redaction before provider dispatch. Inbound guardrails below remain independently configurable.
@@ -271,8 +268,7 @@
           label="Outbound API Secret Masking"
           onchange={(val) => {
             config.maskSecrets = val;
-            saveToggles();
-            runSecurityTest();
+            void saveToggles();
           }}
         />
       </div>
@@ -294,8 +290,7 @@
           label="Inbound Anti-Infostealer Guard"
           onchange={(val) => {
             config.blockDangerousCommands = val;
-            saveToggles();
-            runSecurityTest();
+            void saveToggles();
           }}
         />
       </div>
@@ -317,8 +312,7 @@
           label="Outbound Path Anonymization"
           onchange={(val) => {
             config.maskPaths = val;
-            saveToggles();
-            runSecurityTest();
+            void saveToggles();
           }}
         />
       </div>
@@ -340,8 +334,7 @@
           label="Inbound Image Exfil Neutralizer"
           onchange={(val) => {
             config.sanitizeMarkdownImages = val;
-            saveToggles();
-            runSecurityTest();
+            void saveToggles();
           }}
         />
       </div>
