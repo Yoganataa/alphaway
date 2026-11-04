@@ -18,7 +18,7 @@
 
 ## 1. Current Status
 
-**Phase 0 through Phase 5 are merged into `main`. Phase 5 completed as two PRs: #9 adds persisted Proxy Pool API/UI contracts, and #10 aligns `/health`, dashboard consumers, TypeScript types, and public diagnostic redaction. PR #9 merged at `cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393`; PR #10 merged at `dc1c82afbf91ec34a57809b9003318b5b35acdd6`. PR-head CI/CodeQL passed for both PRs. Post-merge CI for PR #9 [#41766711401](https://github.com/Yoganataa/alphaway/actions/runs/41766711401) passed; post-merge CI for PR #10 [#41766990569](https://github.com/Yoganataa/alphaway/actions/runs/41766990569) passed all four required jobs. Post-merge CodeQL #41766990065 was still running at checkpoint creation. Phase 5 is complete. Phase 6 — 9router-go Dashboard Migration and UI/UX Parity — is next.
+**Phase 0 through Phase 5 are merged into `main`. Phase 5 completed as two PRs: #9 adds persisted Proxy Pool API/UI contracts, and #10 aligns `/health`, dashboard consumers, TypeScript types, and public diagnostic redaction. PR #9 merged at `cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393`; PR #10 merged at `dc1c82afbf91ec34a57809b9003318b5b35acdd6`. PR-head CI/CodeQL passed for both PRs. Post-merge CI for PR #9 [#41766711401](https://github.com/Yoganataa/alphaway/actions/runs/41766711401) passed; post-merge CI for PR #10 [#41766990569](https://github.com/Yoganataa/alphaway/actions/runs/41766990569) passed all four required jobs. Post-merge CodeQL [#41766990065](https://github.com/Yoganataa/alphaway/actions/runs/41766990065) passed both JavaScript/TypeScript and Actions analyzers. Phase 5 is complete. Phase 6 — 9router-go Dashboard Migration and UI/UX Parity — is next.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
@@ -301,7 +301,7 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 Lanjutkan AlphaWay dari https://github.com/Yoganataa/alphaway.
 Baca CHECKPOINT.md terlebih dahulu, kemudian ROADMAP.md. Periksa live main, branch, PR, Ruleset Protect main, dan workflow GitHub sebelum mengubah apa pun.
 
-Phase 0–5 sudah merged. Phase 4 PR #7 merge commit: 4494d2c3371ec723d76f8289485cdebdcb2a988d. Phase 5 PR #9 merge commit: cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393. Phase 5 PR #10 merge commit: dc1c82afbf91ec34a57809b9003318b5b35acdd6. PR #9 and #10 CI/CodeQL passed; post-merge CI #41766990569 passed on main. Post-merge CodeQL #41766990065 was running at checkpoint creation. Main saat checkpoint ini berada pada dc1c82afbf91ec34a57809b9003318b5b35acdd6.
+Phase 0–5 sudah merged. Phase 4 PR #7 merge commit: 4494d2c3371ec723d76f8289485cdebdcb2a988d. Phase 5 PR #9 merge commit: cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393. Phase 5 PR #10 merge commit: dc1c82afbf91ec34a57809b9003318b5b35acdd6. PR #9 and #10 CI/CodeQL passed; post-merge CI #41766990569 and post-merge CodeQL #41766990065 both passed on main. Main saat checkpoint ini berada pada dc1c82afbf91ec34a57809b9003318b5b35acdd6.
 
 Berikutnya Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Mulai dengan membandingkan screen dan kontrol dashboard yang dituju dengan API, persisted state, dan kemampuan runtime AlphaWay yang sudah ada. Buat matriks screen/control → endpoint → persistence → runtime semantics. Jangan meniru status atau aksi yang backend tidak dukung; pisahkan kebutuhan UI dari backend gap.
 
