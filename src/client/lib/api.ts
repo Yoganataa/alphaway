@@ -773,9 +773,31 @@ async function plansRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+function isPlanRecord(value: unknown): value is PlanRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const plan = value as Record<string, unknown>;
+  return (
+    typeof plan.id === "string" &&
+    typeof plan.name === "string" &&
+    typeof plan.description === "string" &&
+    typeof plan.rpmLimit === "number" &&
+    typeof plan.tpmLimit === "number" &&
+    typeof plan.concurrencyLimit === "number" &&
+    typeof plan.tokenQuota === "number" &&
+    Array.isArray(plan.allowedModels) &&
+    plan.allowedModels.every((model) => typeof model === "string") &&
+    typeof plan.createdAt === "number" &&
+    typeof plan.updatedAt === "number"
+  );
+}
+
 export async function fetchPlans(): Promise<PlanRecord[]> {
-  const data = await plansRequest<{ plans: PlanRecord[] }>("/api/plans");
-  return data.plans || [];
+  const data = await plansRequest<unknown>("/api/plans");
+  const plans = (data as { plans?: unknown } | null)?.plans;
+  if (!Array.isArray(plans) || !plans.every(isPlanRecord)) {
+    throw new Error("Invalid Plans response");
+  }
+  return plans;
 }
 
 export async function createPlan(input: PlanInput): Promise<PlanRecord> {
