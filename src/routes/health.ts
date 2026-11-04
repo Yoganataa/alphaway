@@ -85,7 +85,13 @@ healthRoute.get("/health", (c) => {
             : "direct",
       proxy: proxyState,
     },
-    tokensaver: tokensaver.getConfig(),
+    // /health is public. Never include custom SOUL prompts or local paths here.
+    tokensaver: {
+      rtkEnabled: tokensaver.getConfig().rtkEnabled,
+      cavemanEnabled: tokensaver.getConfig().cavemanEnabled,
+      adhdEnabled: tokensaver.getConfig().adhdEnabled,
+      dlpEnabled: tokensaver.getConfig().dlpEnabled,
+    },
     identity: {
       userAgent: idState.userAgent,
       updateMode: idState.updateMode,
