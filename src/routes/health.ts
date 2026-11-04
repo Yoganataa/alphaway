@@ -85,12 +85,12 @@ healthRoute.get("/health", (c) => {
     },
     providers: {
       opencode: {
-        status: "online",
+        status: "registered",
         type: "free-tier",
         diagnostics: opencode.getGateDiagnostic() ? "upstream-gate-rejection-recorded" : "healthy",
       },
       codebuddy: {
-        status: codebuddyKey ? "connected" : "unauthenticated",
+        status: codebuddyKey ? "configured" : "not-configured",
         models: codebuddy.CODEBUDDY_MODELS.length,
       },
     },
