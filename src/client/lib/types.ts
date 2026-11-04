@@ -40,24 +40,6 @@ export interface SoulInfoResponse {
   };
 }
 
-export interface SystemHealth {
-  version: string;
-  uptime: number;
-  listenPort: number;
-  cloudflaredFound: boolean;
-  cloudflaredVersion?: string;
-  tunnelUrl?: string;
-  hasApiKey: boolean;
-  proxyConfigured: boolean;
-  tokensaverConfigured: boolean;
-  platform: string;
-  memory: {
-    rss: number;
-    heapTotal: number;
-    heapUsed: number;
-  };
-}
-
 export interface ModelItem {
   id: string;
   object: string;
