@@ -463,7 +463,7 @@
             <Badge tone="success" size="sm">FREE</Badge>
           </div>
         {:else}
-          <div class="col-span-full p-4 rounded-[10px] bg-surface-2 border border-border-subtle text-center text-xs text-text-muted">
+          <div id="providers-opencode-models-empty" class="col-span-full p-4 rounded-[10px] bg-surface-2 border border-border-subtle text-center text-xs text-text-muted">
             {#if modelsLoading && !modelsLoaded}
               Loading the global model catalog…
             {:else if !modelsLoaded}
@@ -548,7 +548,7 @@
             <Badge tone="info" size="sm">HUNYUAN</Badge>
           </div>
         {:else}
-          <div class="col-span-full p-4 rounded-[10px] bg-surface-2 border border-border-subtle text-center text-xs text-text-muted">
+          <div id="providers-codebuddy-models-empty" class="col-span-full p-4 rounded-[10px] bg-surface-2 border border-border-subtle text-center text-xs text-text-muted">
             {#if modelsLoading && !modelsLoaded}
               Loading the global model catalog…
             {:else if !modelsLoaded}
