@@ -91,7 +91,7 @@ proxyRoute.post("/api/proxy/pool/test", async (c) => {
     }
 
     const result = await egress.testPool({ timeoutMs, entryId });
-    if (result.error) return c.json(result, 404);
+    if (result.error) return c.json(result, result.error === "Proxy pool entry not found." ? 404 : 409);
     return c.json(result);
   } catch (err: any) {
     const status = err?.statusCode === 413 ? 413 : 500;
