@@ -165,7 +165,7 @@
 
 ### Phase 4 — Persona, Jailbreak Presets, SOUL, and Security Rules
 
-**Status:** implementation and PR-head verification complete on `feat/phase-4-persona-security`, PR [#7](https://github.com/Yoganataa/alphaway/pull/7). PR remains open and not merged; explicit project-owner merge decision and post-merge checks are pending.  
+**Status:** Phase 4 is **merged** via PR [#7](https://github.com/Yoganataa/alphaway/pull/7), merge commit `4494d2c3371ec723d76f8289485cdebdcb2a988d`. PR-head CI #41727468557 passed all four mandatory jobs and PR CodeQL #41727027847 passed both analyzers. Post-merge CI [#41743465576](https://github.com/Yoganataa/alphaway/actions/runs/41743465576) passed all four mandatory jobs and post-merge CodeQL [#41743465102](https://github.com/Yoganataa/alphaway/actions/runs/41743465102) passed both analyzers on the merge commit.  
 **Priority:** P1 — prompt policy and data-loss prevention
 
 **Goal:** add first-class, opt-in model-bound Persona presets and make persisted Security Rules enforceable in live gateway traffic. Preserve the existing global SOUL.md engine and adapt reference behavior from 9router-go to AlphaWay's Bun/TypeScript/Hono/SQLite architecture.
@@ -205,6 +205,10 @@
 - [x] Add unit/API/migration/integration regressions for Persona precedence/injection, generated-prompt DLP, Security Rules validation, mask/block, Unicode text matching, legacy settings import, intentional empty legacy rules, disabled rules, nested tool-call arguments, `__proto__` JSON keys, and fail-closed inspection-depth limits.
 - [x] Add request-level tests proving `block` returns 403 before upstream dispatch on OpenAI Chat, Anthropic Messages, and Codex Responses and records one zero-token usage row per blocked request.
 - [x] Pass Bun 1.4.4 frozen install, unit/protocol CI, dashboard browser tests, UI/standalone build, installer smoke, and both CodeQL analyzers on exact PR head `ccd70499efd154972defa4d6918a15f6fc33604e`: CI [#41727033021](https://github.com/Yoganataa/alphaway/actions/runs/41727033021) passed all four mandatory jobs; optional live upstream drill skipped by design. CodeQL [#41727027847](https://github.com/Yoganataa/alphaway/actions/runs/41727027847) passed JavaScript/TypeScript and Actions analyzers.
+
+**Implementation boundary and merge verification**
+
+Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All acceptance criteria 4.1–4.4 are implemented and verified. Post-merge CI #41743465576 passed unit/protocol tests, dashboard browser tests, UI/standalone build, and installer/embedded dashboard smoke. The optional live-upstream gate drill is skipped by design. Post-merge CodeQL #41743465102 passed JavaScript/TypeScript and Actions analyzers on the merge commit.
 
 **Known limitations / deferred**
 - No URL/repository/file import for Persona presets. Do not fetch arbitrary user-supplied URLs without an explicit SSRF-safe importer design.
