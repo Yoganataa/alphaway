@@ -68,14 +68,29 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return res.json();
 }
 
+function isModelItem(value: unknown): value is ModelItem {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const model = value as Record<string, unknown>;
+  return (
+    typeof model.id === "string" &&
+    typeof model.object === "string" &&
+    typeof model.created === "number" &&
+    typeof model.owned_by === "string"
+  );
+}
+
 export async function fetchModels(): Promise<ModelItem[]> {
   const key = getActiveApiKey();
   const res = await fetch(`${BASE_URL}/v1/models`, {
     headers: key ? { Authorization: `Bearer ${key}` } : {},
   });
-  if (!res.ok) throw new Error(`Fetch models failed: ${res.statusText}`);
-  const json = await res.json();
-  return json.data || [];
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(json?.error || `Fetch models failed (${res.status})`);
+  if (!json || typeof json !== "object" || Array.isArray(json) ||
+      !Array.isArray(json.data) || !json.data.every(isModelItem)) {
+    throw new Error("Invalid models response");
+  }
+  return json.data;
 }
 
 export async function fetchTokenSaverConfig(): Promise<TokenSaverConfig> {
@@ -471,11 +486,31 @@ export async function pollCodeBuddyOAuth(
   return data;
 }
 
+function isCustomProviderConfig(value: unknown): value is CustomProviderConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const provider = value as Record<string, unknown>;
+  return (
+    typeof provider.id === "string" &&
+    typeof provider.name === "string" &&
+    typeof provider.baseUrl === "string" &&
+    typeof provider.apiKey === "string" &&
+    (provider.protocol === "openai" || provider.protocol === "anthropic") &&
+    Array.isArray(provider.models) &&
+    provider.models.every((model) => typeof model === "string") &&
+    typeof provider.enabled === "boolean" &&
+    (provider.hasApiKey === undefined || typeof provider.hasApiKey === "boolean")
+  );
+}
+
 export async function fetchCustomProviders(): Promise<CustomProviderConfig[]> {
   const res = await fetch(`${BASE_URL}/api/custom-providers`);
-  if (!res.ok) throw new Error(`Failed to load custom providers: ${res.statusText}`);
-  const json = await res.json();
-  return json.providers || [];
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(json?.error || `Failed to load custom providers (${res.status})`);
+  if (!json || typeof json !== "object" || Array.isArray(json) ||
+      !Array.isArray(json.providers) || !json.providers.every(isCustomProviderConfig)) {
+    throw new Error("Invalid custom providers response");
+  }
+  return json.providers;
 }
 
 export async function saveCustomProvider(
