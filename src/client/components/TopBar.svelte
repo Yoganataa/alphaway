@@ -33,83 +33,88 @@
 
   const titles: Record<string, { title: string; subtitle: string; icon: string }> = {
     overview: {
-      title: "Overview & Endpoint",
-      subtitle: "Tri-protocol inference gateway for OpenCode, CodeBuddy & 3rd-Party custom engines",
+      title: "Endpoint & Key",
+      subtitle: "Gateway endpoint, managed API keys, and client integration snippets.",
       icon: "hub",
     },
     endpoint: {
-      title: "Gateway Endpoint",
-      subtitle: "Universal reverse proxy entrypoints for IDEs, coding agents, and automation pipelines",
+      title: "Endpoint & Key",
+      subtitle: "Gateway endpoint, managed API keys, and client integration snippets.",
       icon: "hub",
     },
-    playground: {
-      title: "Interactive Playground",
-      subtitle: "Multi-model prompt test suite with streaming SSE output and real-time reasoning content",
-      icon: "terminal",
+    providers: {
+      title: "Providers",
+      subtitle: "Provider registration, CodeBuddy credential state, and custom provider configuration.",
+      icon: "dns",
     },
     usage: {
-      title: "Usage & Token Analytics",
-      subtitle: "Real-time token telemetry, SVG stacked trends, KPI summaries, and request audit drawer",
+      title: "Usage",
+      subtitle: "AlphaWay-recorded requests, token estimates, usage trends, and audit details.",
       icon: "monitoring",
     },
     quota: {
-      title: "Quota & Rate Limits",
-      subtitle: "AlphaWay-managed key limits and recorded request/token usage; not upstream provider quota.",
+      title: "Quota Tracker",
+      subtitle: "AlphaWay-enforced managed-key limits and recorded request/token usage; not upstream provider quota.",
       icon: "speed",
     },
-    providers: {
-      title: "Providers & Models",
-      subtitle: "OpenCode adapter registration, CodeBuddy credential state, and custom provider configuration.",
-      icon: "dns",
-    },
     tokensaver: {
-      title: "TokenSaver Optimization",
-      subtitle: "RTK line deduplication, Caveman mode, ADHD prompt, and token efficiency sandbox",
+      title: "Token Saver",
+      subtitle: "RTK compression, Caveman and ADHD prompt modes, and DLP configuration.",
       icon: "bolt",
     },
     security: {
-      title: "Security Armor & DLP",
-      subtitle: "Data Loss Prevention secret masking, anti-infostealer protection, and keyword guardrails",
+      title: "Security",
+      subtitle: "Manage persisted Security Rules and inspect the runtime matcher.",
       icon: "shield",
-    },
-    proxy: {
-      title: "Egress Proxy Pool",
-      subtitle: "Multi-proxy pool rotation, round-robin/failover, latency testing, and Cloudflare relays",
-      icon: "vpn_lock",
-    },
-    proxypools: {
-      title: "Egress Proxy Pool",
-      subtitle: "Multi-proxy pool rotation, round-robin/failover, latency testing, and Cloudflare relays",
-      icon: "vpn_lock",
-    },
-    consolelog: {
-      title: "Console & Gateway Log",
-      subtitle: "Recent server log buffer with severity filters, search, and export.",
-      icon: "receipt_long",
-    },
-    tunnel: {
-      title: "Tunnel & Daemon Lifecycle",
-      subtitle: "Public endpoint configuration and CLI lifecycle guidance; active process state is not reported here.",
-      icon: "cloud",
     },
     persona: {
       title: "Persona",
-      subtitle: "Model-bound prompt presets, keyword matching, exact bindings, and SOUL.md",
+      subtitle: "Model-bound prompt presets, exact bindings, keyword rules, and SOUL Studio.",
       icon: "masks",
     },
     soul: {
       title: "Persona",
-      subtitle: "Model-bound prompt presets and SOUL.md configuration",
+      subtitle: "Model-bound prompt presets and SOUL Studio.",
       icon: "masks",
     },
-    settings: {
-      title: "System & Storage Settings",
-      subtitle: "SQLite storage diagnostics, browser client-key settings, and telemetry maintenance.",
-      icon: "settings",
+    plans: {
+      title: "Plans",
+      subtitle: "Manage per-key policy plans, model allowlists, and request limits.",
+      icon: "layers",
+    },
+    proxy: {
+      title: "Proxy Pools",
+      subtitle: "Persisted egress entries, relay settings, rotation strategies, and bounded live probes.",
+      icon: "vpn_lock",
+    },
+    proxypools: {
+      title: "Proxy Pools",
+      subtitle: "Persisted egress entries, relay settings, rotation strategies, and bounded live probes.",
+      icon: "vpn_lock",
+    },
+    playground: {
+      title: "Playground",
+      subtitle: "Send prompt requests through the AlphaWay gateway and inspect responses.",
+      icon: "terminal",
+    },
+    consolelog: {
+      title: "Console Log",
+      subtitle: "Inspect the recent bounded, in-process gateway log buffer.",
+      icon: "receipt_long",
+    },
+    tunnel: {
+      title: "Tunnel & Daemon",
+      subtitle: "View public endpoint configuration and CLI lifecycle guidance; active process state is not reported.",
+      icon: "cloud",
     },
     profile: {
-      title: "Profile & Storage Settings",
-      subtitle: "SQLite storage diagnostics, browser client-key settings, and telemetry maintenance.",
+      title: "Profile & Settings",
+      subtitle: "Manage the browser-scoped dashboard key, SQLite diagnostics, backup, and maintenance.",
+      icon: "settings",
+    },
+    settings: {
+      title: "Profile & Settings",
+      subtitle: "Manage the browser-scoped dashboard key, SQLite diagnostics, backup, and maintenance.",
       icon: "settings",
     },
   };
