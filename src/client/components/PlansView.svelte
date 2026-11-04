@@ -188,7 +188,7 @@
     <section class="rounded-xl border border-border-subtle bg-surface-1 overflow-hidden">
       <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
         <h3 class="text-sm font-semibold text-text-main">Configured Plans</h3>
-        <Button id="plans-refresh" variant="secondary" size="sm" onclick={loadPlans} disabled={loading || saving}>
+        <Button id="plans-refresh" variant="secondary" size="sm" onclick={loadPlans} disabled={loading || saving || loadError !== null}>
           Refresh
         </Button>
       </div>
@@ -198,7 +198,11 @@
         {:else if !hasLoaded && loadError}
           <p id="plans-unavailable" class="p-5 text-xs text-text-muted">The saved Plan list is unavailable. Retry the load before creating or editing policies.</p>
         {:else if hasLoaded && plans.length === 0}
-          <p class="p-5 text-xs text-text-muted">No Plans yet. Create a reusable policy to assign to managed API keys.</p>
+          <p class="p-5 text-xs text-text-muted">
+            {loadError
+              ? "No Plans were present in the last successful snapshot."
+              : "No Plans yet. Create a reusable policy to assign to managed API keys."}
+          </p>
         {:else if hasLoaded}
           {#each plans as plan (plan.id)}
             <article class="p-4 space-y-3">
