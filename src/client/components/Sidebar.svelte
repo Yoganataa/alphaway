@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import type { HealthResponse } from "../lib/types";
 
@@ -13,6 +14,16 @@
     isMobileOpen?: boolean;
     onCloseMobile?: () => void;
   } = $props();
+
+  let currentHost = $state("Current host");
+  const healthAvailable = $derived(health?.status === "ok");
+  const localGateStatus = $derived(health?.identity?.gate?.status ?? "unknown");
+  const toolAnchorCount = $derived(health?.identity?.gate?.anchors.tools.length ?? 0);
+  const headerAnchorCount = $derived(health?.identity?.gate?.anchors.headers.length ?? 0);
+
+  onMount(() => {
+    currentHost = window.location.host;
+  });
 
   interface NavItem {
     id: string;
@@ -106,12 +117,12 @@
       <div>
         <div class="flex items-center gap-1.5">
           <span class="font-bold text-base text-text-main tracking-tight">AlphaWay</span>
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="w-2 h-2 rounded-full {healthAvailable ? 'bg-emerald-500' : 'bg-zinc-500'}"></span>
         </div>
         <p class="text-[11px] text-text-muted font-mono">{health?.version ? `v${health.version}` : "v0.0.1"}</p>
       </div>
     </div>
-    <Badge tone="success" size="sm" dot>LIVE</Badge>
+    <Badge tone={healthAvailable ? "success" : "neutral"} size="sm" dot>{healthAvailable ? "HEALTHY" : "UNKNOWN"}</Badge>
   </div>
 
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
@@ -149,23 +160,23 @@
     {/each}
   </div>
 
-  <!-- Realtime System Status Card in Sidebar -->
+  <!-- Runtime metadata reported by the health endpoint -->
   <div class="p-3 m-3 rounded-[12px] bg-surface border border-border-subtle space-y-1.5 text-xs">
-    <div class="flex items-center justify-between font-medium text-text-muted">
-      <span>BoringSSL Parity</span>
-      <span class="text-emerald-400 font-mono text-[11px]">17 ciphers</span>
+    <div class="flex items-center justify-between gap-3 font-medium text-text-muted">
+      <span>TLS profile</span>
+      <span class="text-text-main font-mono text-[11px] text-right">{health?.tls || "Not reported"}</span>
     </div>
-    <div class="flex items-center justify-between font-medium text-text-muted">
-      <span>Upstream Gate</span>
-      <span class="text-emerald-400 font-mono text-[11px]">OPEN (5/5)</span>
+    <div class="flex items-center justify-between gap-3 font-medium text-text-muted">
+      <span>Local retry gate</span>
+      <span class="text-text-main font-mono text-[11px]">{localGateStatus.toUpperCase()}</span>
     </div>
-    <div class="flex items-center justify-between font-medium text-text-muted">
-      <span>Storage Engine</span>
-      <span class="text-brand-500 font-mono text-[11px]">SQLite WAL</span>
+    <div class="flex items-center justify-between gap-3 font-medium text-text-muted">
+      <span>Configured anchors</span>
+      <span class="text-text-main font-mono text-[11px]">{toolAnchorCount} tools · {headerAnchorCount} headers</span>
     </div>
-    <div class="flex items-center justify-between font-medium text-text-muted">
-      <span>Port</span>
-      <span class="text-text-main font-mono text-[11px]">:20129</span>
+    <div class="flex items-center justify-between gap-3 font-medium text-text-muted">
+      <span>Dashboard origin</span>
+      <span class="text-text-main font-mono text-[11px] text-right break-all">{currentHost}</span>
     </div>
   </div>
 
