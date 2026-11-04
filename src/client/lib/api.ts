@@ -205,6 +205,7 @@ function isPersonaKeyword(value: unknown): value is PersonaKeyword {
   const keyword = value as Record<string, unknown>;
   return (
     typeof keyword.text === "string" &&
+    keyword.text.trim().length > 0 &&
     (keyword.mode === undefined || keyword.mode === "word" || keyword.mode === "partial")
   );
 }
