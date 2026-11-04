@@ -15,6 +15,7 @@
   let windowUsage = $state<ManagedKeyUsageWindowItem[]>([]);
   let usageWindow = $state<ManagedKeyUsageWindowName>("24h");
   let loading = $state(true);
+  let loadError = $state<string | null>(null);
   let searchTerm = $state("");
 
   const usageByKey = $derived(new Map(windowUsage.map((item) => [item.clientApiKeyId, item])));
@@ -24,6 +25,7 @@
 
   async function loadData(windowName: ManagedKeyUsageWindowName = usageWindow) {
     loading = true;
+    loadError = null;
     try {
       const [keyRecords, usageRecords] = await Promise.all([
         fetchApiKeys(),
@@ -32,7 +34,8 @@
       keys = keyRecords;
       windowUsage = usageRecords;
     } catch (error: any) {
-      notifications.error(error.message || "Failed to load managed key policy usage");
+      loadError = error.message || "Failed to load managed key policy usage";
+      notifications.error(loadError);
     } finally {
       loading = false;
     }
@@ -156,6 +159,23 @@
           {/each}
           {#if loading}
             <tr><td colspan="8" class="py-8 text-center text-text-muted">Loading managed key usage…</td></tr>
+          {:else if loadError}
+            <tr>
+              <td colspan="8" class="py-5 text-center">
+                <div role="alert" class="flex flex-col sm:flex-row items-center justify-center gap-3 text-rose-400">
+                  <span>Could not refresh managed key usage: {loadError}. Any rows above are from the last successful load.</span>
+                  <button
+                    type="button"
+                    aria-label="Retry managed key usage"
+                    onclick={() => void loadData(usageWindow)}
+                    class="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-main hover:bg-surface-2 disabled:opacity-50"
+                    disabled={loading}
+                  >
+                    Retry
+                  </button>
+                </div>
+              </td>
+            </tr>
           {:else if filteredKeys.length === 0}
             <tr><td colspan="8" class="py-8 text-center text-text-muted">No active managed API keys match this filter.</td></tr>
           {/if}

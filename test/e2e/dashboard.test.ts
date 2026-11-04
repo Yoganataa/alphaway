@@ -471,6 +471,49 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(mainText).toContain("Allowed models");
   }, 20000);
 
+  it("shows a recoverable error instead of an empty-key state when Quota Tracker loading fails", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    const keyName = "Quota Tracker Error Recovery";
+    const keyResponse = await fetch(baseURL + "/api/keys", {
+      method: "POST",
+      headers: {
+        Cookie: adminCookie,
+        Origin: baseURL,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: keyName }),
+    });
+    expect(keyResponse.status).toBe(201);
+
+    let failedFirstRequest = false;
+    await page.route("**/api/keys/usage**", async (route) => {
+      const requestUrl = new URL(route.request().url());
+      if (requestUrl.searchParams.get("window") === "24h" && !failedFirstRequest) {
+        failedFirstRequest = true;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Temporary usage read failure" }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.getByRole("button", { name: "Quota Tracker" }).click();
+    const alert = page.getByRole("alert");
+    await alert.getByText(/Could not refresh managed key usage: Temporary usage read failure/).waitFor({
+      state: "visible",
+      timeout: 10000,
+    });
+    expect(await page.getByText("No active managed API keys match this filter.", { exact: true }).count()).toBe(0);
+
+    await alert.getByRole("button", { name: "Retry managed key usage" }).click();
+    await page.getByRole("row").filter({ hasText: keyName }).waitFor({ state: "visible", timeout: 10000 });
+    await alert.waitFor({ state: "detached", timeout: 10000 });
+    expect(failedFirstRequest).toBe(true);
+  }, 20000);
+
   it("creates, edits, and deletes a Plan through the dashboard UI", async () => {
     const { page } = dashboard;
     await page.getByRole("button", { name: "Plans" }).click();
