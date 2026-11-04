@@ -123,6 +123,7 @@
       const updated = await updateProxyPool({ entries, strategy: rotationMode });
       proxyStatus = updated;
       pools = updated.pool.entries;
+      lastLoadedAt = Date.now();
       poolTestResults = {};
       statusMessage = "Proxy pool configuration saved.";
       notifications.success(statusMessage);
@@ -161,6 +162,7 @@
     statusMessage = null;
     try {
       proxyStatus = await updateProxy(proxyInput.trim());
+      lastLoadedAt = Date.now();
       statusMessage = proxyInput.trim() ? "Single proxy fallback updated." : "Single proxy fallback cleared.";
       notifications.success(statusMessage);
     } catch (error: any) {
@@ -282,7 +284,7 @@
           </p>
           <p class="mt-1 break-words text-xs text-text-muted">{loadError}</p>
           {#if lastLoadedAt !== null}
-            <p class="mt-1 text-[11px] text-text-muted">Last successful refresh: {formatProxyStatusTime(lastLoadedAt)}</p>
+            <p class="mt-1 text-[11px] text-text-muted">Last successful configuration sync: {formatProxyStatusTime(lastLoadedAt)}</p>
           {/if}
         </div>
         <Button id="proxy-config-retry" variant="secondary" size="sm" onclick={refreshProxyStatus} disabled={isLoading}>
@@ -381,11 +383,11 @@
           <span class="material-symbols-outlined text-[14px] {isPoolTesting ? 'animate-spin' : ''}">network_check</span>
           <span>{isPoolTesting ? "Probing..." : "Ping All"}</span>
         </Button>
-        <Button variant="secondary" size="xs" onclick={() => (isBulkModalOpen = true)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
+        <Button id="proxy-bulk-import" variant="secondary" size="xs" onclick={() => (isBulkModalOpen = true)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
           <span class="material-symbols-outlined text-[14px]">file_upload</span>
           <span>Bulk Import</span>
         </Button>
-        <Button variant="primary" size="xs" onclick={() => (isAddModalOpen = true)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
+        <Button id="proxy-add-node" variant="primary" size="xs" onclick={() => (isAddModalOpen = true)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
           <span class="material-symbols-outlined text-[14px]">add</span>
           <span>Add Node</span>
         </Button>
