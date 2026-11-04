@@ -95,6 +95,16 @@ export interface TokenSaverHealthSummary {
   dlpEnabled: boolean;
 }
 
+export interface HealthGateRejection {
+  at: number | null;
+  kind: string;
+  status: number | null;
+  logId: string | null;
+  model: string | null;
+  shapeOk?: boolean;
+  missing?: string[];
+}
+
 export interface HealthGateStatus {
   status: "ip-blocked" | "throttled" | "open";
   ipBlockedSince: number | null;
@@ -104,15 +114,14 @@ export interface HealthGateStatus {
     tools: string[];
     headers: string[];
   };
-  lastRejection: unknown;
+  lastRejection: HealthGateRejection | null;
   lastUpstreamError: HealthUpstreamError | null;
 }
 
 export interface HealthUpstreamError {
-  at: number;
-  statusCode: number;
-  model: string;
-  error: string;
+  at: number | null;
+  statusCode: number | null;
+  model: string | null;
   logId: string | null;
 }
 
@@ -178,7 +187,6 @@ export interface HealthResponse {
     };
     codebuddy: {
       status: "connected" | "unauthenticated" | string;
-      user: string | null;
       models: number;
     };
   };
@@ -187,7 +195,6 @@ export interface HealthResponse {
     configured: boolean;
     endpoint: string;
     models: string[];
-    user: string | null;
   };
   egress: {
     mode: string;
