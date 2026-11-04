@@ -24,6 +24,10 @@
   let oauthStatusText = $state<string | null>(null);
   let pollIntervalHandle: any = null;
 
+  const gateStatus = $derived(health?.identity?.gate?.status ?? "unknown");
+  const toolAnchors = $derived(health?.identity?.gate?.anchors.tools ?? []);
+  const headerAnchors = $derived(health?.identity?.gate?.anchors.headers ?? []);
+
   const trustedOAuthDomains = ["codebuddy.ai", "workbuddy.ai"];
   function safeCodeBuddyAuthUrl(value: string | undefined): string | null {
     if (!value || value.length > 2048) return null;
@@ -260,43 +264,56 @@
       <div>
         <div class="flex items-center gap-2">
           <h2 class="text-lg font-bold text-text-main tracking-tight">OpenCode Free-Tier</h2>
-          <Badge tone="success" size="sm" dot>BoringSSL Active</Badge>
+          <Badge tone={health?.tls ? "neutral" : "warning"} size="sm">
+            {health?.tls || "TLS profile not reported"}
+          </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
-          Native BoringSSL parity engine with automatic tool-anchor synthesis and release handshake.
+          TLS profile and configured request anchors as reported by AlphaWay health. These values do not represent a live upstream connectivity probe.
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <span class="text-xs font-mono px-2.5 py-1 rounded-[8px] bg-surface-2 text-text-muted border border-border">
-          Status: {health?.providers?.opencode?.status || "unknown"}
+          Adapter: {health?.providers?.opencode?.status || "unknown"}
         </span>
+        <Badge
+          tone={gateStatus === "open" ? "success" : gateStatus === "unknown" ? "neutral" : "warning"}
+          size="sm"
+        >
+          Local retry gate: {gateStatus.toUpperCase()}
+        </Badge>
       </div>
     </div>
 
-    <!-- Shape Anchors & Gate Status -->
+    <!-- Configured request anchors -->
     <div class="space-y-3">
       <h3 class="text-xs font-semibold uppercase tracking-wider text-text-subtle">
-        Gate Shape & Fingerprint Anchors
+        Configured Request Anchors
       </h3>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <div class="p-3 rounded-[10px] bg-surface-2 border border-border-subtle flex items-center justify-between">
-          <span class="text-text-muted font-medium">BoringSSL 17 Ciphers</span>
-          <span class="text-emerald-400 font-bold">MATCH</span>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div class="p-3 rounded-[10px] bg-surface-2 border border-border-subtle space-y-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-text-muted font-medium">Tool anchors</span>
+            <span class="text-text-main font-mono">{toolAnchors.length}</span>
+          </div>
+          <p class="font-mono text-text-main break-all">
+            {toolAnchors.length ? toolAnchors.join(", ") : "Not reported"}
+          </p>
         </div>
-        <div class="p-3 rounded-[10px] bg-surface-2 border border-border-subtle flex items-center justify-between">
-          <span class="text-text-muted font-medium">12 TLS Extensions</span>
-          <span class="text-emerald-400 font-bold">MATCH</span>
-        </div>
-        <div class="p-3 rounded-[10px] bg-surface-2 border border-border-subtle flex items-center justify-between">
-          <span class="text-text-muted font-medium">`read` Tool Anchor</span>
-          <span class="text-emerald-400 font-bold">INJECTED</span>
-        </div>
-        <div class="p-3 rounded-[10px] bg-surface-2 border border-border-subtle flex items-center justify-between">
-          <span class="text-text-muted font-medium">CSPRNG Session</span>
-          <span class="text-emerald-400 font-bold">SYNCED</span>
+        <div class="p-3 rounded-[10px] bg-surface-2 border border-border-subtle space-y-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-text-muted font-medium">Header anchors</span>
+            <span class="text-text-main font-mono">{headerAnchors.length}</span>
+          </div>
+          <p class="font-mono text-text-main break-all">
+            {headerAnchors.length ? headerAnchors.join(", ") : "Not reported"}
+          </p>
         </div>
       </div>
+      <p class="text-[11px] text-text-muted">
+        Anchor lists describe the request shape AlphaWay configures. They do not confirm acceptance by the upstream service.
+      </p>
     </div>
 
     <!-- Models List -->
