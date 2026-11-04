@@ -15,15 +15,20 @@
   let windowUsage = $state<ManagedKeyUsageWindowItem[]>([]);
   let usageWindow = $state<ManagedKeyUsageWindowName>("24h");
   let loading = $state(true);
+  let loadError = $state<string | null>(null);
+  let loadedUsageWindow = $state<ManagedKeyUsageWindowName | null>(null);
   let searchTerm = $state("");
 
   const usageByKey = $derived(new Map(windowUsage.map((item) => [item.clientApiKeyId, item])));
-  const usageWindowLabel = $derived(usageWindow === "1h" ? "Last hour" : usageWindow === "24h" ? "Last 24 hours" : usageWindow === "7d" ? "Last 7 days" : "Last 30 days");
+  const formatUsageWindowLabel = (windowName: ManagedKeyUsageWindowName) =>
+    windowName === "1h" ? "Last hour" : windowName === "24h" ? "Last 24 hours" : windowName === "7d" ? "Last 7 days" : "Last 30 days";
+  const usageWindowLabel = $derived(formatUsageWindowLabel(loadedUsageWindow ?? usageWindow));
   const limitLabel = (value: number | null) => value === null || value === 0 ? "Unlimited" : value.toLocaleString();
   const tokenLabel = (value: number) => value.toLocaleString();
 
   async function loadData(windowName: ManagedKeyUsageWindowName = usageWindow) {
     loading = true;
+    loadError = null;
     try {
       const [keyRecords, usageRecords] = await Promise.all([
         fetchApiKeys(),
@@ -31,8 +36,10 @@
       ]);
       keys = keyRecords;
       windowUsage = usageRecords;
+      loadedUsageWindow = windowName;
     } catch (error: any) {
-      notifications.error(error.message || "Failed to load managed key policy usage");
+      loadError = error.message || "Failed to load managed key policy usage";
+      notifications.error(loadError);
     } finally {
       loading = false;
     }
@@ -156,6 +163,29 @@
           {/each}
           {#if loading}
             <tr><td colspan="8" class="py-8 text-center text-text-muted">Loading managed key usage…</td></tr>
+          {:else if loadError}
+            <tr>
+              <td colspan="8" class="py-5 text-center">
+                <div role="alert" class="flex flex-col sm:flex-row items-center justify-center gap-3 text-rose-400">
+                  <span>
+                    {#if loadedUsageWindow}
+                      Could not refresh usage for {formatUsageWindowLabel(usageWindow)}: {loadError}. Values still shown use the {formatUsageWindowLabel(loadedUsageWindow)} window.
+                    {:else}
+                      Could not load usage for {formatUsageWindowLabel(usageWindow)}: {loadError}. No usage data is available yet.
+                    {/if}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Retry managed key usage"
+                    onclick={() => void loadData(usageWindow)}
+                    class="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-main hover:bg-surface-2 disabled:opacity-50"
+                    disabled={loading}
+                  >
+                    Retry
+                  </button>
+                </div>
+              </td>
+            </tr>
           {:else if filteredKeys.length === 0}
             <tr><td colspan="8" class="py-8 text-center text-text-muted">No active managed API keys match this filter.</td></tr>
           {/if}
