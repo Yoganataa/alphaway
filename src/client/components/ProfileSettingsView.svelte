@@ -19,6 +19,8 @@
 
   let dbStats = $state<DatabaseStats | null>(null);
   let loadingDb = $state(true);
+  let dbStatsError = $state<string | null>(null);
+  let dbStatsUpdatedAt = $state<number | null>(null);
   let isVacuuming = $state(false);
   let isDownloadingBackup = $state(false);
 
@@ -29,12 +31,20 @@
   let showResetUsageConfirm = $state(false);
   let showClearLogsConfirm = $state(false);
 
+  function formatDbStatsTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
   async function loadStats() {
     loadingDb = true;
     try {
       dbStats = await fetchDatabaseStats();
-    } catch {
-      dbStats = null;
+      dbStatsError = null;
+      dbStatsUpdatedAt = Date.now();
+    } catch (error) {
+      // Keep the last successful snapshot visible; an unavailable refresh is
+      // not evidence that the SQLite database itself is unavailable.
+      dbStatsError = error instanceof Error ? error.message : "Unknown database statistics error";
     } finally {
       loadingDb = false;
     }
@@ -153,8 +163,12 @@
       <div>
         <div class="flex items-center gap-2">
           <h3 class="text-base font-bold text-text-main tracking-tight">SQLite Storage Engine</h3>
-          <Badge tone={loadingDb ? "neutral" : dbStats?.journalMode?.toLowerCase() === "wal" ? "success" : "warning"} size="sm" dot>
-            {loadingDb ? "Checking" : dbStats?.journalMode?.toUpperCase() || "Unavailable"}
+          <Badge
+            tone={loadingDb ? "neutral" : dbStatsError ? "warning" : dbStats?.journalMode?.toLowerCase() === "wal" ? "success" : "warning"}
+            size="sm"
+            dot
+          >
+            {loadingDb ? "Checking" : dbStatsError ? (dbStats ? "Stale Data" : "Unavailable") : dbStats?.journalMode?.toUpperCase() || "Unavailable"}
           </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
@@ -183,6 +197,27 @@
         </Button>
       </div>
     </div>
+
+    {#if dbStatsError}
+      <div
+        id="database-stats-load-error"
+        role="alert"
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[10px] border border-amber-500/30 bg-amber-500/5 p-3"
+      >
+        <div class="min-w-0">
+          <p class="text-xs font-semibold text-amber-400">
+            {dbStats ? "Database statistics refresh failed. Showing the last successful snapshot." : "Database statistics could not be loaded."}
+          </p>
+          <p class="mt-1 break-words text-xs text-text-muted">{dbStatsError}</p>
+          {#if dbStatsUpdatedAt !== null}
+            <p class="mt-1 text-[11px] text-text-muted">Last successful refresh: {formatDbStatsTime(dbStatsUpdatedAt)}</p>
+          {/if}
+        </div>
+        <Button variant="secondary" size="sm" onclick={loadStats} disabled={loadingDb}>
+          Retry Load
+        </Button>
+      </div>
+    {/if}
 
     <!-- SQLite Stats Grid -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
