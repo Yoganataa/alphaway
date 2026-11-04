@@ -149,8 +149,12 @@ describe("Proxy pool configuration load recovery", () => {
     expect(await page.locator("#proxy-save-btn").isDisabled()).toBe(true);
 
     await page.locator("#proxy-config-retry").click();
-    await loadError.waitFor({ state: "visible", timeout: 10000 });
-    expect(await loadError.textContent()).toContain("Invalid proxy configuration response");
+    // The previous alert stays mounted while the retry is pending. Wait for the
+    // new response body instead of accepting that still-visible stale message.
+    await page.getByText("Invalid proxy configuration response", { exact: true }).waitFor({
+      state: "visible",
+      timeout: 10000,
+    });
     expect(await page.locator("#proxy-pool-unavailable").isVisible()).toBe(true);
     expect(await page.locator("#proxy-add-node").isDisabled()).toBe(true);
 
