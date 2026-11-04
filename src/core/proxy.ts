@@ -1215,7 +1215,7 @@ async function testPool({ probeUrl = null, timeoutMs = 15000, entryId = null } =
         ok: verdict.ok,
         apiStatus: verdict.apiStatus || null,
         exitIp: verdict.exitIp || null,
-        latencyMs: verdict.latencyMs || null,
+        latencyMs: verdict.latencyMs ?? null,
         error: verdict.error || null,
         state: h && h.cooldownUntil > Date.now() ? "cooling" : verdict.ok ? "ready" : "error",
       };
