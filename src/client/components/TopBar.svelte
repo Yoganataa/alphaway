@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
   import ThemeToggle from "../lib/ui/ThemeToggle.svelte";
@@ -22,6 +23,13 @@
   } = $props();
 
   let copied = $state(false);
+  let currentHost = $state("Current host");
+  let currentOrigin = $state("");
+
+  onMount(() => {
+    currentHost = window.location.host;
+    currentOrigin = window.location.origin;
+  });
 
   const titles: Record<string, { title: string; subtitle: string; icon: string }> = {
     overview: {
@@ -46,12 +54,12 @@
     },
     quota: {
       title: "Quota & Rate Limits",
-      subtitle: "Live capacity monitor, requests per minute (RPM), tokens per minute (TPM), and session reset windows",
+      subtitle: "AlphaWay-managed key limits and recorded request/token usage; not upstream provider quota.",
       icon: "speed",
     },
     providers: {
       title: "Providers & Models",
-      subtitle: "Upstream identity status, anti-burst dual-lane routing, and custom engine CRUD",
+      subtitle: "OpenCode adapter registration, CodeBuddy credential state, and custom provider configuration.",
       icon: "dns",
     },
     tokensaver: {
@@ -76,12 +84,12 @@
     },
     consolelog: {
       title: "Console & Gateway Log",
-      subtitle: "Live streaming server logs with severity filters, search, and export",
+      subtitle: "Recent server log buffer with severity filters, search, and export.",
       icon: "receipt_long",
     },
     tunnel: {
       title: "Tunnel & Daemon Lifecycle",
-      subtitle: "Cloudflare Named Tunnel ingress and native background daemon supervisor",
+      subtitle: "Public endpoint configuration and CLI lifecycle guidance; active process state is not reported here.",
       icon: "cloud",
     },
     persona: {
@@ -96,12 +104,12 @@
     },
     settings: {
       title: "System & Storage Settings",
-      subtitle: "Embedded SQLite engine with WAL mode concurrency, API key management, and log purge",
+      subtitle: "SQLite storage diagnostics, browser client-key settings, and telemetry maintenance.",
       icon: "settings",
     },
     profile: {
       title: "Profile & Storage Settings",
-      subtitle: "Embedded SQLite engine with WAL mode concurrency, API key management, and log purge",
+      subtitle: "SQLite storage diagnostics, browser client-key settings, and telemetry maintenance.
       icon: "settings",
     },
   };
@@ -109,13 +117,15 @@
   const currentMeta = $derived(titles[activeTab] || titles.overview);
 
   function copyBaseUrl() {
-    const url = "http://127.0.0.1:20129/v1";
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(url);
-      copied = true;
-      notifications.success("OpenAI Base URL copied to clipboard");
-      setTimeout(() => (copied = false), 2000);
+    if (!currentOrigin || typeof navigator === "undefined" || !navigator.clipboard) {
+      notifications.error("Current dashboard origin is not available");
+      return;
     }
+    const url = `${currentOrigin}/v1`;
+    navigator.clipboard.writeText(url);
+    copied = true;
+    notifications.success("OpenAI Base URL copied to clipboard");
+    setTimeout(() => (copied = false), 2000);
   }
 </script>
 
@@ -141,8 +151,8 @@
           <span class="text-text-subtle">&middot;</span>
           <span>{currentMeta.title}</span>
         </h1>
-        <Badge tone="success" size="sm" dot>BoringSSL Native Parity</Badge>
-        <span class="text-xs font-mono text-text-subtle hidden sm:inline">:20129</span>
+        <Badge tone={health?.tls ? "neutral" : "warning"} size="sm" dot>{health?.tls || "TLS profile unavailable"}</Badge>
+        <span class="text-xs font-mono text-text-subtle hidden sm:inline">{currentHost}</span>
       </div>
       <p class="text-xs text-text-muted truncate mt-0.5 hidden sm:block">
         {currentMeta.subtitle}
