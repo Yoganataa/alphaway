@@ -16,10 +16,13 @@
   let usageWindow = $state<ManagedKeyUsageWindowName>("24h");
   let loading = $state(true);
   let loadError = $state<string | null>(null);
+  let loadedUsageWindow = $state<ManagedKeyUsageWindowName | null>(null);
   let searchTerm = $state("");
 
   const usageByKey = $derived(new Map(windowUsage.map((item) => [item.clientApiKeyId, item])));
-  const usageWindowLabel = $derived(usageWindow === "1h" ? "Last hour" : usageWindow === "24h" ? "Last 24 hours" : usageWindow === "7d" ? "Last 7 days" : "Last 30 days");
+  const formatUsageWindowLabel = (windowName: ManagedKeyUsageWindowName) =>
+    windowName === "1h" ? "Last hour" : windowName === "24h" ? "Last 24 hours" : windowName === "7d" ? "Last 7 days" : "Last 30 days";
+  const usageWindowLabel = $derived(formatUsageWindowLabel(loadedUsageWindow ?? usageWindow));
   const limitLabel = (value: number | null) => value === null || value === 0 ? "Unlimited" : value.toLocaleString();
   const tokenLabel = (value: number) => value.toLocaleString();
 
@@ -33,6 +36,7 @@
       ]);
       keys = keyRecords;
       windowUsage = usageRecords;
+      loadedUsageWindow = windowName;
     } catch (error: any) {
       loadError = error.message || "Failed to load managed key policy usage";
       notifications.error(loadError);
@@ -163,7 +167,13 @@
             <tr>
               <td colspan="8" class="py-5 text-center">
                 <div role="alert" class="flex flex-col sm:flex-row items-center justify-center gap-3 text-rose-400">
-                  <span>Could not refresh managed key usage: {loadError}. Any rows above are from the last successful load.</span>
+                  <span>
+                    {#if loadedUsageWindow}
+                      Could not refresh usage for {formatUsageWindowLabel(usageWindow)}: {loadError}. Values still shown use the {formatUsageWindowLabel(loadedUsageWindow)} window.
+                    {:else}
+                      Could not load usage for {formatUsageWindowLabel(usageWindow)}: {loadError}. No usage data is available yet.
+                    {/if}
+                  </span>
                   <button
                     type="button"
                     aria-label="Retry managed key usage"
