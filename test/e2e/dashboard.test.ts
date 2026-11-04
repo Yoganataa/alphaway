@@ -162,6 +162,41 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     expect(mainText).toContain("CodeBuddy International");
     expect(mainText).toContain("Start OAuth Login");
+
+    await page.route("**/api/custom-providers/test", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          status: 204,
+          message: "OpenAI endpoint reachable!",
+        }),
+      });
+    });
+
+    await page.getByRole("button", { name: "Add Provider" }).click();
+    await page.locator("#provider-id").fill("probe-regression");
+    await page.locator("#provider-name").fill("Probe Regression");
+    await page.locator("#provider-models").fill("probe-model-one, probe-model-two");
+
+    const probeRequestPromise = page.waitForRequest((request) =>
+      request.url().endsWith("/api/custom-providers/test") && request.method() === "POST"
+    );
+    await page.getByRole("button", { name: "Test Connection" }).click();
+    const probeRequest = await probeRequestPromise;
+    expect(probeRequest.postDataJSON()).toMatchObject({ model: "probe-model-one" });
+
+    const probeResult = page.getByText(/Probe succeeded \(upstream HTTP 204\)/);
+    await probeResult.waitFor({ state: "visible", timeout: 10000 });
+    const probeMessage = await probeResult.textContent();
+    expect(probeMessage).toContain("Tested one configured model (probe-model-one)");
+    expect(probeMessage).toContain("the configured model list was not validated");
+    expect(probeMessage).not.toContain("0ms");
+    expect(probeMessage).not.toContain("models valid");
+
+    await page.unroute("**/api/custom-providers/test");
+    await page.getByRole("button", { name: "Cancel" }).click();
   }, 15000);
 
   it("navigates to TokenSaver, toggles settings and tests compression sandbox", async () => {

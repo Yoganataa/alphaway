@@ -180,6 +180,7 @@
     testResult = null;
     try {
       const parsedModels = formModels.split(",").map((s) => s.trim()).filter(Boolean);
+      const probeModel = parsedModels[0];
       const res = await testCustomProvider({
         id: formId || "test-temp",
         name: formName || "Test",
@@ -187,21 +188,29 @@
         apiKey: formApiKey,
         protocol: formProtocol,
         models: parsedModels,
+        ...(probeModel ? { model: probeModel } : {}),
         enabled: formEnabled,
       });
+      const responseStatus = typeof res.status === "number"
+        ? `upstream HTTP ${res.status}`
+        : `AlphaWay HTTP ${res.requestStatus}`;
+
       if (res.ok) {
+        const scope = probeModel
+          ? `Tested one configured model (${probeModel}); the configured model list was not validated.`
+          : "Used the protocol default probe model; the configured model list was not validated.";
         testResult = {
           ok: true,
-          message: `Success! Latency: ${res.latencyMs || 0}ms (${res.modelsCount ?? parsedModels.length} models valid)`,
+          message: `Probe succeeded (${responseStatus}). ${scope}`,
         };
       } else {
         testResult = {
           ok: false,
-          message: `Failed: ${res.error || "Connection error"}`,
+          message: `Probe failed (${responseStatus}): ${res.error || "Connection error"}`,
         };
       }
     } catch (err: any) {
-      testResult = { ok: false, message: `Error: ${err.message}` };
+      testResult = { ok: false, message: `Probe error: ${err.message}` };
     } finally {
       testing = false;
     }
