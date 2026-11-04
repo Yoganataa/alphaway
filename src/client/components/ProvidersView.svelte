@@ -336,7 +336,7 @@
 
       <div class="flex items-center gap-2">
         <span class="text-xs font-mono px-2.5 py-1 rounded-[8px] bg-surface-2 text-text-muted border border-border">
-          Status: {health?.providers?.codebuddy?.enabled ? "active" : "disabled"}
+          Status: {health?.providers?.codebuddy?.status || "unknown"}
         </span>
       </div>
     </div>
