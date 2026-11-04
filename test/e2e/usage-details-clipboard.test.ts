@@ -8,7 +8,7 @@ describe("Request Details clipboard feedback", () => {
   let dashboard: BridgeDashboard;
 
   beforeAll(async () => {
-    dashboard = await startBridgeDashboard(20156);
+    dashboard = await startBridgeDashboard(20157);
   }, 60000);
 
   afterAll(async () => {
@@ -69,7 +69,7 @@ describe("Request Details clipboard feedback", () => {
     await page.goto(baseURL + "/");
     await page.getByRole("button", { name: "Usage", exact: true }).click();
     await page.getByRole("button", { name: "Request Details", exact: true }).click();
-    await page.getByRole("button", { name: "View", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.getByRole("button", { name: "View", exact: true }).click();
 
     const copyIdButton = page.locator("#usage-copy-request-id");
     const copyJsonButton = page.locator("#usage-copy-request-json");
