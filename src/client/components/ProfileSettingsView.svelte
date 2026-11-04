@@ -48,7 +48,7 @@
   function handleSaveKey() {
     if (!apiKeyInput.trim()) return;
     setActiveApiKey(apiKeyInput.trim());
-    notifications.success("Master API key saved to browser session");
+    notifications.success("Dashboard client key saved to this browser session");
   }
 
   async function handleDownloadBackup() {
@@ -124,15 +124,15 @@
     <!-- Gateway Identity & API Key -->
     <div class="space-y-4">
       <div class="space-y-1.5">
-        <label for="master-api-key" class="text-xs font-semibold text-text-muted">
-          Active Master API Key (Bearer Authorization)
+        <label for="dashboard-client-api-key" class="text-xs font-semibold text-text-muted">
+          Dashboard Client API Key
         </label>
         <div class="flex flex-col sm:flex-row gap-3">
           <input
-            id="master-api-key"
-            type="text"
+            id="dashboard-client-api-key"
+            type="password"
             bind:value={apiKeyInput}
-            placeholder="sk-alphaway-free"
+            placeholder="Paste your gateway API key"
             class="flex-1 px-3.5 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono focus:outline-hidden focus:border-brand-500"
           />
           <Button variant="primary" size="sm" onclick={handleSaveKey}>
@@ -141,7 +141,7 @@
           </Button>
         </div>
         <p class="text-[11px] text-text-muted">
-          Matches your <code class="font-mono text-brand-400">API_KEY</code> environment setting. Sent by default in playground and client test benches.
+          Used by this dashboard in the current browser session for gateway requests and generated client snippets. It does not change server environment variables or create a managed API key.
         </p>
       </div>
     </div>
@@ -153,10 +153,12 @@
       <div>
         <div class="flex items-center gap-2">
           <h3 class="text-base font-bold text-text-main tracking-tight">SQLite Storage Engine</h3>
-          <Badge tone="success" size="sm" dot>WAL Active</Badge>
+          <Badge tone={loadingDb ? "neutral" : dbStats?.journalMode?.toLowerCase() === "wal" ? "success" : "warning"} size="sm" dot>
+            {loadingDb ? "Checking" : dbStats?.journalMode?.toUpperCase() || "Unavailable"}
+          </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
-          Native Bun SQLite engine with Write-Ahead Logging (WAL), encrypted physical backups, and page-reclamation diagnostics.
+          Native Bun SQLite with the current journal mode, encrypted SQLite snapshots, and page-reclamation diagnostics.
         </p>
       </div>
 
@@ -186,31 +188,31 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border">
         <div class="text-[11px] text-text-muted font-medium mb-1">Database Engine</div>
-        <div class="text-sm font-bold text-text-main">{dbStats?.engine || "Bun SQLite"}</div>
-        <div class="text-[11px] text-emerald-400 font-mono mt-0.5">Zero C++ overhead</div>
+        <div class="text-sm font-bold text-text-main">{dbStats?.engine || (loadingDb ? "Checking…" : "Unavailable")}</div>
+        <div class="text-[11px] text-text-muted font-mono mt-0.5">{dbStats?.busyTimeoutMs != null ? `Busy timeout ${dbStats.busyTimeoutMs}ms` : "Diagnostics unavailable"}</div>
       </div>
 
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border">
         <div class="text-[11px] text-text-muted font-medium mb-1">Journal Mode</div>
-        <div class="text-sm font-bold text-text-main">{dbStats?.mode || "WAL Mode"}</div>
-        <div class="text-[11px] text-emerald-400 font-mono mt-0.5">Non-blocking concurrency</div>
+        <div class="text-sm font-bold text-text-main">{dbStats?.mode || (loadingDb ? "Checking…" : "Unavailable")}</div>
+        <div class="text-[11px] text-text-muted font-mono mt-0.5">Current PRAGMA journal mode</div>
       </div>
 
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border">
         <div class="text-[11px] text-text-muted font-medium mb-1">Storage Size</div>
-        <div class="text-sm font-bold text-text-main font-mono">{dbStats?.sizeKb || 0} KB</div>
+        <div class="text-sm font-bold text-text-main font-mono">{dbStats ? dbStats.sizeKb.toLocaleString() : "—"} KB</div>
         <div class="text-[11px] text-text-muted font-mono mt-0.5">
-          {(Math.round((dbStats?.reclaimableBytes || 0) / 1024))} KB reclaimable
+          {dbStats ? Math.round((dbStats.reclaimableBytes || 0) / 1024).toLocaleString() : "—"} KB reclaimable
         </div>
       </div>
 
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border">
         <div class="text-[11px] text-text-muted font-medium mb-1">Indexed Records</div>
         <div class="text-sm font-bold text-text-main font-mono">
-          {dbStats?.requestLogsCount || 0} Requests
+          {dbStats?.requestLogsCount?.toLocaleString() ?? "—"} Requests
         </div>
         <div class="text-[11px] text-brand-400 font-mono mt-0.5">
-          {dbStats?.customProvidersCount || 0} Custom Providers
+          {dbStats?.customProvidersCount?.toLocaleString() ?? "—"} Custom Providers
         </div>
       </div>
     </div>
@@ -222,7 +224,7 @@
 
     <!-- DB File Path -->
     <div class="p-3 rounded-[8px] bg-surface-1 border border-border flex items-center justify-between text-xs font-mono">
-      <span class="text-text-muted truncate select-all">{dbStats?.path || "~/.alphaway/db/data.sqlite"}</span>
+      <span class="text-text-muted truncate select-all">{dbStats?.path || (loadingDb ? "Loading path…" : "Unavailable")}</span>
       <Badge tone="neutral" size="xs">Local File</Badge>
     </div>
   </Card>

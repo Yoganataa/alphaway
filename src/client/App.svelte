@@ -2,7 +2,6 @@
   import { onMount } from "svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import TopBar from "./components/TopBar.svelte";
-  import OverviewView from "./components/OverviewView.svelte";
   import EndpointView from "./components/EndpointView.svelte";
   import PlaygroundView from "./components/PlaygroundView.svelte";
   import UsageView from "./components/UsageView.svelte";
