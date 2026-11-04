@@ -752,10 +752,19 @@ function resetHealth() {
 function describeEntry(entry, now = Date.now()) {
   const h = health.get(keyOf(entry.url));
   const cooling = Boolean(h && h.cooldownUntil > now);
+  const kind = entry.direct
+    ? "direct"
+    : entry.relay
+      ? "relay"
+      : (() => {
+          try { return new URL(entry.url).protocol.slice(0, -1); }
+          catch { return "proxy"; }
+        })();
   return {
     id: entry.id,
     label: entry.label,
     host: entry.direct ? "direct" : displayHost(entry.url),
+    kind,
     enabled: entry.enabled,
     weight: entry.weight,
     state: !entry.enabled ? "disabled" : cooling ? "cooling" : "ready",
@@ -925,17 +934,39 @@ function setPool(raw) {
   if (!spec) return { ok: false, error: "Invalid pool format." };
 
   const source = Array.isArray(spec.entries) ? spec.entries : [];
+  const existingById = new Map(pool.entries.map((entry) => [entry.id, entry]));
   const entries = [];
   const errors = [];
   source.forEach((item, index) => {
-    const parsed = parsePoolEntry(item, index);
+    // Public dashboard state intentionally omits proxy URLs and credentials.
+    // When an existing entry is submitted by ID without a URL, retain its
+    // current encrypted configuration instead of requiring the browser to
+    // round-trip secrets it must never receive.
+    let candidate = item;
+    if (
+      item &&
+      typeof item === "object" &&
+      !Array.isArray(item) &&
+      typeof item.id === "string" &&
+      !Object.prototype.hasOwnProperty.call(item, "url") &&
+      item.direct !== true
+    ) {
+      const existing = existingById.get(item.id);
+      if (existing) candidate = { ...existing, ...item };
+    }
+    const parsed = parsePoolEntry(candidate, index);
     if (parsed.ok) entries.push(parsed.entry);
     else errors.push(parsed.error);
   });
   if (errors.length > 0) return { ok: false, error: errors.join(" ") };
 
   const seen = new Set();
+  const seenIds = new Set();
   for (const entry of entries) {
+    if (seenIds.has(entry.id)) {
+      return { ok: false, error: "Pool entry IDs must be unique." };
+    }
+    seenIds.add(entry.id);
     const key = keyOf(entry.url);
     if (seen.has(key)) {
       return { ok: false, error: `Egress ganda di pool: ${entry.direct ? "direct" : displayHost(entry.url)}` };
@@ -1088,20 +1119,98 @@ async function testProxy(url, { timeoutMs = 15000, probeUrl = null } = {}) {
  * health map so the panel's result is also what the next request uses. A
  * throttled entry goes into cooldown; a working one is cleared.
  */
-async function testPool({ probeUrl = null, timeoutMs = 15000 } = {}) {
-  const entries = pool.entries.slice();
+async function testDirectEgress(probeUrl, timeoutMs) {
+  const started = Date.now();
+  try {
+    const response = await fetch(probeUrl, {
+      headers: { Authorization: "Bearer public" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return {
+      ok: response.ok,
+      apiStatus: response.status,
+      latencyMs: Date.now() - started,
+      error: response.ok ? null : `Upstream answered HTTP ${response.status}.`,
+    };
+  } catch {
+    return {
+      ok: false,
+      apiStatus: null,
+      latencyMs: Date.now() - started,
+      error: "Direct egress probe failed.",
+    };
+  }
+}
+
+async function testRelayEgress(entry, probeUrl, timeoutMs) {
+  const started = Date.now();
+  const target = new URL(probeUrl);
+  const headers = {
+    "x-relay-target": target.origin,
+    "x-relay-path": target.pathname + target.search,
+  };
+  if (entry.token) headers["x-relay-auth"] = entry.token;
+  try {
+    const response = await fetch(entry.url, {
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return {
+      ok: response.ok,
+      apiStatus: response.status,
+      latencyMs: Date.now() - started,
+      error: response.ok ? null : `Relay answered HTTP ${response.status}.`,
+    };
+  } catch {
+    return {
+      ok: false,
+      apiStatus: null,
+      latencyMs: Date.now() - started,
+      error: "Relay probe failed.",
+    };
+  }
+}
+
+/**
+ * Probe configured entries through the same egress type the gateway uses.
+ * Existing entry URLs and relay credentials remain server-side.
+ */
+async function testPool({ probeUrl = null, timeoutMs = 15000, entryId = null } = {}) {
+  const targetUrl = probeUrl || "https://opencode.ai/inference/v1/models";
+  const entries = entryId
+    ? pool.entries.filter((entry) => entry.id === entryId)
+    : pool.entries.slice();
+  if (entryId && entries.length === 0) {
+    return { ok: false, entries: [], error: "Proxy pool entry not found." };
+  }
   if (entries.length === 0) return { ok: true, entries: [] };
+
+  const boundedTimeout = Number.isFinite(Number(timeoutMs))
+    ? Math.min(30000, Math.max(1000, Number(timeoutMs)))
+    : 15000;
   const results = await Promise.all(
     entries.map(async (entry) => {
-      if (!entry.enabled) return { id: entry.id, label: entry.label, host: displayHost(entry.url), skipped: true };
-      const verdict = await testProxy(entry.url, { probeUrl, timeoutMs, relay: Boolean(entry.relay), token: entry.token });
+      const host = entry.direct ? "direct" : displayHost(entry.url);
+      if (!entry.enabled) {
+        return { id: entry.id, label: entry.label, host, skipped: true, reason: "Entry is disabled." };
+      }
+
+      let verdict;
+      if (entry.direct) {
+        verdict = await testDirectEgress(targetUrl, boundedTimeout);
+      } else if (entry.relay) {
+        verdict = await testRelayEgress(entry, targetUrl, boundedTimeout);
+      } else {
+        verdict = await testProxy(entry.url, { probeUrl: targetUrl, timeoutMs: boundedTimeout });
+      }
+
       if (verdict.ok) markSuccess(entry.url);
       else if (verdict.apiStatus === 403) markFailure(entry.url, { reason: "upstream 403" });
-      const h = health.get(entry.url);
+      const h = health.get(keyOf(entry.url));
       return {
         id: entry.id,
         label: entry.label,
-        host: displayHost(entry.url),
+        host,
         ok: verdict.ok,
         apiStatus: verdict.apiStatus || null,
         exitIp: verdict.exitIp || null,
@@ -1111,7 +1220,7 @@ async function testPool({ probeUrl = null, timeoutMs = 15000 } = {}) {
       };
     })
   );
-  return { ok: results.some((r) => r.ok), entries: results };
+  return { ok: results.some((result) => result.ok), entries: results };
 }
 
 async function probeExitIp(proxyUrl, timeoutMs) {
