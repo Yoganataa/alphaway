@@ -3,9 +3,8 @@
   import Card from "../lib/ui/Card.svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
-  import Toggle from "../lib/ui/Toggle.svelte";
   import ApiKeysTable from "./keys/ApiKeysTable.svelte";
-  import { getActiveApiKey, fetchHealth } from "../lib/api";
+  import { getActiveApiKey } from "../lib/api";
   import { notifications } from "../lib/notifications";
   import type { HealthResponse } from "../lib/types";
 
@@ -17,10 +16,9 @@
   let showKey = $state(false);
   let copiedId = $state<string | null>(null);
 
-  // Tunnel state
-  let tunnelRunning = $state(false);
-  let tunnelUrl = $state("");
-  let requireApiKey = $state(false);
+  const publicEndpointUrl = $derived(health?.endpoint?.tunnel ? health.endpoint.publicUrl : "");
+  const publicEndpointConfigured = $derived(publicEndpointUrl.length > 0);
+  const requiresApiKey = $derived(health?.auth?.required ?? health?.authRequired ?? false);
 
   let activeCodeTab = $state<"cursor" | "continue" | "claude" | "curl" | "anthropic" | "python" | "node">("cursor");
   let copiedSnippet = $state(false);
@@ -31,13 +29,6 @@
   onMount(() => {
     if (typeof window !== "undefined") {
       localOrigin = window.location.origin;
-    }
-    if (health?.endpoint?.tunnel && health?.endpoint?.publicUrl) {
-      tunnelRunning = true;
-      tunnelUrl = health.endpoint.publicUrl;
-    }
-    if (health?.auth?.required || health?.authRequired) {
-      requireApiKey = true;
     }
   });
 
@@ -75,7 +66,7 @@
   ]
 }`,
     claude: `# Claude Code CLI configuration:
-export ANTHROPIC_BASE_URL="http://127.0.0.1:20129"
+export ANTHROPIC_BASE_URL="${localOrigin}"
 export ANTHROPIC_API_KEY="${apiKey}"
 claude --model mimo-v2.6-flash-free`,
     curl: `curl -s ${localEndpoint}/chat/completions \\
@@ -85,7 +76,7 @@ claude --model mimo-v2.6-flash-free`,
     "model": "mimo-v2.6-flash-free",
     "messages": [{"role": "user", "content": "Hello AlphaWay!"}]
   }'`,
-    anthropic: `curl -s http://127.0.0.1:20129/v1/messages \\
+    anthropic: `curl -s ${localOrigin}/v1/messages \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${apiKey}" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -129,9 +120,9 @@ console.log(res.choices[0].message.content);`,
   const egressProxyDisplay = $derived.by(() => {
     if (!health?.egress) return "Direct Local Connection";
     if (health.egress.mode === "direct" || !health.egress.proxy) return "Direct Local Connection";
-    if (typeof health.egress.proxy === "string") return health.egress.proxy;
-    if (typeof health.egress.proxy === "object" && health.egress.proxy.url) return health.egress.proxy.url;
-    return "Direct Local Connection";
+    const proxy = health.egress.proxy;
+    if (proxy.mode === "pool") return `${proxy.pool.ready}/${proxy.pool.enabled} pool entries ready`;
+    return proxy.proxy || "Proxy configured";
   });
 </script>
 
@@ -210,19 +201,14 @@ console.log(res.choices[0].message.content);`,
         </p>
       </div>
 
-      <!-- Require API Key Switch -->
       <div class="flex items-center gap-3 bg-surface-2 px-3 py-2 rounded-[8px] border border-border">
         <div class="text-right">
-          <span class="text-xs font-semibold text-text-main block">Require API Key</span>
-          <span class="text-[10px] text-text-muted">Enforces bearer authentication</span>
+          <span class="text-xs font-semibold text-text-main block">Gateway Authentication</span>
+          <span class="text-[10px] text-text-muted">Read-only server policy</span>
         </div>
-        <Toggle
-          checked={requireApiKey}
-          onchange={(val) => {
-            requireApiKey = val;
-            notifications.info(val ? "API key auth enabled" : "Public access enabled");
-          }}
-        />
+        <Badge tone={requiresApiKey ? "success" : "warning"} size="sm">
+          {requiresApiKey ? "Required" : "Not required"}
+        </Badge>
       </div>
     </div>
 
@@ -234,11 +220,11 @@ console.log(res.choices[0].message.content);`,
           <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></div>
           <div class="min-w-0">
             <div class="flex items-center gap-2 font-sans font-semibold text-text-main">
-              <span>Local Origin (OpenAI v1)</span>
-              <Badge tone="success" size="xs">Reachable</Badge>
+              <span>Current Dashboard Origin (OpenAI v1)</span>
+              <Badge tone="neutral" size="xs">Current origin</Badge>
             </div>
             <div class="text-text-muted truncate mt-0.5 select-all">
-              {showLocalUrl ? "http://127.0.0.1:20129/v1" : "http://127.0.0.1:•••••/v1"}
+              {showLocalUrl ? localEndpoint : "••••••••••••/v1"}
             </div>
           </div>
         </div>
@@ -257,7 +243,7 @@ console.log(res.choices[0].message.content);`,
           <Button
             variant="secondary"
             size="xs"
-            onclick={() => copyText("local", "http://127.0.0.1:20129/v1")}
+            onclick={() => copyText("local", localEndpoint)}
           >
             <span class="material-symbols-outlined text-[14px]">
               {copiedId === "local" ? "check" : "content_copy"}
@@ -270,26 +256,26 @@ console.log(res.choices[0].message.content);`,
       <!-- Row 2: Cloudflare Tunnel -->
       <div class="p-3.5 rounded-[10px] bg-surface-2 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="flex items-center gap-3 min-w-0">
-          <div class="w-2.5 h-2.5 rounded-full {tunnelRunning ? 'bg-emerald-500' : 'bg-zinc-500'} shrink-0"></div>
+          <div class="w-2.5 h-2.5 rounded-full {publicEndpointConfigured ? 'bg-emerald-500' : 'bg-zinc-500'} shrink-0"></div>
           <div class="min-w-0">
             <div class="flex items-center gap-2 font-sans font-semibold text-text-main">
-              <span>Cloudflare Named Tunnel</span>
-              <Badge tone={tunnelRunning ? "success" : "neutral"} size="xs">
-                {tunnelRunning ? "Online" : "Standby"}
+              <span>Public Endpoint</span>
+              <Badge tone={publicEndpointConfigured ? "success" : "neutral"} size="xs">
+                {publicEndpointConfigured ? "Configured" : "Not configured"}
               </Badge>
             </div>
             <div class="text-text-muted truncate mt-0.5 select-all">
-              {#if tunnelRunning && tunnelUrl}
-                {showTunnelUrl ? tunnelUrl : "https://••••••••.trycloudflare.com"}
+              {#if publicEndpointConfigured}
+                {showTunnelUrl ? publicEndpointUrl : "••••••••••••••••"}
               {:else}
-                <span class="font-sans text-text-muted">Disabled (run <code class="font-mono text-brand-400">bun src/index.ts --tunnel</code> to expose publicly)</span>
+                <span class="font-sans text-text-muted">Not configured. Start the ingress process with <code class="font-mono text-brand-400">bun src/index.ts --tunnel</code> and set a public endpoint variable to publish its URL.</span>
               {/if}
             </div>
           </div>
         </div>
 
         <div class="flex items-center gap-2 shrink-0 font-sans">
-          {#if tunnelRunning && tunnelUrl}
+          {#if publicEndpointConfigured}
             <Button
               variant="ghost"
               size="xs"
@@ -302,7 +288,7 @@ console.log(res.choices[0].message.content);`,
             <Button
               variant="secondary"
               size="xs"
-              onclick={() => copyText("tunnel", tunnelUrl)}
+              onclick={() => copyText("tunnel", publicEndpointUrl)}
             >
               <span class="material-symbols-outlined text-[14px]">
                 {copiedId === "tunnel" ? "check" : "content_copy"}

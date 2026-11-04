@@ -40,24 +40,6 @@ export interface SoulInfoResponse {
   };
 }
 
-export interface SystemHealth {
-  version: string;
-  uptime: number;
-  listenPort: number;
-  cloudflaredFound: boolean;
-  cloudflaredVersion?: string;
-  tunnelUrl?: string;
-  hasApiKey: boolean;
-  proxyConfigured: boolean;
-  tokensaverConfigured: boolean;
-  platform: string;
-  memory: {
-    rss: number;
-    heapTotal: number;
-    heapUsed: number;
-  };
-}
-
 export interface ModelItem {
   id: string;
   object: string;
@@ -66,35 +48,156 @@ export interface ModelItem {
 }
 
 export interface TokenSaverConfig {
-  aggressiveCompression: boolean;
+  rtkEnabled: boolean;
+  rtkMaxLines: number;
+  rtkDeduplicate: boolean;
+  cavemanEnabled: boolean;
+  cavemanLevel: "lite" | "full" | "ultra";
+  cavemanLang: "auto" | "en" | "id";
+  cavemanAutoClarity: boolean;
+  cavemanInputMode: boolean;
+  adhdEnabled: boolean;
+  adhdLevel: "lite" | "full";
+  soulEnabled: boolean;
+  soulMode: "auto" | "preset" | "custom";
+  soulPreset: string;
+  soulFilePath: string;
+  soulCustomContent: string;
+  dlpEnabled: boolean;
+  maskSecrets: boolean;
+  maskPaths: boolean;
+  sanitizeMarkdownImages: boolean;
+  blockDangerousCommands: boolean;
+}
+
+export interface TokenSaverHealthSummary {
+  rtkEnabled: boolean;
   cavemanEnabled: boolean;
   adhdEnabled: boolean;
-  dlpRedaction: boolean;
-  maxTokensFloor: number;
-  rtkLinesCap: number;
+  dlpEnabled: boolean;
+}
+
+export interface HealthGateRejection {
+  at: number | null;
+  kind: string;
+  status: number | null;
+  logId: string | null;
+  model: string | null;
+  shapeOk?: boolean;
+  missing?: string[];
+}
+
+export interface HealthGateStatus {
+  status: "ip-blocked" | "throttled" | "open";
+  ipBlockedSince: number | null;
+  throttledUntil: number | null;
+  cooldownMs: number;
+  anchors: {
+    tools: string[];
+    headers: string[];
+  };
+  lastRejection: HealthGateRejection | null;
+  lastUpstreamError: HealthUpstreamError | null;
+}
+
+export interface HealthUpstreamError {
+  at: number | null;
+  status: number | null;
+  model: string | null;
+  logId: string | null;
+  cfRay: string | null;
+  cfPlacement: string | null;
+}
+
+export interface EgressPoolHealthEntry {
+  id: string;
+  label: string;
+  host: string;
+  enabled: boolean;
+  weight: number;
+  state: "disabled" | "cooling" | "ready" | string;
+  cooldownMsLeft: number;
+  cooldownUntil: number;
+  failures: number;
+  lastError: string | null;
+  lastOkAt: number | null;
+  lastUsedAt: number | null;
+}
+
+export interface EgressHealthDescription {
+  mode: string;
+  proxy: string;
+  hasCredentials: boolean;
+  source: string;
+  locked: boolean;
+  configPath: string;
+  error: string | null;
+  pool: {
+    active: boolean;
+    size: number;
+    enabled: number;
+    ready: number;
+    cooling: number;
+    strategy: string;
+    source: string;
+    cooldownMs: number;
+    maxCooldownMs: number;
+    error: string | null;
+    entries: EgressPoolHealthEntry[];
+  };
 }
 
 export interface HealthResponse {
   status: string;
+  provider: string;
+  service: string;
   version: string;
-  identity: any;
-  tunnel?: {
-    running: boolean;
-    url?: string;
+  runtime: string;
+  tls: string;
+  framework: string;
+  uptimeSeconds: number;
+  discoveredModels: number;
+  auth: { required: boolean };
+  authRequired: boolean;
+  endpoint: {
+    publicUrl: string;
+    tunnel: boolean;
   };
-  proxy?: {
+  providers: {
+    opencode: {
+      status: string;
+      type: string;
+      diagnostics: string;
+    };
+    codebuddy: {
+      status: string;
+      models: number;
+    };
+  };
+  codebuddy: {
+    supported: boolean;
     configured: boolean;
-    url?: string;
+    endpoint: string;
+    models: string[];
   };
-  codebuddy?: {
-    connected: boolean;
-    account?: string;
-    modelCount?: number;
+  egress: {
+    mode: string;
+    proxy: EgressHealthDescription;
   };
-  tokensaver?: TokenSaverConfig;
-  customProvidersCount?: number;
-  requiresApiKey: boolean;
-  boringSslParity?: boolean;
+  tokensaver: TokenSaverHealthSummary;
+  identity: {
+    userAgent: string;
+    updateMode: string;
+    sourceTag: string | null;
+    versionFloor: string | null;
+    lastCheckAgeMs: number | null;
+    ttlMs: number;
+    lastError: string | null;
+    release: unknown;
+    available: unknown;
+    gate: HealthGateStatus;
+  };
+  lastUpstreamError: HealthUpstreamError | null;
 }
 
 export type ProxyPoolStrategy = "round-robin" | "failover" | "random";

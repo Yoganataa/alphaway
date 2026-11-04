@@ -13,6 +13,33 @@ import { getCodeBuddyApiKey } from "../core/codebuddy-credentials";
 
 export const healthRoute = new Hono();
 
+function publicUpstreamError(value: any) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    at: Number.isFinite(value.at) ? value.at : null,
+    status: Number.isInteger(value.status) ? value.status : Number.isInteger(value.statusCode) ? value.statusCode : null,
+    model: typeof value.model === "string" ? value.model.slice(0, 200) : null,
+    logId: typeof value.logId === "string" ? value.logId.slice(0, 128) : null,
+    cfRay: typeof value.cfRay === "string" ? value.cfRay.slice(0, 128) : null,
+    cfPlacement: typeof value.cfPlacement === "string" ? value.cfPlacement.slice(0, 128) : null,
+  };
+}
+
+function publicGateRejection(value: any) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    at: Number.isFinite(value.at) ? value.at : null,
+    kind: typeof value.kind === "string" ? value.kind.slice(0, 64) : "upstream-rejection",
+    status: Number.isInteger(value.status) ? value.status : null,
+    logId: typeof value.logId === "string" ? value.logId.slice(0, 128) : null,
+    model: typeof value.model === "string" ? value.model.slice(0, 200) : null,
+    ...(typeof value.shapeOk === "boolean" ? { shapeOk: value.shapeOk } : {}),
+    ...(Array.isArray(value.missing)
+      ? { missing: value.missing.filter((item: unknown) => typeof item === "string").slice(0, 20) }
+      : {}),
+  };
+}
+
 function getPublicEndpoint(): string {
   const raw = (
     process.env.PUBLIC_URL ||
@@ -40,6 +67,7 @@ healthRoute.get("/health", (c) => {
 
   return c.json({
     status: "ok",
+    uptimeSeconds: Math.floor(process.uptime()),
     provider: "alphaway",
     service: "alphaway",
     version: "0.0.1",
@@ -57,13 +85,12 @@ healthRoute.get("/health", (c) => {
     },
     providers: {
       opencode: {
-        status: "online",
+        status: "registered",
         type: "free-tier",
-        diagnostics: opencode.getGateDiagnostic() || "healthy",
+        diagnostics: opencode.getGateDiagnostic() ? "upstream-gate-rejection-recorded" : "healthy",
       },
       codebuddy: {
-        status: codebuddyKey ? "connected" : "unauthenticated",
-        user: codebuddy.extractJwtSub(codebuddyKey) || null,
+        status: codebuddyKey ? "configured" : "not-configured",
         models: codebuddy.CODEBUDDY_MODELS.length,
       },
     },
@@ -72,7 +99,6 @@ healthRoute.get("/health", (c) => {
       configured: Boolean(codebuddyKey),
       endpoint: process.env.CODEBUDDY_INTL_URL || codebuddy.CODEBUDDY_INTL_URL,
       models: codebuddy.CODEBUDDY_MODELS.map((m: any) => m.id),
-      user: codebuddy.extractJwtSub(codebuddyKey) || null,
     },
     egress: {
       mode: proxyState.mode.includes("pool")
@@ -84,7 +110,13 @@ healthRoute.get("/health", (c) => {
             : "direct",
       proxy: proxyState,
     },
-    tokensaver: tokensaver.getConfig(),
+    // /health is public. Never include custom SOUL prompts or local paths here.
+    tokensaver: {
+      rtkEnabled: tokensaver.getConfig().rtkEnabled,
+      cavemanEnabled: tokensaver.getConfig().cavemanEnabled,
+      adhdEnabled: tokensaver.getConfig().adhdEnabled,
+      dlpEnabled: tokensaver.getConfig().dlpEnabled,
+    },
     identity: {
       userAgent: idState.userAgent,
       updateMode: idState.updateMode,
@@ -92,7 +124,7 @@ healthRoute.get("/health", (c) => {
       versionFloor: idState.versionFloor,
       lastCheckAgeMs: idState.lastCheckTime ? Date.now() - idState.lastCheckTime : null,
       ttlMs: idState.ttlMs,
-      lastError: idState.lastRefreshError,
+      lastError: idState.lastRefreshError ? "Identity refresh failed" : null,
       release: idState.release,
       available: idState.available,
       gate: {
@@ -101,10 +133,10 @@ healthRoute.get("/health", (c) => {
           tools: identity.GATE_ANCHOR_TOOL_NAMES.slice(),
           headers: identity.GATE_ANCHOR_HEADER_NAMES.slice(),
         },
-        lastRejection: opencode.getGateDiagnostic() || null,
-        lastUpstreamError: opencode.getLastUpstreamError() || null,
+        lastRejection: publicGateRejection(opencode.getGateDiagnostic()),
+        lastUpstreamError: publicUpstreamError(opencode.getLastUpstreamError()),
       },
     },
-    lastUpstreamError: opencode.getLastUpstreamError() || null,
+    lastUpstreamError: publicUpstreamError(opencode.getLastUpstreamError()),
   });
 });

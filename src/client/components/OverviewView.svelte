@@ -34,7 +34,8 @@
     }
   }
 
-  const baseUrl = "http://127.0.0.1:20129/v1";
+  const origin = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:20129";
+  const baseUrl = `${origin}/v1`;
   const apiKey = $derived(getActiveApiKey());
 
   const snippets = $derived({
@@ -45,7 +46,7 @@
     "model": "mimo-v2.6-flash-free",
     "messages": [{"role": "user", "content": "Hello AlphaWay!"}]
   }'`,
-    anthropic: `curl -s http://127.0.0.1:20129/v1/messages \\
+    anthropic: `curl -s ${origin}/v1/messages \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${apiKey}" \\
   -d '{
@@ -53,7 +54,7 @@
     "messages": [{"role": "user", "content": "Hello via Claude format!"}],
     "max_tokens": 1024
   }'`,
-    responses: `curl -s http://127.0.0.1:20129/response \\
+    responses: `curl -s ${origin}/response \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${apiKey}" \\
   -d '{
@@ -114,10 +115,10 @@ console.log(completion.choices[0].message.content);`,
   // Safe string formatting for egress
   const egressProxyDisplay = $derived.by(() => {
     if (!health?.egress) return "Direct Local Connection";
-    if (health.egress.mode === "direct" || !health.egress.proxy) return "Direct Local Connection";
-    if (typeof health.egress.proxy === "string") return health.egress.proxy;
-    if (typeof health.egress.proxy === "object" && health.egress.proxy.url) return health.egress.proxy.url;
-    return "Direct Local Connection";
+    if (health.egress.mode === "direct") return "Direct Local Connection";
+    const proxy = health.egress.proxy;
+    if (proxy.mode === "pool") return `${proxy.pool.ready}/${proxy.pool.enabled} pool entries ready`;
+    return proxy.proxy || "Proxy configured";
   });
 </script>
 
@@ -143,14 +144,16 @@ console.log(completion.choices[0].message.content);`,
     <Card padding="md" hover>
       <div class="flex items-center justify-between text-xs text-text-muted mb-2">
         <span class="font-medium">Upstream Gate</span>
-        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="w-2 h-2 rounded-full {health?.identity?.gate?.status === 'open' ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
       </div>
       <div class="text-lg font-bold text-text-main tracking-tight flex items-center gap-2">
-        <span>GATE OPEN</span>
-        <Badge tone="success" size="sm">Active</Badge>
+        <span>{(health?.identity?.gate?.status || "unknown").toUpperCase()}</span>
+        <Badge tone={health?.identity?.gate?.status === "open" ? "success" : "warning"} size="sm">
+          {health?.identity?.gate?.status === "open" ? "Ready" : "Restricted"}
+        </Badge>
       </div>
       <p class="text-xs text-text-muted mt-1 font-mono">
-        Active Anchors: {Object.values(health?.providers?.opencode?.gate?.anchors || {}).filter(Boolean).length || 5}/5
+        Retry cooldown: {health?.identity?.gate?.cooldownMs ?? 0}ms
       </p>
     </Card>
 
@@ -168,17 +171,17 @@ console.log(completion.choices[0].message.content);`,
       </p>
     </Card>
 
-    <!-- Card 4: Active Free Models -->
+    <!-- Card 4: Model Catalog -->
     <Card padding="md" hover>
       <div class="flex items-center justify-between text-xs text-text-muted mb-2">
-        <span class="font-medium">Active Free Models</span>
+        <span class="font-medium">Model Catalog</span>
         <span class="w-2 h-2 rounded-full bg-purple-500"></span>
       </div>
       <div class="text-lg font-bold text-text-main tracking-tight">
-        {health?.discoveredModels || (health?.providers?.opencode?.freeModels?.length || 0) + (health?.providers?.codebuddy?.models || 0)} Models
+        {(health?.discoveredModels ?? 0) + (health?.providers?.codebuddy?.models ?? 0)} Models
       </div>
       <p class="text-xs text-text-muted mt-1 font-mono">
-        {health?.discoveredModels || 0} OpenCode &middot; {health?.providers?.codebuddy?.models || 0} CodeBuddy
+        {health?.discoveredModels ?? 0} OpenCode &middot; {health?.providers?.codebuddy?.models ?? 0} CodeBuddy catalog entries
       </p>
     </Card>
   </div>
@@ -356,9 +359,9 @@ console.log(completion.choices[0].message.content);`,
         <span class="material-symbols-outlined text-[16px] text-text-muted">memory</span>
       </div>
       <div class="text-sm font-semibold text-text-main font-mono">
-        bun/1.4.4 + Hono.js
+        {health?.runtime || "Bun"} · {health?.framework || "Hono.js"}
       </div>
-      <p class="text-[11px] text-emerald-400 font-medium">BoringSSL Zero-Drift Engine</p>
+      <p class="text-[11px] text-emerald-400 font-medium">{health?.tls || "TLS details unavailable"}</p>
     </Card>
 
     <!-- System Uptime -->
@@ -368,9 +371,9 @@ console.log(completion.choices[0].message.content);`,
         <span class="material-symbols-outlined text-[16px] text-text-muted">schedule</span>
       </div>
       <div class="text-sm font-semibold text-text-main font-mono">
-        {Math.floor((health?.uptime || 0) / 60)}m {Math.floor((health?.uptime || 0) % 60)}s
+        {Math.floor((health?.uptimeSeconds || 0) / 60)}m {Math.floor((health?.uptimeSeconds || 0) % 60)}s
       </div>
-      <p class="text-[11px] text-text-muted">Active Background Service</p>
+      <p class="text-[11px] text-text-muted">Current AlphaWay process uptime</p>
     </Card>
 
     <!-- Daemon & Tunnel -->
@@ -380,10 +383,10 @@ console.log(completion.choices[0].message.content);`,
         <span class="material-symbols-outlined text-[16px] text-text-muted">cloud_done</span>
       </div>
       <div class="text-sm font-semibold text-text-main">
-        {health?.tunnel?.url ? "Cloudflare Tunnel Active" : "Standalone · Local Only"}
+        {health?.endpoint?.tunnel ? "Public endpoint configured" : "Local endpoint only"}
       </div>
       <p class="text-[11px] text-text-muted truncate">
-        {health?.tunnel?.url || "127.0.0.1:20129"}
+        {health?.endpoint?.publicUrl || "http://127.0.0.1:20129/v1"}
       </p>
     </Card>
   </div>

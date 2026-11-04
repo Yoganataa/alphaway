@@ -8,10 +8,20 @@
 
   let config = $state<TokenSaverConfig>({
     rtkEnabled: true,
-    rtkMaxLines: 100,
+    rtkMaxLines: 250,
+    rtkDeduplicate: true,
     cavemanEnabled: false,
-    cavemanLevel: "medium",
+    cavemanLevel: "full",
+    cavemanLang: "auto",
+    cavemanAutoClarity: true,
+    cavemanInputMode: false,
     adhdEnabled: false,
+    adhdLevel: "full",
+    soulEnabled: false,
+    soulMode: "auto",
+    soulPreset: "atlas",
+    soulFilePath: "",
+    soulCustomContent: "",
     dlpEnabled: true,
     maskSecrets: true,
     maskPaths: true,
@@ -280,7 +290,7 @@
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle">
       <div>
         <h3 class="text-sm font-semibold text-text-main">Compression & Security Sandbox</h3>
-        <p class="text-xs text-text-muted">Test prompt savings, secret masking, and exfiltration defense in real-time</p>
+        <p class="text-xs text-text-muted">Client-side illustration only. It does not call the gateway or reproduce the provider tokenizer and full runtime Security Rules pipeline.</p>
       </div>
 
       <Button
@@ -291,7 +301,7 @@
         onclick={runCompressionSandbox}
       >
         <span class="material-symbols-outlined text-[16px]">play_arrow</span>
-        <span>Run Test Compression</span>
+        <span>Run Local Preview</span>
       </Button>
     </div>
 
@@ -299,11 +309,11 @@
     {#if savingsPercent > 0}
       <div class="grid grid-cols-3 gap-3 p-3 rounded-[10px] bg-brand-500/10 border border-brand-500/25 font-mono text-center">
         <div>
-          <span class="text-[10px] text-text-muted block">Original Tokens</span>
+          <span class="text-[10px] text-text-muted block">Estimated Input Tokens</span>
           <strong class="text-xs text-text-main">~{originalTokens}</strong>
         </div>
         <div>
-          <span class="text-[10px] text-text-muted block">Compressed Tokens</span>
+          <span class="text-[10px] text-text-muted block">Estimated Output Tokens</span>
           <strong class="text-xs text-brand-400">~{compressedTokens}</strong>
         </div>
         <div>
@@ -315,7 +325,7 @@
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="space-y-1.5">
-        <label for="sandbox-input" class="text-xs text-text-muted font-medium">Input Prompt (Includes Secrets & Exfiltration)</label>
+        <label for="sandbox-input" class="text-xs text-text-muted font-medium">Preview Input</label>
         <textarea
           id="sandbox-input"
           bind:value={sandboxInput}
@@ -325,14 +335,14 @@
       </div>
 
       <div class="space-y-1.5">
-        <label for="sandbox-output" class="text-xs text-text-muted font-medium">Secured & Compressed Output</label>
+        <label for="sandbox-output" class="text-xs text-text-muted font-medium">Local Preview Output</label>
         <textarea
           id="sandbox-output"
           readonly
           value={sandboxOutput}
           rows="7"
           class="w-full p-3 rounded-[10px] bg-surface-2 border border-border-subtle text-xs text-emerald-300 font-mono focus:outline-none resize-none leading-relaxed"
-          placeholder="Run compression to see output..."
+          placeholder="Run the local preview to see the illustrative output..."
         ></textarea>
       </div>
     </div>
