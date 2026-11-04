@@ -60,6 +60,42 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 15000);
 
+  it("searches implemented pages in the command palette and handles empty keyboard results", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    await page.keyboard.press("Control+k");
+    const search = page.getByRole("textbox", { name: "Search commands and pages" });
+    await search.waitFor({ state: "visible", timeout: 10000 });
+
+    // Query changes reset the selected row; Enter opens the single matching page.
+    await search.press("ArrowDown");
+    await search.press("ArrowDown");
+    await search.fill("Plans");
+    const plansOption = page.locator("#command-option-plans");
+    await plansOption.waitFor({ state: "visible", timeout: 10000 });
+    expect(await plansOption.getAttribute("aria-selected")).toBe("true");
+    await search.press("Enter");
+    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+    // Backend-gap pages must not appear as working navigation commands.
+    await page.keyboard.press("Control+k");
+    const reopenedSearch = page.getByRole("textbox", { name: "Search commands and pages" });
+    await reopenedSearch.fill("Terminal");
+    await page.getByRole("status", { name: "No implemented pages or actions match this search." }).waitFor({ state: "visible" });
+    await reopenedSearch.press("ArrowDown");
+    await reopenedSearch.press("ArrowUp");
+    await reopenedSearch.press("Enter");
+    expect(await reopenedSearch.isVisible()).toBe(true);
+
+    // The real Proxy Pools page is searchable and navigable as well.
+    await reopenedSearch.fill("Proxy Pools");
+    const proxyOption = page.locator("#command-option-proxy");
+    await proxyOption.waitFor({ state: "visible", timeout: 10000 });
+    await reopenedSearch.press("Enter");
+    await page.getByText("Egress Proxy Configuration", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+  }, 20000);
+
   it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
     const { page, baseURL } = dashboard;
     const expectedTls = "AlphaWay E2E TLS profile sentinel";
