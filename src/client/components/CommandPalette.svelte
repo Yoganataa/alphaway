@@ -159,12 +159,12 @@
     {
       id: "copy-baseurl",
       label: "Copy OpenAI Base URL",
-      description: "http://127.0.0.1:20129/v1",
+      description: "Copy the Base URL for this dashboard origin",
       icon: "content_copy",
       category: "Actions",
       action: () => {
         if (typeof navigator !== "undefined") {
-          navigator.clipboard.writeText("http://127.0.0.1:20129/v1");
+          navigator.clipboard.writeText(`${window.location.origin}/v1`);
           notifications.success("OpenAI Base URL copied to clipboard");
         }
         isOpen = false;
