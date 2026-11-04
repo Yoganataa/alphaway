@@ -74,27 +74,118 @@ export interface TokenSaverConfig {
   rtkLinesCap: number;
 }
 
+export interface HealthGateStatus {
+  status: "ip-blocked" | "throttled" | "open";
+  ipBlockedSince: number | null;
+  throttledUntil: number | null;
+  cooldownMs: number;
+  anchors: {
+    tools: string[];
+    headers: string[];
+  };
+  lastRejection: unknown;
+  lastUpstreamError: HealthUpstreamError | null;
+}
+
+export interface HealthUpstreamError {
+  at: number;
+  statusCode: number;
+  model: string;
+  error: string;
+  logId: string | null;
+}
+
+export interface EgressPoolHealthEntry {
+  id: string;
+  label: string;
+  host: string;
+  enabled: boolean;
+  weight: number;
+  state: "disabled" | "cooling" | "ready" | string;
+  cooldownMsLeft: number;
+  cooldownUntil: number;
+  failures: number;
+  lastError: string | null;
+  lastOkAt: number | null;
+  lastUsedAt: number | null;
+}
+
+export interface EgressHealthDescription {
+  mode: string;
+  proxy: string;
+  hasCredentials: boolean;
+  source: string;
+  locked: boolean;
+  configPath: string;
+  error: string | null;
+  pool: {
+    active: boolean;
+    size: number;
+    enabled: number;
+    ready: number;
+    cooling: number;
+    strategy: string;
+    source: string;
+    cooldownMs: number;
+    maxCooldownMs: number;
+    error: string | null;
+    entries: EgressPoolHealthEntry[];
+  };
+}
+
 export interface HealthResponse {
   status: string;
+  provider: string;
+  service: string;
   version: string;
-  identity: any;
-  tunnel?: {
-    running: boolean;
-    url?: string;
+  runtime: string;
+  tls: string;
+  framework: string;
+  uptimeSeconds: number;
+  discoveredModels: number;
+  auth: { required: boolean };
+  authRequired: boolean;
+  endpoint: {
+    publicUrl: string;
+    tunnel: boolean;
   };
-  proxy?: {
+  providers: {
+    opencode: {
+      status: string;
+      type: string;
+      diagnostics: string;
+    };
+    codebuddy: {
+      status: "connected" | "unauthenticated" | string;
+      user: string | null;
+      models: number;
+    };
+  };
+  codebuddy: {
+    supported: boolean;
     configured: boolean;
-    url?: string;
+    endpoint: string;
+    models: string[];
+    user: string | null;
   };
-  codebuddy?: {
-    connected: boolean;
-    account?: string;
-    modelCount?: number;
+  egress: {
+    mode: string;
+    proxy: EgressHealthDescription;
   };
-  tokensaver?: TokenSaverConfig;
-  customProvidersCount?: number;
-  requiresApiKey: boolean;
-  boringSslParity?: boolean;
+  tokensaver: TokenSaverConfig;
+  identity: {
+    userAgent: string;
+    updateMode: string;
+    sourceTag: string | null;
+    versionFloor: string | null;
+    lastCheckAgeMs: number | null;
+    ttlMs: number;
+    lastError: string | null;
+    release: unknown;
+    available: unknown;
+    gate: HealthGateStatus;
+  };
+  lastUpstreamError: HealthUpstreamError | null;
 }
 
 export interface ProxyStatus {
