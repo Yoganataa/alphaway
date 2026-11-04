@@ -3,86 +3,134 @@
   import Card from "../lib/ui/Card.svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
-  import Toggle from "../lib/ui/Toggle.svelte";
   import Modal from "../lib/ui/Modal.svelte";
-  import { fetchProxyStatus, updateProxy, testProxy, type ProxyStatus, type ProxyTestResult } from "../lib/api";
+  import {
+    fetchProxyStatus,
+    updateProxy,
+    updateProxyPool,
+    testProxy,
+    testProxyPool,
+  } from "../lib/api";
+  import type {
+    ProxyStatus,
+    ProxyTestResult,
+    ProxyPoolEntryStatus,
+    ProxyPoolStrategy,
+    ProxyPoolTestEntryResult,
+  } from "../lib/types";
   import { notifications } from "../lib/notifications";
 
-  interface PoolEntry {
-    id: string;
-    name: string;
-    url: string;
-    protocol: "http" | "https" | "socks5";
-    isActive: boolean;
-    latencyMs?: number;
-    status: "ok" | "testing" | "error" | "untested";
-    lastTestedAt?: string;
+  interface EditablePoolEntry extends ProxyPoolEntryStatus {
+    url?: string;
+    token?: string;
   }
 
-  let proxyStatus = $state<ProxyStatus>({
-    url: null,
-    mode: "direct",
-    locked: false,
-    source: "none",
-  });
-
-  let proxyInput = $state<string>("");
-  let isTesting = $state<boolean>(false);
-  let isSaving = $state<boolean>(false);
+  let proxyStatus = $state<ProxyStatus | null>(null);
+  let pools = $state<EditablePoolEntry[]>([]);
+  let rotationMode = $state<ProxyPoolStrategy>("round-robin");
+  let proxyInput = $state("");
+  let isLoading = $state(true);
+  let isTesting = $state(false);
+  let isSaving = $state(false);
+  let isPoolTesting = $state(false);
   let testResult = $state<ProxyTestResult | null>(null);
+  let poolTestResults = $state<Record<string, ProxyPoolTestEntryResult>>({});
   let statusMessage = $state<string | null>(null);
-
-  // Pool state
-  let rotationMode = $state<"round-robin" | "latency-first" | "failover">("latency-first");
-  let pools = $state<PoolEntry[]>([
-    {
-      id: "pool-1",
-      name: "Cloudflare Worker Relay (Global)",
-      url: "https://cf-relay.opencode.dev",
-      protocol: "https",
-      isActive: true,
-      latencyMs: 84,
-      status: "ok",
-      lastTestedAt: "Just now",
-    },
-    {
-      id: "pool-2",
-      name: "Local SOCKS5 Tunnel",
-      url: "socks5://127.0.0.1:10808",
-      protocol: "socks5",
-      isActive: false,
-      status: "untested",
-    },
-  ]);
 
   let isAddModalOpen = $state(false);
   let isBulkModalOpen = $state(false);
   let newName = $state("");
   let newUrl = $state("");
+  let newToken = $state("");
   let bulkInput = $state("");
 
-  onMount(async () => {
-    try {
-      proxyStatus = await fetchProxyStatus();
-      if (proxyStatus.url) proxyInput = proxyStatus.url;
-    } catch {}
+  onMount(() => {
+    void refreshProxyStatus();
   });
+
+  async function refreshProxyStatus() {
+    isLoading = true;
+    try {
+      const status = await fetchProxyStatus();
+      proxyStatus = status;
+      pools = status.pool.entries;
+      rotationMode = status.pool.strategy;
+    } catch (error: any) {
+      notifications.error(`Unable to load proxy configuration: ${error.message}`);
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function newPoolEntry(urlValue: string, labelValue: string, tokenValue = ""): EditablePoolEntry {
+    const parsed = new URL(urlValue);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("Only HTTP and HTTPS proxy URLs are supported. SOCKS5 is not supported by Bun fetch.");
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    const relay = hostname.endsWith(".workers.dev") || hostname.endsWith(".pages.dev");
+    const id = `proxy-${crypto.randomUUID()}`;
+    return {
+      id,
+      label: labelValue.trim() || parsed.host,
+      host: parsed.host,
+      kind: relay ? "relay" : parsed.protocol.slice(0, -1) as "http" | "https",
+      enabled: true,
+      weight: 1,
+      state: "ready",
+      cooldownMsLeft: 0,
+      cooldownUntil: 0,
+      failures: 0,
+      lastError: null,
+      lastOkAt: null,
+      lastUsedAt: null,
+      url: urlValue.trim(),
+      ...(tokenValue.trim() ? { token: tokenValue.trim() } : {}),
+    };
+  }
+
+  async function savePool(nextEntries: EditablePoolEntry[] = pools): Promise<boolean> {
+    isSaving = true;
+    statusMessage = null;
+    try {
+      const entries = nextEntries.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        enabled: entry.enabled,
+        weight: entry.weight,
+        ...(entry.url ? { url: entry.url } : {}),
+        ...(entry.token ? { token: entry.token } : {}),
+      }));
+      const updated = await updateProxyPool({ entries, strategy: rotationMode });
+      proxyStatus = updated;
+      pools = updated.pool.entries;
+      poolTestResults = {};
+      statusMessage = "Proxy pool configuration saved.";
+      notifications.success(statusMessage);
+      return true;
+    } catch (error: any) {
+      statusMessage = `Error: ${error.message}`;
+      notifications.error(statusMessage);
+      return false;
+    } finally {
+      isSaving = false;
+    }
+  }
 
   async function handleTestProxy() {
     if (!proxyInput.trim()) return;
     isTesting = true;
     testResult = null;
-    statusMessage = null;
     try {
       testResult = await testProxy(proxyInput.trim());
       if (testResult.ok) {
-        notifications.success(`Proxy reachable (${testResult.latencyMs || 65}ms)`);
+        notifications.success(`Proxy reachable (${testResult.latencyMs ?? "latency unavailable"}ms)`);
       } else {
-        notifications.error(`Proxy check failed: ${testResult.error || "Unknown"}`);
+        notifications.error(`Proxy check failed: ${testResult.error || "Unknown error"}`);
       }
-    } catch (err: any) {
-      testResult = { ok: false, error: err.message };
-      notifications.error(`Proxy check failed: ${err.message}`);
+    } catch (error: any) {
+      testResult = { ok: false, error: error.message };
+      notifications.error(`Proxy check failed: ${error.message}`);
     } finally {
       isTesting = false;
     }
@@ -92,357 +140,353 @@
     isSaving = true;
     statusMessage = null;
     try {
-      await updateProxy(proxyInput.trim());
-      proxyStatus = await fetchProxyStatus();
-      statusMessage = proxyInput.trim() ? "Proxy updated successfully!" : "Switched to Direct Egress.";
+      proxyStatus = await updateProxy(proxyInput.trim());
+      statusMessage = proxyInput.trim() ? "Single proxy fallback updated." : "Single proxy fallback cleared.";
       notifications.success(statusMessage);
-      setTimeout(() => (statusMessage = null), 3000);
-    } catch (err: any) {
-      statusMessage = `Error: ${err.message}`;
+    } catch (error: any) {
+      statusMessage = `Error: ${error.message}`;
       notifications.error(statusMessage);
     } finally {
       isSaving = false;
     }
   }
 
-  async function handleClearProxy() {
-    proxyInput = "";
-    await handleSaveProxy();
-  }
-
-  function handleAddSingle() {
+  async function handleAddSingle() {
     if (!newUrl.trim()) return;
-    const isSocks = newUrl.startsWith("socks");
-    const entry: PoolEntry = {
-      id: `proxy-${Date.now()}`,
-      name: newName.trim() || `Proxy ${pools.length + 1}`,
-      url: newUrl.trim(),
-      protocol: isSocks ? "socks5" : newUrl.startsWith("https") ? "https" : "http",
-      isActive: true,
-      status: "untested",
-    };
-    pools.push(entry);
-    isAddModalOpen = false;
-    newName = "";
-    newUrl = "";
-    notifications.success("Added proxy to rotation pool");
-  }
-
-  function handleBulkImport() {
-    const lines = bulkInput.split("\n").map((l) => l.trim()).filter(Boolean);
-    let count = 0;
-    for (const line of lines) {
-      const parts = line.split(/[,\s\t]+/);
-      const url = parts[0];
-      if (url.startsWith("http") || url.startsWith("socks")) {
-        pools.push({
-          id: `proxy-${Date.now()}-${count}`,
-          name: parts[1] || `Egress Node ${pools.length + 1}`,
-          url,
-          protocol: url.startsWith("socks") ? "socks5" : url.startsWith("https") ? "https" : "http",
-          isActive: true,
-          status: "untested",
-        });
-        count++;
-      }
-    }
-    isBulkModalOpen = false;
-    bulkInput = "";
-    notifications.success(`Imported ${count} proxies into rotation pool`);
-  }
-
-  async function pingPoolEntry(entry: PoolEntry) {
-    entry.status = "testing";
     try {
-      const res = await testProxy(entry.url);
-      if (res.ok) {
-        entry.status = "ok";
-        entry.latencyMs = res.latencyMs || Math.floor(Math.random() * 50) + 40;
-        entry.lastTestedAt = "Just now";
-        notifications.success(`${entry.name}: OK (${entry.latencyMs}ms)`);
-      } else {
-        entry.status = "error";
-        notifications.error(`${entry.name}: Failed (${res.error || 'Timeout'})`);
-      }
-    } catch {
-      entry.status = "error";
+      const entry = newPoolEntry(newUrl.trim(), newName, newToken);
+      const saved = await savePool([...pools, entry]);
+      if (!saved) return;
+      isAddModalOpen = false;
+      newName = "";
+      newUrl = "";
+      newToken = "";
+    } catch (error: any) {
+      notifications.error(error.message);
     }
   }
 
-  async function pingAllPools() {
-    notifications.info("Checking latency across all rotation pool nodes...");
-    for (const p of pools) {
-      await pingPoolEntry(p);
+  async function handleBulkImport() {
+    const lines = bulkInput.split("\n").map((line) => line.trim()).filter(Boolean);
+    const additions: EditablePoolEntry[] = [];
+    try {
+      for (const line of lines) {
+        const [url, ...labelParts] = line.split(/\s+/);
+        additions.push(newPoolEntry(url, labelParts.join(" ")));
+      }
+      if (additions.length === 0) return;
+      const saved = await savePool([...pools, ...additions]);
+      if (!saved) return;
+      isBulkModalOpen = false;
+      bulkInput = "";
+      notifications.success(`Imported ${additions.length} proxy entr${additions.length === 1 ? "y" : "ies"}.`);
+    } catch (error: any) {
+      notifications.error(error.message);
+    }
+  }
+
+  async function handleRemoveEntry(entry: EditablePoolEntry) {
+    const next = pools.filter((item) => item.id !== entry.id);
+    await savePool(next);
+  }
+
+  async function handleToggleEntry(entry: EditablePoolEntry, enabled: boolean) {
+    const next = pools.map((item) => item.id === entry.id ? { ...item, enabled } : item);
+    await savePool(next);
+  }
+
+  async function handleStrategyChange() {
+    await savePool();
+  }
+
+  async function runPoolTest(entryId?: string) {
+    if (entryId) {
+      poolTestResults = { ...poolTestResults, [entryId]: { id: entryId, label: "Testing", host: null, skipped: true, reason: "Testing…" } };
+    }
+    isPoolTesting = true;
+    try {
+      const result = await testProxyPool({ timeoutMs: 15000, ...(entryId ? { entryId } : {}) });
+      poolTestResults = {
+        ...poolTestResults,
+        ...Object.fromEntries(result.entries.map((entry) => [entry.id, entry])),
+      };
+      await refreshProxyStatus();
+      if (result.error) throw new Error(result.error);
+      if (result.ok) {
+        notifications.success(entryId ? "Proxy entry probe succeeded." : "At least one enabled pool entry passed its probe.");
+      } else {
+        notifications.error(entryId ? "Proxy entry probe did not pass." : "No enabled pool entry passed its probe.");
+      }
+    } catch (error: any) {
+      notifications.error(`Proxy pool probe failed: ${error.message}`);
+    } finally {
+      isPoolTesting = false;
     }
   }
 </script>
 
 <div class="space-y-6">
-  <!-- Egress Proxy Primary Card (Preserves Exact IDs for Tests) -->
   <Card padding="md" elev class="space-y-6">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
       <div>
         <div class="flex items-center gap-2">
           <h2 class="text-lg font-bold text-text-main tracking-tight">Egress Proxy Configuration</h2>
-          <Badge tone={proxyStatus.mode === "direct" ? "neutral" : "primary"} size="sm" dot>
-            {proxyStatus.mode === "direct" ? "Direct Connection" : "Proxy Routed"}
+          <Badge tone={proxyStatus?.mode === "direct" ? "neutral" : "primary"} size="sm" dot>
+            {proxyStatus?.mode === "pool" ? "Pool Routed" : proxyStatus?.mode === "proxy" ? "Single Proxy" : proxyStatus?.mode === "direct" ? "Direct Connection" : "Loading"}
           </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
-          Route all upstream inference and discovery requests through an egress tunnel to prevent IP fatigue.
+          Configure one fallback proxy or a persisted multi-egress pool. Runtime credentials are never returned to the browser.
         </p>
       </div>
-
-      <div class="flex items-center gap-2 font-mono text-xs">
-        <span class="px-2.5 py-1 rounded-[8px] bg-surface-2 text-text-muted border border-border capitalize">
-          Mode: {proxyStatus.mode}
-        </span>
-      </div>
+      <span class="text-xs px-2.5 py-1 rounded-[8px] bg-surface-2 text-text-muted border border-border font-mono">
+        Mode: {proxyStatus?.mode ?? "loading"}
+      </span>
     </div>
 
-    {#if proxyStatus.locked}
+    {#if proxyStatus?.locked}
       <div class="p-3.5 rounded-[10px] bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
-        Proxy is currently locked by the <code class="font-mono bg-black/40 px-1 py-0.5 rounded">UPSTREAM_PROXY_URL</code> environment variable.
+        Egress configuration is locked by an environment override. Update <code class="font-mono">UPSTREAM_PROXY_URL</code> or <code class="font-mono">UPSTREAM_PROXY_POOL</code> and restart AlphaWay.
       </div>
     {/if}
 
-    <!-- Single Active Proxy Form -->
-    <div class="space-y-4">
-      <div class="space-y-1.5">
-        <label for="proxy-url-input" class="text-xs font-semibold text-text-muted">Active Egress URL (HTTP / HTTPS / SOCKS5)</label>
-        <div class="flex flex-col sm:flex-row gap-3">
-          <input
-            id="proxy-url-input"
-            type="text"
-            bind:value={proxyInput}
-            placeholder="http://127.0.0.1:7890 or socks5://127.0.0.1:10808"
-            class="flex-1 px-3.5 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono focus:outline-hidden focus:border-brand-500"
-            disabled={proxyStatus.locked}
-          />
-          <div class="flex items-center gap-2">
-            <Button
-              id="proxy-test-btn"
-              variant="secondary"
-              size="sm"
-              onclick={handleTestProxy}
-              disabled={isTesting || !proxyInput.trim()}
-            >
-              <span class="material-symbols-outlined text-[16px] {isTesting ? 'animate-spin' : ''}">speed</span>
-              <span>{isTesting ? "Testing..." : "Test Latency"}</span>
-            </Button>
-            <Button
-              id="proxy-save-btn"
-              variant="primary"
-              size="sm"
-              onclick={handleSaveProxy}
-              disabled={isSaving || proxyStatus.locked}
-            >
-              <span class="material-symbols-outlined text-[16px]">save</span>
-              <span>{isSaving ? "Saving..." : "Save Active"}</span>
-            </Button>
-            {#if proxyInput.trim()}
-              <Button
-                variant="ghost"
-                size="sm"
-                onclick={handleClearProxy}
-                disabled={isSaving || proxyStatus.locked}
-                title="Revert to direct connection"
-              >
-                Clear
-              </Button>
+    <div class="space-y-3">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-semibold text-text-main">Single Proxy / Fallback</h3>
+          <p class="text-xs text-text-muted mt-0.5">
+            Current endpoint: {proxyStatus?.proxy || "Direct egress"}
+            {#if proxyStatus?.hasCredentials}
+              <span> · credentials configured (hidden)</span>
             {/if}
-          </div>
+          </p>
+        </div>
+        {#if proxyStatus?.source === "env"}
+          <Badge tone="warning" size="sm">Environment managed</Badge>
+        {:else if proxyStatus?.source === "database"}
+          <Badge tone="success" size="sm">SQLite persisted</Badge>
+        {/if}
+      </div>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <input
+          id="proxy-url-input"
+          type="password"
+          bind:value={proxyInput}
+          placeholder="Enter a replacement http(s)://[user:pass@]host:port"
+          class="flex-1 px-3.5 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono focus:outline-hidden focus:border-brand-500"
+          disabled={Boolean(proxyStatus?.locked) || isSaving}
+          autocomplete="new-password"
+        />
+        <div class="flex items-center gap-2">
+          <Button id="proxy-test-btn" variant="secondary" size="sm" onclick={handleTestProxy} disabled={isTesting || !proxyInput.trim()}>
+            <span class="material-symbols-outlined text-[16px] {isTesting ? 'animate-spin' : ''}">speed</span>
+            <span>{isTesting ? "Testing..." : "Test URL"}</span>
+          </Button>
+          <Button id="proxy-save-btn" variant="primary" size="sm" onclick={handleSaveProxy} disabled={isSaving || Boolean(proxyStatus?.locked)}>
+            <span class="material-symbols-outlined text-[16px]">save</span>
+            <span>{isSaving ? "Saving..." : "Save Fallback"}</span>
+          </Button>
+          {#if proxyInput.trim()}
+            <Button variant="ghost" size="sm" onclick={() => { proxyInput = ""; void handleSaveProxy(); }} disabled={isSaving || Boolean(proxyStatus?.locked)}>
+              Clear
+            </Button>
+          {/if}
         </div>
       </div>
 
-      {#if statusMessage}
-        <div class="p-3 rounded-[8px] bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
-          <span class="material-symbols-outlined text-[16px]">check_circle</span>
-          <span>{statusMessage}</span>
+      {#if testResult}
+        <div class="p-3.5 rounded-[8px] border text-xs flex items-center gap-2 font-mono {testResult.ok ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}">
+          <span>{testResult.ok ? "Connection verified" : testResult.error || "Probe failed"}</span>
+          {#if testResult.latencyMs !== undefined && testResult.latencyMs !== null}
+            <span>· {testResult.latencyMs} ms</span>
+          {/if}
         </div>
       {/if}
-
-      {#if testResult}
-        <div class="p-3.5 rounded-[8px] {testResult.ok ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'} border text-xs flex items-center gap-2 font-mono">
-          <span class="material-symbols-outlined text-[16px]">{testResult.ok ? 'verified' : 'error'}</span>
-          <span>
-            {testResult.ok ? `Connection verified! Egress Latency: ${testResult.latencyMs || 65}ms` : `Probe failed: ${testResult.error}`}
-          </span>
-        </div>
+      {#if statusMessage}
+        <p class="text-xs text-text-muted">{statusMessage}</p>
       {/if}
     </div>
   </Card>
 
-  <!-- Multi-Proxy Rotation Pool (9Router-Go Architecture) -->
   <Card padding="md" elev class="space-y-4">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-border-subtle">
       <div>
         <div class="flex items-center gap-2">
           <h3 class="text-sm font-bold text-text-main">Multi-Proxy Rotation Pool</h3>
-          <span class="text-xs text-text-muted font-mono">({pools.length} Nodes)</span>
+          <span class="text-xs text-text-muted font-mono">({pools.length} configured)</span>
         </div>
         <p class="text-xs text-text-muted">
-          Dynamic rotation across multiple egress relays with automatic failover and latency sorting.
+          Pool entries, strategy, and health are read from AlphaWay's persisted egress engine. HTTP, HTTPS, and configured relay endpoints are supported; SOCKS5 is rejected by the Bun runtime.
         </p>
       </div>
-
-      <div class="flex items-center gap-2">
-        <!-- Rotation Strategy Selector -->
+      <div class="flex items-center gap-2 flex-wrap">
         <select
           bind:value={rotationMode}
+          onchange={handleStrategyChange}
+          disabled={Boolean(proxyStatus?.locked) || isSaving}
           class="px-2.5 py-1.5 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-medium focus:outline-hidden"
         >
-          <option value="latency-first">Strategy: Latency-First (Fastest)</option>
           <option value="round-robin">Strategy: Round-Robin</option>
-          <option value="failover">Strategy: Failover-Only</option>
+          <option value="failover">Strategy: Failover</option>
+          <option value="random">Strategy: Weighted Random</option>
         </select>
-
-        <Button variant="secondary" size="xs" onclick={pingAllPools}>
-          <span class="material-symbols-outlined text-[14px]">network_check</span>
-          <span>Ping All</span>
+        <Button variant="secondary" size="xs" onclick={() => runPoolTest()} disabled={isPoolTesting || isLoading || pools.length === 0}>
+          <span class="material-symbols-outlined text-[14px] {isPoolTesting ? 'animate-spin' : ''}">network_check</span>
+          <span>{isPoolTesting ? "Probing..." : "Ping All"}</span>
         </Button>
-        <Button variant="secondary" size="xs" onclick={() => (isBulkModalOpen = true)}>
+        <Button variant="secondary" size="xs" onclick={() => (isBulkModalOpen = true)} disabled={Boolean(proxyStatus?.locked) || isSaving}>
           <span class="material-symbols-outlined text-[14px]">file_upload</span>
           <span>Bulk Import</span>
         </Button>
-        <Button variant="primary" size="xs" onclick={() => (isAddModalOpen = true)}>
+        <Button variant="primary" size="xs" onclick={() => (isAddModalOpen = true)} disabled={Boolean(proxyStatus?.locked) || isSaving}>
           <span class="material-symbols-outlined text-[14px]">add</span>
           <span>Add Node</span>
         </Button>
       </div>
     </div>
 
-    <!-- Pools Table -->
-    <div class="overflow-x-auto rounded-[10px] border border-border-subtle bg-surface-1 font-mono text-xs">
-      <table class="w-full text-left">
-        <thead class="bg-surface-2 text-text-muted uppercase tracking-wider border-b border-border-subtle">
-          <tr>
-            <th class="px-4 py-3 font-semibold font-sans">Name</th>
-            <th class="px-4 py-3 font-semibold font-sans">Protocol</th>
-            <th class="px-4 py-3 font-semibold font-sans">Node Endpoint URL</th>
-            <th class="px-4 py-3 font-semibold font-sans">Latency</th>
-            <th class="px-4 py-3 font-semibold font-sans">Status</th>
-            <th class="px-4 py-3 font-semibold font-sans text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-border-subtle">
-          {#each pools as p (p.id)}
-            <tr class="hover:bg-surface-2/40 transition-colors">
-              <td class="px-4 py-3 font-sans font-medium text-text-main">
-                {p.name}
-              </td>
-              <td class="px-4 py-3">
-                <span class="px-1.5 py-0.5 rounded-[4px] bg-surface-3 text-[10px] text-text-muted uppercase">
-                  {p.protocol}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-text-muted">
-                {p.url}
-              </td>
-              <td class="px-4 py-3">
-                {#if p.latencyMs}
-                  <span class="text-emerald-400 font-bold">{p.latencyMs}ms</span>
-                {:else}
-                  <span class="text-text-muted">—</span>
-                {/if}
-              </td>
-              <td class="px-4 py-3">
-                <Badge
-                  tone={p.status === 'ok' ? 'success' : p.status === 'error' ? 'error' : 'neutral'}
-                  size="sm"
-                  dot
-                >
-                  {p.status.toUpperCase()}
-                </Badge>
-              </td>
-              <td class="px-4 py-3 text-right font-sans">
-                <div class="flex items-center justify-end gap-1.5">
-                  <Button variant="ghost" size="xs" onclick={() => pingPoolEntry(p)}>
-                    Ping
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    class="text-red-400"
-                    onclick={() => {
-                      pools = pools.filter((x) => x.id !== p.id);
-                      notifications.info(`Removed ${p.name}`);
-                    }}
-                  >
-                    <span class="material-symbols-outlined text-[14px]">delete</span>
-                  </Button>
-                </div>
-              </td>
+    {#if proxyStatus?.pool.error}
+      <div class="p-3 rounded-[8px] bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+        {proxyStatus.pool.error}
+      </div>
+    {/if}
+
+    {#if isLoading}
+      <p class="p-6 text-center text-xs text-text-muted">Loading persisted proxy pool…</p>
+    {:else if pools.length === 0}
+      <div class="p-8 rounded-[12px] bg-surface-2 border border-border-subtle text-center space-y-2">
+        <p class="text-sm font-semibold text-text-main">No proxy pool entries configured</p>
+        <p class="text-xs text-text-muted">Add an HTTP(S) proxy or relay endpoint. AlphaWay will keep the pool empty until an entry is saved.</p>
+      </div>
+    {:else}
+      <div class="flex flex-wrap gap-3 text-xs text-text-muted">
+        <span>Enabled: {proxyStatus?.pool.enabled ?? 0}</span>
+        <span>Ready: {proxyStatus?.pool.ready ?? 0}</span>
+        <span>Cooling: {proxyStatus?.pool.cooling ?? 0}</span>
+        <span>Cooldown: {proxyStatus?.pool.cooldownMs ?? 0} ms</span>
+      </div>
+      <div class="overflow-x-auto rounded-[10px] border border-border-subtle bg-surface-1 font-mono text-xs">
+        <table class="w-full text-left">
+          <thead class="bg-surface-2 text-text-muted uppercase tracking-wider border-b border-border-subtle">
+            <tr>
+              <th class="px-4 py-3 font-semibold font-sans">Name</th>
+              <th class="px-4 py-3 font-semibold font-sans">Type</th>
+              <th class="px-4 py-3 font-semibold font-sans">Endpoint</th>
+              <th class="px-4 py-3 font-semibold font-sans">Last probe</th>
+              <th class="px-4 py-3 font-semibold font-sans">State</th>
+              <th class="px-4 py-3 font-semibold font-sans text-right">Actions</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody class="divide-y divide-border-subtle">
+            {#each pools as entry (entry.id)}
+              {@const probe = poolTestResults[entry.id]}
+              <tr class="hover:bg-surface-2/40 transition-colors">
+                <td class="px-4 py-3 font-sans font-medium text-text-main">
+                  {entry.label}
+                  <div class="text-[10px] text-text-subtle font-mono">weight {entry.weight}</div>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="px-1.5 py-0.5 rounded-[4px] bg-surface-3 text-[10px] text-text-muted uppercase">{entry.kind}</span>
+                </td>
+                <td class="px-4 py-3 text-text-muted">{entry.host || "—"}</td>
+                <td class="px-4 py-3 text-text-muted">
+                  {#if probe?.latencyMs !== undefined && probe?.latencyMs !== null}
+                    {probe.latencyMs} ms
+                  {:else if probe?.skipped}
+                    {probe.reason || "Skipped"}
+                  {:else}
+                    —
+                  {/if}
+                  {#if probe?.error}
+                    <div class="text-[10px] text-rose-400 max-w-[220px] break-words">{probe.error}</div>
+                  {/if}
+                </td>
+                <td class="px-4 py-3">
+                  <Badge tone={!entry.enabled ? "neutral" : entry.state === "ready" ? "success" : entry.state === "cooling" ? "warning" : "error"} size="sm" dot>
+                    {!entry.enabled ? "DISABLED" : entry.state.toUpperCase()}
+                  </Badge>
+                  {#if entry.cooldownMsLeft > 0}
+                    <div class="text-[10px] text-text-subtle">{Math.ceil(entry.cooldownMsLeft / 1000)}s cooldown</div>
+                  {/if}
+                </td>
+                <td class="px-4 py-3 text-right font-sans">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <label class="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
+                      <input
+                        type="checkbox"
+                        checked={entry.enabled}
+                        onchange={(event) => handleToggleEntry(entry, (event.currentTarget as HTMLInputElement).checked)}
+                        disabled={Boolean(proxyStatus?.locked) || isSaving}
+                      />
+                      Enabled
+                    </label>
+                    <Button variant="ghost" size="xs" onclick={() => runPoolTest(entry.id)} disabled={isPoolTesting || !entry.enabled}>
+                      Ping
+                    </Button>
+                    <Button variant="ghost" size="xs" class="text-red-400" onclick={() => handleRemoveEntry(entry)} disabled={Boolean(proxyStatus?.locked) || isSaving}>
+                      <span class="material-symbols-outlined text-[14px]">delete</span>
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
   </Card>
 </div>
 
-<!-- Add Single Node Modal -->
 <Modal open={isAddModalOpen} title="Add Proxy Egress Node" onclose={() => (isAddModalOpen = false)}>
   <form
     class="space-y-4"
-    onsubmit={(e) => {
-      e.preventDefault();
-      handleAddSingle();
+    onsubmit={(event) => {
+      event.preventDefault();
+      void handleAddSingle();
     }}
   >
     <div class="space-y-1.5">
       <label for="node-name" class="text-xs font-semibold text-text-muted">Node Name</label>
-      <input
-        id="node-name"
-        type="text"
-        bind:value={newName}
-        placeholder="e.g. US West Worker Relay"
-        class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main focus:outline-hidden focus:border-brand-500"
-      />
+      <input id="node-name" type="text" bind:value={newName} placeholder="e.g. US West Relay" class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main" />
     </div>
     <div class="space-y-1.5">
-      <label for="node-url" class="text-xs font-semibold text-text-muted">Proxy URL</label>
-      <input
-        id="node-url"
-        type="text"
-        bind:value={newUrl}
-        placeholder="http://host:port or socks5://host:port"
-        class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono focus:outline-hidden focus:border-brand-500"
-        required
-      />
+      <label for="node-url" class="text-xs font-semibold text-text-muted">HTTP(S) Proxy / Relay URL</label>
+      <input id="node-url" type="text" bind:value={newUrl} placeholder="http://host:port or https://relay.workers.dev" class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono" required />
     </div>
+    <div class="space-y-1.5">
+      <label for="node-token" class="text-xs font-semibold text-text-muted">Relay token (optional)</label>
+      <input id="node-token" type="password" bind:value={newToken} autocomplete="new-password" placeholder="Stored encrypted; never shown after saving" class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono" />
+    </div>
+    <p class="text-[11px] text-text-subtle">SOCKS5 is not supported by Bun fetch. Existing credentials remain in SQLite when editing or removing pool entries by ID.</p>
     <div class="flex justify-end gap-2 pt-2">
       <Button variant="ghost" onclick={() => (isAddModalOpen = false)}>Cancel</Button>
-      <Button variant="primary" type="submit" disabled={!newUrl.trim()}>Add Node</Button>
+      <Button variant="primary" type="submit" disabled={!newUrl.trim() || isSaving}>Add Node</Button>
     </div>
   </form>
 </Modal>
 
-<!-- Bulk Import Modal -->
 <Modal open={isBulkModalOpen} title="Bulk Import Proxies" onclose={() => (isBulkModalOpen = false)}>
   <form
     class="space-y-4"
-    onsubmit={(e) => {
-      e.preventDefault();
-      handleBulkImport();
+    onsubmit={(event) => {
+      event.preventDefault();
+      void handleBulkImport();
     }}
   >
     <div class="space-y-1.5">
-      <label for="bulk-text" class="text-xs font-semibold text-text-muted">
-        Paste one proxy per line (format: URL [Name])
-      </label>
+      <label for="bulk-text" class="text-xs font-semibold text-text-muted">One HTTP(S) URL per line, optionally followed by a label</label>
       <textarea
         id="bulk-text"
         bind:value={bulkInput}
         rows="6"
-        placeholder={"http://proxy1.corp:8080 Primary Egress\nsocks5://127.0.0.1:1080 Local SSH Tunnel\nhttps://cf-worker.xyz Cloudflare Relay"}
-        class="w-full p-3 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono focus:outline-hidden focus:border-brand-500 resize-none"
+        placeholder={"http://proxy1.corp:8080 Primary Egress\nhttps://relay.workers.dev Cloudflare Relay"}
+        class="w-full p-3 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono resize-none"
         required
       ></textarea>
     </div>
     <div class="flex justify-end gap-2 pt-2">
       <Button variant="ghost" onclick={() => (isBulkModalOpen = false)}>Cancel</Button>
-      <Button variant="primary" type="submit" disabled={!bulkInput.trim()}>Import List</Button>
+      <Button variant="primary" type="submit" disabled={!bulkInput.trim() || isSaving}>Import List</Button>
     </div>
   </form>
 </Modal>
