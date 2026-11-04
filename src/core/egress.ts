@@ -3,17 +3,40 @@
  * Native TypeScript interface for AlphaWay
  */
 
-import type { EgressState, ProxyConfig, PoolHealth } from "../types";
-
-// Re-export core operations from proxy module with full typing
+// Keep the wrapper aligned with the runtime proxy module contract.
 const proxy = require("./proxy");
+
+export interface PoolTestOptions {
+  timeoutMs?: number;
+  entryId?: string;
+}
+
+export interface PoolTestEntryResult {
+  id: string;
+  label: string;
+  host: string | null;
+  ok?: boolean;
+  skipped?: boolean;
+  reason?: string;
+  apiStatus?: number | null;
+  exitIp?: string | null;
+  latencyMs?: number | null;
+  error?: string | null;
+  state?: "ready" | "cooling" | "error";
+}
+
+export interface PoolTestResult {
+  ok: boolean;
+  entries: PoolTestEntryResult[];
+  error?: string;
+}
 
 export const ENV_OVERRIDE: string | null = proxy.ENV_OVERRIDE;
 export const POOL_ENV: string | null = proxy.POOL_ENV;
 export const STRATEGY_ENV: string | null = proxy.STRATEGY_ENV;
 
 export function configFile(): string {
-  return proxy.configFile();
+  return proxy.configStore();
 }
 
 export function healthFile(): string {
@@ -28,7 +51,7 @@ export function parsePoolEntry(raw: any, index?: number): any {
   return proxy.parsePoolEntry(raw, index);
 }
 
-export function parsePoolSpec(spec: any): any[] {
+export function parsePoolSpec(spec: string): { entries: any[]; errors: string[] } {
   return proxy.parsePoolSpec(spec);
 }
 
@@ -64,38 +87,44 @@ export function setProxyUrl(raw: string | null): any {
   return proxy.setProxyUrl(raw);
 }
 
-export function setPool(spec: any, strategy?: string): any {
-  return proxy.setPool(spec, strategy);
+export function setPool(spec: unknown): any {
+  return proxy.setPool(spec);
 }
 
 export function pick(options?: any): any {
   return proxy.pick(options);
 }
 
-export function markFailure(target: any, status?: number): void {
-  proxy.markFailure(target, status);
+export function markFailure(
+  target: string,
+  options?: { reason?: string; now?: number; cooldownMs?: number | null }
+): any {
+  return proxy.markFailure(target, options);
 }
 
-export function markSuccess(target: any): void {
-  proxy.markSuccess(target);
+export function markSuccess(target: string, options?: { now?: number }): any {
+  return proxy.markSuccess(target, options);
 }
 
 export function resetHealth(): void {
   proxy.resetHealth();
 }
 
-export function withProxy(options?: any): any {
-  return proxy.withProxy(options);
+export function withProxy(init?: any, egressUrl?: string | null): any {
+  return proxy.withProxy(init, egressUrl);
 }
 
 export async function netFetch(url: string | URL, init?: any): Promise<Response> {
   return proxy.netFetch(url, init);
 }
 
-export async function testProxy(rawUrl: string, timeoutMs?: number): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
-  return proxy.testProxy(rawUrl, timeoutMs);
+export async function testProxy(
+  rawUrl: string,
+  timeoutMs = 15000
+): Promise<{ ok: boolean; apiStatus?: number; exitIp?: string | null; latencyMs?: number; error?: string; exitError?: string | null }> {
+  return proxy.testProxy(rawUrl, { timeoutMs });
 }
 
-export async function testPool(entry: any, timeoutMs?: number): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
-  return proxy.testPool(entry, timeoutMs);
+export async function testPool(options: PoolTestOptions = {}): Promise<PoolTestResult> {
+  return proxy.testPool(options);
 }

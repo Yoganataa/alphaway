@@ -97,17 +97,75 @@ export interface HealthResponse {
   boringSslParity?: boolean;
 }
 
-export interface ProxyStatus {
+export type ProxyPoolStrategy = "round-robin" | "failover" | "random";
+
+export interface ProxyPoolEntryStatus {
+  id: string;
+  label: string;
+  host: string | null;
+  kind: "direct" | "relay" | "http" | "https" | "proxy";
+  enabled: boolean;
+  weight: number;
+  state: "disabled" | "cooling" | "ready";
+  cooldownMsLeft: number;
+  cooldownUntil: number;
+  failures: number;
+  lastError: string | null;
+  lastOkAt: number | null;
+  lastUsedAt: number | null;
+}
+
+export interface ProxyPoolStatus {
   active: boolean;
-  url?: string;
-  verified?: boolean;
-  latencyMs?: number;
+  size: number;
+  enabled: number;
+  ready: number;
+  cooling: number;
+  strategy: ProxyPoolStrategy;
+  source: "env" | "database" | "none" | string;
+  cooldownMs: number;
+  maxCooldownMs: number;
+  error: string | null;
+  entries: ProxyPoolEntryStatus[];
+}
+
+export interface ProxyStatus {
+  mode: "direct" | "proxy" | "pool";
+  proxy: string | null;
+  hasCredentials: boolean;
+  source: "env" | "database" | "none" | string;
+  locked: boolean;
+  configPath: string;
+  error: string | null;
+  pool: ProxyPoolStatus;
 }
 
 export interface ProxyTestResult {
   ok: boolean;
-  status?: number;
-  latencyMs?: number;
+  apiStatus?: number | null;
+  exitIp?: string | null;
+  latencyMs?: number | null;
+  error?: string | null;
+  exitError?: string | null;
+}
+
+export interface ProxyPoolTestEntryResult {
+  id: string;
+  label: string;
+  host: string | null;
+  ok?: boolean;
+  skipped?: boolean;
+  reason?: string;
+  apiStatus?: number | null;
+  exitIp?: string | null;
+  latencyMs?: number | null;
+  error?: string | null;
+  state?: "ready" | "cooling" | "error";
+}
+
+export interface ProxyPoolTestResult {
+  ok: boolean;
+  entries: ProxyPoolTestEntryResult[];
   error?: string;
 }
 
