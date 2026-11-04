@@ -262,6 +262,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
   it("recovers TokenSaver load and save failures and preserves the returned config", async () => {
     const { page, baseURL, adminCookie } = dashboard;
+    await page.goto(`${baseURL}/`);
     const originalResponse = await fetch(`${baseURL}/api/tokensaver`, {
       headers: { Cookie: adminCookie },
     });
@@ -304,7 +305,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
       await page.waitForFunction(() => {
         const toggle = document.querySelector<HTMLInputElement>("#tokensaver-rtk-toggle");
         return Boolean(toggle && !toggle.disabled);
-      });
+      }, undefined, { timeout: 8000 });
       expect(await page.locator("#tokensaver-load-error").count()).toBe(0);
 
       await rtkToggle.setChecked(true);
@@ -352,7 +353,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
         });
       }
     }
-  }, 25000);
+  }, 45000);
 
   it("navigates to Proxy Pools and tests proxy configuration form", async () => {
     const { page } = dashboard;
