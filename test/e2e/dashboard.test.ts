@@ -28,6 +28,44 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 15000);
 
+  it("groups implemented navigation into Main, Advanced Features, and System", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    const sidebar = page.locator("aside");
+    await sidebar.getByText("Main", { exact: true }).waitFor({ state: "visible" });
+    const sidebarText = await sidebar.textContent();
+
+    const orderedLabels = [
+      "Main",
+      "Endpoint & Key",
+      "Providers",
+      "Usage",
+      "Quota Tracker",
+      "Token Saver",
+      "Advanced Features",
+      "Security",
+      "Persona",
+      "Plans",
+      "System",
+      "Proxy Pools",
+      "Playground",
+      "Console Log",
+      "Tunnel & Daemon",
+      "Profile & Settings",
+    ];
+    let previousIndex = -1;
+    for (const label of orderedLabels) {
+      const index = sidebarText.indexOf(label);
+      expect(index, `Sidebar label should be present and ordered: ${label}`).toBeGreaterThan(previousIndex);
+      previousIndex = index;
+    }
+
+    for (const unavailable of ["Combos", "CLI Tools", "Media Providers", "Skills", "Terminal"]) {
+      expect(sidebarText).not.toContain(unavailable);
+    }
+  }, 15000);
+
   it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
     const { page, baseURL } = dashboard;
     const expectedTls = "AlphaWay E2E TLS profile sentinel";
