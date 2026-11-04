@@ -17,9 +17,11 @@ function publicUpstreamError(value: any) {
   if (!value || typeof value !== "object") return null;
   return {
     at: Number.isFinite(value.at) ? value.at : null,
-    statusCode: Number.isInteger(value.statusCode) ? value.statusCode : null,
+    status: Number.isInteger(value.status) ? value.status : Number.isInteger(value.statusCode) ? value.statusCode : null,
     model: typeof value.model === "string" ? value.model.slice(0, 200) : null,
     logId: typeof value.logId === "string" ? value.logId.slice(0, 128) : null,
+    cfRay: typeof value.cfRay === "string" ? value.cfRay.slice(0, 128) : null,
+    cfPlacement: typeof value.cfPlacement === "string" ? value.cfPlacement.slice(0, 128) : null,
   };
 }
 
