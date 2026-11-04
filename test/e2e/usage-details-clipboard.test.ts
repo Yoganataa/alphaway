@@ -67,8 +67,8 @@ describe("Request Details clipboard feedback", () => {
     });
 
     await page.goto(baseURL + "/");
-    await page.getByRole("button", { name: "Usage", exact: true }).click();
-    await page.getByRole("button", { name: "Request Details", exact: true }).click();
+    await page.getByRole("button", { name: "Usage" }).click();
+    await page.getByRole("button", { name: "Request Details" }).click();
     await page.getByRole("button", { name: "View", exact: true }).click();
 
     const copyIdButton = page.locator("#usage-copy-request-id");
