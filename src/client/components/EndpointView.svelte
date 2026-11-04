@@ -120,9 +120,9 @@ console.log(res.choices[0].message.content);`,
   const egressProxyDisplay = $derived.by(() => {
     if (!health?.egress) return "Direct Local Connection";
     if (health.egress.mode === "direct" || !health.egress.proxy) return "Direct Local Connection";
-    if (typeof health.egress.proxy === "string") return health.egress.proxy;
-    if (typeof health.egress.proxy === "object" && health.egress.proxy.url) return health.egress.proxy.url;
-    return "Direct Local Connection";
+    const proxy = health.egress.proxy;
+    if (proxy.mode === "pool") return `${proxy.pool.ready}/${proxy.pool.enabled} pool entries ready`;
+    return proxy.proxy || "Proxy configured";
   });
 </script>
 
