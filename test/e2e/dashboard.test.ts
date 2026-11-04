@@ -449,6 +449,74 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 25000);
 
+  it("keeps saved Security Rules distinct from empty state when rule loading fails", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    const originalResponse = await fetch(`${baseURL}/api/security/rules`, {
+      headers: { Cookie: adminCookie },
+    });
+    expect(originalResponse.status).toBe(200);
+    const originalRules = (await originalResponse.json()).rules;
+    expect(Array.isArray(originalRules)).toBe(true);
+
+    const savedRule = {
+      id: "e2e-security-rules-load-recovery",
+      pattern: "E2E_SECURITY_RULE_LOAD_RECOVERY",
+      action: "mask",
+      description: "Browser regression fixture for Security Rules loading",
+      enabled: true,
+    };
+    const seedResponse = await fetch(`${baseURL}/api/security/rules`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ rules: [...originalRules, savedRule] }),
+    });
+    expect(seedResponse.status).toBe(200);
+
+    let failInitialLoad = true;
+    await page.route("**/api/security/rules", async (route) => {
+      if (route.request().method() === "GET" && failInitialLoad) {
+        failInitialLoad = false;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Temporary Security Rules read failure" }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    try {
+      await page.getByRole("button", { name: "Security" }).click();
+      const loadError = page.locator("#security-rules-load-error");
+      await loadError.waitFor({ state: "visible", timeout: 10000 });
+      expect(await loadError.textContent()).toContain("Temporary Security Rules read failure");
+      expect(await page.locator("#security-rules-count").textContent()).toContain("Unavailable");
+
+      const addRuleButton = page.getByRole("button", { name: "Add Rule" });
+      expect(await addRuleButton.isDisabled()).toBe(true);
+      await page.locator("#security-rules-retry-btn").click();
+
+      await page.getByRole("row").filter({ hasText: savedRule.pattern }).waitFor({
+        state: "visible",
+        timeout: 10000,
+      });
+      expect(await page.locator("#security-rules-load-error").count()).toBe(0);
+      expect(await page.locator("#security-rules-count").textContent()).toContain("enabled");
+      expect(await addRuleButton.isEnabled()).toBe(true);
+      expect(failInitialLoad).toBe(false);
+    } finally {
+      await page.unroute("**/api/security/rules");
+      await fetch(`${baseURL}/api/security/rules`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Cookie: adminCookie },
+        body: JSON.stringify({ rules: originalRules }),
+      });
+    }
+  }, 25000);
+
   it("navigates to Proxy Pools and tests proxy configuration form", async () => {
     const { page } = dashboard;
 
