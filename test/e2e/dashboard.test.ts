@@ -60,6 +60,102 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 15000);
 
+  it("searches implemented pages in the command palette and handles empty keyboard results", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    await page.keyboard.press("Control+k");
+    const search = page.getByRole("textbox", { name: "Search commands and pages" });
+    await search.waitFor({ state: "visible", timeout: 10000 });
+
+    // Query changes reset the selected row; Enter opens the single matching page.
+    await search.press("ArrowDown");
+    await search.press("ArrowDown");
+    await search.fill("Plans");
+    const plansOption = page.locator("#command-option-plans");
+    await plansOption.waitFor({ state: "visible", timeout: 10000 });
+    expect(await plansOption.getAttribute("aria-selected")).toBe("true");
+    await search.press("Enter");
+    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+    // Backend-gap pages must not appear as working navigation commands.
+    await page.keyboard.press("Control+k");
+    const reopenedSearch = page.getByRole("textbox", { name: "Search commands and pages" });
+    await reopenedSearch.fill("Terminal");
+    await page.getByText("No implemented pages or actions match this search.", { exact: true }).waitFor({ state: "visible" });
+    await reopenedSearch.press("ArrowDown");
+    await reopenedSearch.press("ArrowUp");
+    await reopenedSearch.press("Enter");
+    expect(await reopenedSearch.isVisible()).toBe(true);
+
+    // The real Proxy Pools page is searchable and navigable as well.
+    await reopenedSearch.fill("Proxy Pools");
+    const proxyOption = page.locator("#command-option-proxy");
+    await proxyOption.waitFor({ state: "visible", timeout: 10000 });
+    await reopenedSearch.press("Enter");
+    await page.getByText("Egress Proxy Configuration", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+  }, 20000);
+
+  it("keeps TopBar titles aligned with implemented navigation labels", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    const expectedTitles = [
+      "Endpoint & Key",
+      "Providers",
+      "Usage",
+      "Quota Tracker",
+      "Token Saver",
+      "Security",
+      "Persona",
+      "Plans",
+      "Proxy Pools",
+      "Playground",
+      "Console Log",
+      "Tunnel & Daemon",
+      "Profile & Settings",
+    ];
+
+    const headerTitle = page.locator("header h1");
+    for (const title of expectedTitles) {
+      const navigationItem = page.locator("aside button").filter({ hasText: title }).first();
+      await navigationItem.click();
+      await page.waitForFunction(
+        (expected) => document.querySelector("header h1")?.textContent?.includes(expected) ?? false,
+        title,
+        { timeout: 10000 }
+      );
+      expect(await headerTitle.textContent()).toContain(title);
+    }
+  }, 20000);
+
+  it("opens and closes the grouped sidebar on mobile navigation", async () => {
+    const { page, baseURL } = dashboard;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${baseURL}/`);
+
+    const sidebar = page.locator("aside");
+    await page.waitForFunction(() => {
+      const element = document.querySelector("aside");
+      return Boolean(element && element.getBoundingClientRect().left < 0);
+    });
+
+    await page.getByRole("button", { name: "Toggle mobile menu" }).click();
+    await page.waitForFunction(() => {
+      const element = document.querySelector("aside");
+      return Boolean(element && Math.abs(element.getBoundingClientRect().left) < 1);
+    });
+
+    await sidebar.locator("button").filter({ hasText: "Proxy Pools" }).click();
+    await page.waitForFunction(() => {
+      const element = document.querySelector("aside");
+      return Boolean(element && element.getBoundingClientRect().left < 0);
+    });
+    await page.getByText("Egress Proxy Configuration", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }, 20000);
+
   it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
     const { page, baseURL } = dashboard;
     const expectedTls = "AlphaWay E2E TLS profile sentinel";
