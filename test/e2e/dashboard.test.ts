@@ -82,7 +82,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.keyboard.press("Control+k");
     const reopenedSearch = page.getByRole("textbox", { name: "Search commands and pages" });
     await reopenedSearch.fill("Terminal");
-    await page.getByRole("status", { name: "No implemented pages or actions match this search." }).waitFor({ state: "visible" });
+    await page.getByText("No implemented pages or actions match this search.", { exact: true }).waitFor({ state: "visible" });
     await reopenedSearch.press("ArrowDown");
     await reopenedSearch.press("ArrowUp");
     await reopenedSearch.press("Enter");
