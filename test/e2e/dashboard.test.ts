@@ -41,6 +41,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const headerTitle = await page.textContent("header h1");
     expect(headerTitle).toContain("AlphaWay");
 
+    await page.getByText(new URL(baseURL).host, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     const headerText = await page.textContent("header");
     expect(headerText).toContain(health.tls);
     expect(headerText).toContain(new URL(baseURL).host);
