@@ -120,9 +120,11 @@ export interface HealthGateStatus {
 
 export interface HealthUpstreamError {
   at: number | null;
-  statusCode: number | null;
+  status: number | null;
   model: string | null;
   logId: string | null;
+  cfRay: string | null;
+  cfPlacement: string | null;
 }
 
 export interface EgressPoolHealthEntry {
