@@ -321,6 +321,8 @@ export interface ProxyPoolEntryInput {
   id?: string;
   label?: string;
   url?: string;
+  relay?: boolean;
+  token?: string;
   direct?: boolean;
   enabled?: boolean;
   weight?: number;
@@ -328,7 +330,7 @@ export interface ProxyPoolEntryInput {
 
 export interface ProxyPoolUpdate {
   entries: ProxyPoolEntryInput[];
-  strategy: ProxyPoolStrategy;
+  strategy?: ProxyPoolStrategy;
   cooldownMs?: number;
   maxCooldownMs?: number;
 }
