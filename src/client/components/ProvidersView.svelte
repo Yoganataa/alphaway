@@ -14,11 +14,23 @@
     testCustomProvider,
   } from "../lib/api";
   import type { HealthResponse, ModelItem, CodeBuddyOAuthStart, CustomProviderConfig } from "../lib/types";
+  import { notifications } from "../lib/notifications";
 
   let { health }: { health: HealthResponse | null } = $props();
 
   let models = $state<ModelItem[]>([]);
   let customProviders = $state<CustomProviderConfig[]>([]);
+  let modelsLoading = $state(true);
+  let modelsLoaded = $state(false);
+  let modelsLoadError = $state<string | null>(null);
+  let modelsLastLoadedAt = $state<number | null>(null);
+  let modelsRefreshInFlight = false;
+  let providersLoading = $state(true);
+  let providersLoaded = $state(false);
+  let providersLoadError = $state<string | null>(null);
+  let providersLastLoadedAt = $state<number | null>(null);
+  let providersRefreshInFlight = false;
+  let providerMutating = $state(false);
   let oauthData = $state<CodeBuddyOAuthStart | null>(null);
   let oauthPolling = $state<boolean>(false);
   let oauthStatusText = $state<string | null>(null);
@@ -67,18 +79,67 @@
   let testResult = $state<{ ok: boolean; message: string } | null>(null);
   let testing = $state(false);
 
-  onMount(async () => {
-    await refreshData();
-  });
+  function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+  }
 
-  async function refreshData() {
+  function formatLoadedTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
+  async function loadModels(): Promise<boolean> {
+    if (modelsRefreshInFlight) return false;
+    modelsRefreshInFlight = true;
+    modelsLoading = true;
     try {
       models = await fetchModels();
-    } catch {}
+      modelsLoaded = true;
+      modelsLoadError = null;
+      modelsLastLoadedAt = Date.now();
+      return true;
+    } catch (error) {
+      modelsLoadError = getErrorMessage(error, "Unknown model catalog loading error");
+      return false;
+    } finally {
+      modelsLoading = false;
+      modelsRefreshInFlight = false;
+    }
+  }
+
+  async function loadCustomProviders(): Promise<boolean> {
+    if (providersRefreshInFlight) return false;
+    providersRefreshInFlight = true;
+    providersLoading = true;
     try {
       customProviders = await fetchCustomProviders();
-    } catch {}
+      providersLoaded = true;
+      providersLoadError = null;
+      providersLastLoadedAt = Date.now();
+      return true;
+    } catch (error) {
+      providersLoadError = getErrorMessage(error, "Unknown custom provider loading error");
+      return false;
+    } finally {
+      providersLoading = false;
+      providersRefreshInFlight = false;
+    }
   }
+
+  const providerWritesBlocked = () =>
+    !providersLoaded || providersLoading || providersLoadError !== null ||
+    providerMutating || formSaving;
+
+  async function refreshData(): Promise<{ models: boolean; providers: boolean }> {
+    const [modelsOk, providersOk] = await Promise.all([
+      loadModels(),
+      loadCustomProviders(),
+    ]);
+    return { models: modelsOk, providers: providersOk };
+  }
+
+  onMount(() => {
+    void refreshData();
+  });
 
   const openCodeModels = $derived(models.filter((m) => m.owned_by === "opencode" || m.id.endsWith("-free") || m.id === "big-pickle"));
   const codeBuddyModels = $derived(models.filter((m) => m.owned_by === "codebuddy"));
@@ -101,7 +162,10 @@
             oauthStatusText = "Login successful! Tokens saved.";
             oauthPolling = false;
             clearInterval(pollIntervalHandle);
-            await refreshData();
+            const refreshed = await refreshData();
+            if (!refreshed.providers) {
+              oauthStatusText = "Login successful; the provider list could not be refreshed. Retry loading Providers.";
+            }
           } else if (res.status === "error") {
             oauthStatusText = res.message || "Authorization failed. Please try again.";
             oauthPolling = false;
@@ -118,6 +182,7 @@
   }
 
   function openNewProviderModal(preset?: "deepseek" | "anthropic" | "openrouter" | "ollama") {
+    if (providerWritesBlocked()) return;
     isEditing = false;
     formError = null;
     testResult = null;
@@ -162,6 +227,7 @@
   }
 
   function editProvider(p: CustomProviderConfig) {
+    if (providerWritesBlocked()) return;
     isEditing = true;
     formError = null;
     testResult = null;
@@ -217,11 +283,13 @@
   }
 
   async function handleSaveProvider() {
+    if (providerWritesBlocked()) return;
     if (!formId.trim() || !formName.trim() || !formBaseUrl.trim()) {
       formError = "Provider ID, Name, and Base URL are required.";
       return;
     }
     formSaving = true;
+    providerMutating = true;
     formError = null;
     try {
       const parsedModels = formModels.split(",").map((s) => s.trim()).filter(Boolean);
@@ -235,36 +303,92 @@
         enabled: formEnabled,
       });
       showProviderModal = false;
-      await refreshData();
+      const refreshed = await loadCustomProviders();
+      if (refreshed) notifications.success(isEditing ? "Custom provider updated" : "Custom provider saved");
+      else notifications.warning("Provider was saved, but its list could not be refreshed. Retry loading Providers.");
     } catch (err: any) {
-      formError = err.message;
+      formError = err.message || "Failed to save custom provider";
+      notifications.error(formError);
     } finally {
+      providerMutating = false;
       formSaving = false;
     }
   }
 
   async function handleDelete(id: string) {
+    if (providerWritesBlocked()) return;
     if (!confirm(`Are you sure you want to delete custom provider "${id}"?`)) return;
+    providerMutating = true;
     try {
       await deleteCustomProvider(id);
-      await refreshData();
+      const refreshed = await loadCustomProviders();
+      if (refreshed) notifications.success("Custom provider deleted");
+      else notifications.warning("Provider was deleted, but its list could not be refreshed. Retry loading Providers.");
     } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+      notifications.error(err.message || "Failed to delete custom provider");
+    } finally {
+      providerMutating = false;
     }
   }
 
   async function toggleProvider(p: CustomProviderConfig) {
+    if (providerWritesBlocked()) return;
+    providerMutating = true;
     try {
       await saveCustomProvider({
         ...p,
         enabled: !p.enabled,
       });
-      await refreshData();
+      const refreshed = await loadCustomProviders();
+      if (refreshed) notifications.success(p.enabled ? "Custom provider disabled" : "Custom provider enabled");
+      else notifications.warning("Provider state was saved, but its list could not be refreshed. Retry loading Providers.");
     } catch (err: any) {
-      alert(`Failed to update provider: ${err.message}`);
+      notifications.error(err.message || "Failed to update custom provider");
+    } finally {
+      providerMutating = false;
     }
   }
 </script>
+
+<div class="space-y-3">
+  {#if modelsLoadError}
+    <div id="providers-models-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+      <div class="min-w-0">
+        <p class="text-xs font-semibold text-amber-400">
+          {modelsLoaded ? "Model catalog refresh failed. Showing the last successful snapshot." : "The model catalog is unavailable; the page cannot treat this as an empty model list."}
+        </p>
+        <p class="mt-1 break-words text-xs text-text-muted">{modelsLoadError}</p>
+        {#if modelsLastLoadedAt !== null}
+          <p class="mt-1 text-[11px] text-text-muted">Last successful load: {formatLoadedTime(modelsLastLoadedAt)}</p>
+        {/if}
+      </div>
+      <Button id="providers-models-retry" variant="secondary" size="sm" onclick={loadModels} disabled={modelsLoading || modelsRefreshInFlight}>
+        {modelsLoading ? "Retrying…" : "Retry Models"}
+      </Button>
+    </div>
+  {:else if modelsLoading && modelsLoaded}
+    <p id="providers-models-refreshing" role="status" class="text-xs text-text-muted">Refreshing the global model catalog…</p>
+  {/if}
+
+  {#if providersLoadError}
+    <div id="providers-config-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+      <div class="min-w-0">
+        <p class="text-xs font-semibold text-amber-400">
+          {providersLoaded ? "Custom provider refresh failed. The last successful snapshot is shown; changes are blocked." : "Saved custom providers could not be loaded. Add, edit, enable, and delete actions are blocked until the list is available."}
+        </p>
+        <p class="mt-1 break-words text-xs text-text-muted">{providersLoadError}</p>
+        {#if providersLastLoadedAt !== null}
+          <p class="mt-1 text-[11px] text-text-muted">Last successful load: {formatLoadedTime(providersLastLoadedAt)}</p>
+        {/if}
+      </div>
+      <Button id="providers-config-retry" variant="secondary" size="sm" onclick={loadCustomProviders} disabled={providersLoading || providerMutating}>
+        {providersLoading ? "Retrying…" : "Retry Providers"}
+      </Button>
+    </div>
+  {:else if providersLoading && providersLoaded}
+    <p id="providers-config-refreshing" role="status" class="text-xs text-text-muted">Refreshing saved custom providers…</p>
+  {/if}
+</div>
 
 <div class="space-y-6">
   <!-- Provider 1: OpenCode Free-Tier -->
@@ -329,7 +453,7 @@
     <div class="space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-semibold uppercase tracking-wider text-text-subtle">
-          Free-Tier Models ({openCodeModels.length})
+          Free-Tier Models ({modelsLoaded ? openCodeModels.length : modelsLoading ? "Loading" : "Unavailable"})
         </h3>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -340,7 +464,13 @@
           </div>
         {:else}
           <div class="col-span-full p-4 rounded-[10px] bg-surface-2 border border-border-subtle text-center text-xs text-text-muted">
-            No models discovered yet. Fetching upstream...
+            {#if modelsLoading && !modelsLoaded}
+              Loading the global model catalog…
+            {:else if !modelsLoaded}
+              The model catalog is unavailable. Retry the load above.
+            {:else}
+              No OpenCode free-tier models were returned by the current catalog.
+            {/if}
           </div>
         {/each}
       </div>
@@ -408,7 +538,7 @@
     <div class="space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-semibold uppercase tracking-wider text-text-subtle">
-          Active Models ({codeBuddyModels.length})
+          Active Models ({modelsLoaded ? codeBuddyModels.length : modelsLoading ? "Loading" : "Unavailable"})
         </h3>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -419,7 +549,13 @@
           </div>
         {:else}
           <div class="col-span-full p-4 rounded-[10px] bg-surface-2 border border-border-subtle text-center text-xs text-text-muted">
-            No CodeBuddy models active. Complete OAuth login above to activate.
+            {#if modelsLoading && !modelsLoaded}
+              Loading the global model catalog…
+            {:else if !modelsLoaded}
+              The model catalog is unavailable. Retry the load above.
+            {:else}
+              No CodeBuddy models are active. Complete OAuth login above to activate.
+            {/if}
           </div>
         {/each}
       </div>
@@ -440,7 +576,10 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <Button variant="primary" size="sm" onclick={() => openNewProviderModal()}>
+        <Button id="providers-config-refresh" variant="secondary" size="sm" onclick={loadCustomProviders} disabled={providersLoading || providerMutating}>
+          {providersLoading ? "Refreshing…" : "Refresh"}
+        </Button>
+        <Button id="providers-add" variant="primary" size="sm" onclick={() => openNewProviderModal()} disabled={providerWritesBlocked()} title={providerWritesBlocked() ? "Load the saved provider list before changing it" : "Add a custom provider"}>
           <span class="material-symbols-outlined text-[16px]">add</span>
           <span>Add Provider</span>
         </Button>
@@ -450,30 +589,34 @@
     <!-- Quick Presets -->
     <div class="p-3 rounded-[10px] bg-surface-2 border border-border-subtle flex flex-wrap items-center gap-2 text-xs">
       <span class="text-text-muted font-medium">Quick Presets:</span>
-      <button onclick={() => openNewProviderModal("deepseek")} class="px-2.5 py-1 rounded-[6px] bg-surface hover:bg-surface-3 text-text-main border border-border transition-colors font-medium">
+      <button disabled={providerWritesBlocked()} onclick={() => openNewProviderModal("deepseek")} class="px-2.5 py-1 rounded-[6px] bg-surface hover:bg-surface-3 text-text-main border border-border transition-colors font-medium">
         DeepSeek
       </button>
-      <button onclick={() => openNewProviderModal("anthropic")} class="px-2.5 py-1 rounded-[6px] bg-surface hover:bg-surface-3 text-text-main border border-border transition-colors font-medium">
+      <button disabled={providerWritesBlocked()} onclick={() => openNewProviderModal("anthropic")} class="px-2.5 py-1 rounded-[6px] bg-surface hover:bg-surface-3 text-text-main border border-border transition-colors font-medium">
         Anthropic Claude
       </button>
-      <button onclick={() => openNewProviderModal("openrouter")} class="px-2.5 py-1 rounded-[6px] bg-surface hover:bg-surface-3 text-text-main border border-border transition-colors font-medium">
+      <button disabled={providerWritesBlocked()} onclick={() => openNewProviderModal("openrouter")} class="px-2.5 py-1 rounded-[6px] bg-surface hover:bg-surface-3 text-text-main border border-border transition-colors font-medium">
         OpenRouter
       </button>
-      <button onclick={() => openNewProviderModal("ollama")} class="px-2.5 py-1 rounded-[6px] bg-surface hover:bg-surface-3 text-text-main border border-border transition-colors font-medium">
+      <button disabled={providerWritesBlocked()} onclick={() => openNewProviderModal("ollama")} class="px-2.5 py-1 rounded-[6px] bg-surface hover:bg-surface-3 text-text-main border border-border transition-colors font-medium">
         Ollama Local
       </button>
     </div>
 
     <!-- Custom Providers List -->
     <div class="space-y-3">
-      {#if customProviders.length === 0}
-        <div class="p-8 rounded-[12px] bg-surface-2 border border-border-subtle text-center space-y-3">
+      {#if providersLoading && !providersLoaded}
+        <p id="providers-config-loading" role="status" class="p-5 text-xs text-text-muted">Loading saved custom providers…</p>
+      {:else if !providersLoaded && providersLoadError}
+        <p id="providers-config-unavailable" class="p-5 text-xs text-text-muted">The saved provider list is unavailable. Retry before adding or changing providers.</p>
+      {:else if providersLoaded && customProviders.length === 0}
+        <div id="providers-config-empty" class="p-8 rounded-[12px] bg-surface-2 border border-border-subtle text-center space-y-3">
           <span class="material-symbols-outlined text-4xl text-text-subtle">dns</span>
           <p class="text-xs text-text-muted max-w-md mx-auto">
-            No 3rd-party custom providers configured yet. Click "Add Provider" or choose a Quick Preset above to connect external OpenAI or Anthropic format APIs.
+            No 3rd-party custom providers are configured yet. Add a provider or choose a Quick Preset to connect an external OpenAI or Anthropic API.
           </p>
         </div>
-      {:else}
+      {:else if providersLoaded}
         <div class="grid grid-cols-1 gap-3">
           {#each customProviders as p}
             <div class="p-4 rounded-[12px] bg-surface-2 border border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-border transition-all">
@@ -505,17 +648,17 @@
               </div>
 
               <div class="flex items-center gap-2 shrink-0">
-                <Button variant="ghost" size="sm" onclick={() => toggleProvider(p)}>
+                <Button variant="ghost" size="sm" onclick={() => toggleProvider(p)} disabled={providerWritesBlocked()}>
                   <span class="material-symbols-outlined text-[16px]">
                     {p.enabled ? "pause_circle" : "play_circle"}
                   </span>
                   <span>{p.enabled ? "Disable" : "Enable"}</span>
                 </Button>
-                <Button variant="outline" size="sm" onclick={() => editProvider(p)}>
+                <Button variant="outline" size="sm" onclick={() => editProvider(p)} disabled={providerWritesBlocked()}>
                   <span class="material-symbols-outlined text-[16px]">edit</span>
                   <span>Edit</span>
                 </Button>
-                <Button variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={() => handleDelete(p.id)}>
+                <Button variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={() => handleDelete(p.id)} disabled={providerWritesBlocked()}>
                   <span class="material-symbols-outlined text-[16px]">delete</span>
                 </Button>
               </div>
@@ -635,7 +778,7 @@
       </div>
 
       <div class="flex items-center justify-between pt-3 border-t border-border-subtle">
-        <Button variant="ghost" size="sm" onclick={handleTestCurrent} disabled={testing || !formBaseUrl}>
+        <Button variant="ghost" size="sm" onclick={handleTestCurrent} disabled={testing || providerMutating || !formBaseUrl}>
           {#if testing}
             <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
             <span>Testing...</span>
@@ -649,7 +792,7 @@
           <Button variant="ghost" size="sm" onclick={() => (showProviderModal = false)}>
             Cancel
           </Button>
-          <Button variant="primary" size="sm" onclick={handleSaveProvider} disabled={formSaving}>
+          <Button variant="primary" size="sm" onclick={handleSaveProvider} disabled={providerWritesBlocked()}>
             {#if formSaving}
               <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
               <span>Saving...</span>
