@@ -163,7 +163,7 @@ describe("Providers configuration load recovery", () => {
       await page.locator("#providers-config-refreshing").waitFor({ state: "visible", timeout: 5000 });
       expect(await addProvider.isDisabled()).toBe(true);
       expect(await existingRow.getByRole("button", { name: "Edit" }).isDisabled()).toBe(true);
-      expect(await existingRow.getByRole("button", { name: "Delete" }).isDisabled()).toBe(true);
+      expect(await page.locator("#providers-delete-provider-e2e").isDisabled()).toBe(true);
       expect(writes).toBe(0);
 
       releaseRefresh();
@@ -173,7 +173,7 @@ describe("Providers configuration load recovery", () => {
       expect(await existingRow.getByText("Existing Provider", { exact: true }).isVisible()).toBe(true);
       expect(await addProvider.isDisabled()).toBe(true);
       expect(await existingRow.getByRole("button", { name: "Edit" }).isDisabled()).toBe(true);
-      expect(await existingRow.getByRole("button", { name: "Delete" }).isDisabled()).toBe(true);
+      expect(await page.locator("#providers-delete-provider-e2e").isDisabled()).toBe(true);
       expect(writes).toBe(0);
 
       await page.locator("#providers-config-retry").click();
