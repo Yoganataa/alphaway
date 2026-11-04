@@ -14,8 +14,13 @@
 
   let plans = $state<PlanRecord[]>([]);
   let loading = $state(true);
+  let hasLoaded = $state(false);
+  let loadError = $state<string | null>(null);
+  let lastLoadedAt = $state<number | null>(null);
+  let refreshInFlight = false;
   let saving = $state(false);
   let editingId = $state<string | null>(null);
+  let deletingId = $state<string | null>(null);
   let name = $state("");
   let description = $state("");
   let rpmLimit = $state("0");
@@ -26,15 +31,29 @@
 
   const modelList = () => allowedModels.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
   const limitLabel = (value: number) => value > 0 ? value.toLocaleString() : "Unlimited";
+  const writesBlocked = () => !hasLoaded || loading || loadError !== null || saving;
 
-  async function loadPlans() {
+  function formatLoadedTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
+  async function loadPlans(): Promise<boolean> {
+    if (refreshInFlight) return false;
+    refreshInFlight = true;
     loading = true;
     try {
-      plans = await fetchPlans();
-    } catch (error: any) {
-      notifications.error(error.message || "Failed to load Plans");
+      const nextPlans = await fetchPlans();
+      plans = nextPlans;
+      hasLoaded = true;
+      loadError = null;
+      lastLoadedAt = Date.now();
+      return true;
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : "Unknown Plans loading error";
+      return false;
     } finally {
       loading = false;
+      refreshInFlight = false;
     }
   }
 
@@ -52,6 +71,7 @@
   }
 
   function startEdit(plan: PlanRecord) {
+    if (writesBlocked()) return;
     editingId = plan.id;
     name = plan.name;
     description = plan.description;
@@ -80,16 +100,20 @@
 
   async function savePlan(event: SubmitEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (writesBlocked()) return;
     saving = true;
     const wasEditing = Boolean(editingId);
     try {
       const input = buildInput();
       if (editingId) await updatePlan(editingId, input);
       else await createPlan(input);
-      await loadPlans();
+      const refreshed = await loadPlans();
       resetForm();
-      notifications.success(wasEditing ? "Plan updated" : "Plan created");
+      notifications.success(
+        refreshed
+          ? (wasEditing ? "Plan updated" : "Plan created")
+          : "Plan saved, but the list could not be refreshed. Retry to sync the current state.",
+      );
     } catch (error: any) {
       notifications.error(error.message || "Plan could not be saved");
     } finally {
@@ -98,14 +122,24 @@
   }
 
   async function removePlan(plan: PlanRecord) {
+    if (writesBlocked()) return;
     if (!confirm("Delete Plan '" + plan.name + "'? Plans assigned to API keys cannot be deleted.")) return;
+    saving = true;
+    deletingId = plan.id;
     try {
       await deletePlan(plan.id);
-      await loadPlans();
+      const refreshed = await loadPlans();
       if (editingId === plan.id) resetForm();
-      notifications.success("Plan deleted");
+      notifications.success(
+        refreshed
+          ? "Plan deleted"
+          : "Plan deleted, but the list could not be refreshed. Retry to sync the current state.",
+      );
     } catch (error: any) {
       notifications.error(error.message || "Plan could not be deleted");
+    } finally {
+      saving = false;
+      deletingId = null;
     }
   }
 </script>
@@ -114,23 +148,62 @@
   <div class="flex flex-col gap-1">
     <div class="flex items-center gap-2">
       <h2 class="text-lg font-bold text-text-main">Plans</h2>
-      <Badge tone="primary" size="sm">{plans.length} configured</Badge>
+      {#if hasLoaded}
+        <Badge tone="primary" size="sm">{plans.length} configured</Badge>
+      {:else if loading}
+        <Badge tone="neutral" size="sm">Loading</Badge>
+      {:else}
+        <Badge tone="warning" size="sm">Unavailable</Badge>
+      {/if}
     </div>
     <p class="text-xs text-text-muted">Reusable policies for managed API keys. Unassigned keys remain unrestricted.</p>
   </div>
+
+  {#if loadError}
+    <div
+      id="plans-load-error"
+      role="alert"
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
+    >
+      <div class="min-w-0">
+        <p class="text-xs font-semibold text-amber-400">
+          {hasLoaded
+            ? "Plan refresh failed. Showing the last successful snapshot; changes are blocked until the list is refreshed."
+            : "Saved Plans could not be loaded. The empty state is unavailable until the server returns a valid list."}
+        </p>
+        <p class="mt-1 break-words text-xs text-text-muted">{loadError}</p>
+        {#if lastLoadedAt !== null}
+          <p class="mt-1 text-[11px] text-text-muted">Last successful load: {formatLoadedTime(lastLoadedAt)}</p>
+        {/if}
+      </div>
+      <Button id="plans-load-retry" variant="secondary" size="sm" onclick={loadPlans} disabled={loading || saving}>
+        {loading ? "Retrying..." : "Retry Load"}
+      </Button>
+    </div>
+  {:else if loading && hasLoaded}
+    <p id="plans-refreshing" role="status" class="text-xs text-text-muted">Refreshing saved Plans…</p>
+  {/if}
 
   <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.8fr)] gap-5">
     <section class="rounded-xl border border-border-subtle bg-surface-1 overflow-hidden">
       <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
         <h3 class="text-sm font-semibold text-text-main">Configured Plans</h3>
-        <Button variant="secondary" size="sm" onclick={loadPlans} disabled={loading}>Refresh</Button>
+        <Button id="plans-refresh" variant="secondary" size="sm" onclick={loadPlans} disabled={loading || saving || loadError !== null}>
+          Refresh
+        </Button>
       </div>
       <div class="divide-y divide-border-subtle">
-        {#if loading}
+        {#if loading && !hasLoaded}
           <p class="p-5 text-xs text-text-muted">Loading Plans…</p>
-        {:else if plans.length === 0}
-          <p class="p-5 text-xs text-text-muted">No Plans yet. Create a reusable policy to assign to managed API keys.</p>
-        {:else}
+        {:else if !hasLoaded && loadError}
+          <p id="plans-unavailable" class="p-5 text-xs text-text-muted">The saved Plan list is unavailable. Retry the load before creating or editing policies.</p>
+        {:else if hasLoaded && plans.length === 0}
+          <p class="p-5 text-xs text-text-muted">
+            {loadError
+              ? "No Plans were present in the last successful snapshot."
+              : "No Plans yet. Create a reusable policy to assign to managed API keys."}
+          </p>
+        {:else if hasLoaded}
           {#each plans as plan (plan.id)}
             <article class="p-4 space-y-3">
               <div class="flex items-start justify-between gap-3">
@@ -139,8 +212,16 @@
                   <p class="text-xs text-text-muted mt-1">{plan.description || "No description"}</p>
                 </div>
                 <div class="flex gap-1 shrink-0">
-                  <Button variant="ghost" size="sm" onclick={() => startEdit(plan)}>Edit</Button>
-                  <Button variant="ghost" size="sm" onclick={() => removePlan(plan)}>Delete</Button>
+                  <Button variant="ghost" size="sm" onclick={() => startEdit(plan)} disabled={writesBlocked()}>Edit</Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onclick={() => removePlan(plan)}
+                    disabled={writesBlocked()}
+                    loading={deletingId === plan.id}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
@@ -167,32 +248,43 @@
     <section class="rounded-xl border border-border-subtle bg-surface-1 p-4">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold text-text-main">{editingId ? "Edit Plan" : "Create Plan"}</h3>
-        {#if editingId}<Button variant="ghost" size="sm" onclick={resetForm}>Cancel</Button>{/if}
+        {#if editingId}
+          <Button variant="ghost" size="sm" onclick={resetForm} disabled={saving}>Cancel</Button>
+        {/if}
       </div>
+      {#if !hasLoaded || loadError}
+        <p class="mb-3 text-xs text-text-muted">Plan changes are disabled until a valid saved Plan list has loaded.</p>
+      {/if}
       <form class="space-y-3" onsubmit={savePlan}>
-        <label class="block space-y-1">
-          <span class="text-xs text-text-muted">Name</span>
-          <input bind:value={name} maxlength="80" required class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" placeholder="Starter" />
-        </label>
-        <label class="block space-y-1">
-          <span class="text-xs text-text-muted">Description</span>
-          <input bind:value={description} maxlength="256" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" placeholder="Optional policy description" />
-        </label>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="block space-y-1"><span class="text-xs text-text-muted">RPM (0 = unlimited)</span><input bind:value={rpmLimit} inputmode="numeric" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" /></label>
-          <label class="block space-y-1"><span class="text-xs text-text-muted">Prompt TPM (0 = unlimited)</span><input bind:value={tpmLimit} inputmode="numeric" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" /></label>
-          <label class="block space-y-1"><span class="text-xs text-text-muted">Concurrency (0 = unlimited)</span><input bind:value={concurrencyLimit} inputmode="numeric" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" /></label>
-          <label class="block space-y-1"><span class="text-xs text-text-muted">Lifetime tokens (0 = unlimited)</span><input bind:value={tokenQuota} inputmode="numeric" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" /></label>
-        </div>
-        <label class="block space-y-1">
-          <span class="text-xs text-text-muted">Allowed models (one per line; exact ID or prefix ending in *)</span>
-          <textarea bind:value={allowedModels} rows="4" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main font-mono" placeholder={"gpt-4.1-mini\nclaude-3-5-*"}></textarea>
-        </label>
-        <p class="text-[11px] text-text-subtle">An empty model list allows all models. USD spend budgets are not shown because AlphaWay does not yet have authoritative provider pricing data.</p>
-        <div class="flex justify-end gap-2 pt-1">
-          {#if editingId}<Button variant="secondary" size="sm" onclick={resetForm}>New Plan</Button>{/if}
-          <Button variant="primary" size="sm" type="submit" disabled={saving || !name.trim()}>{saving ? "Saving…" : editingId ? "Save Changes" : "Create Plan"}</Button>
-        </div>
+        <fieldset disabled={writesBlocked()} class="space-y-3 disabled:opacity-60">
+          <label class="block space-y-1">
+            <span class="text-xs text-text-muted">Name</span>
+            <input bind:value={name} maxlength="80" required class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" placeholder="Starter" />
+          </label>
+          <label class="block space-y-1">
+            <span class="text-xs text-text-muted">Description</span>
+            <input bind:value={description} maxlength="256" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" placeholder="Optional policy description" />
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block space-y-1"><span class="text-xs text-text-muted">RPM (0 = unlimited)</span><input bind:value={rpmLimit} inputmode="numeric" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" /></label>
+            <label class="block space-y-1"><span class="text-xs text-text-muted">Prompt TPM (0 = unlimited)</span><input bind:value={tpmLimit} inputmode="numeric" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" /></label>
+            <label class="block space-y-1"><span class="text-xs text-text-muted">Concurrency (0 = unlimited)</span><input bind:value={concurrencyLimit} inputmode="numeric" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" /></label>
+            <label class="block space-y-1"><span class="text-xs text-text-muted">Lifetime tokens (0 = unlimited)</span><input bind:value={tokenQuota} inputmode="numeric" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main" /></label>
+          </div>
+          <label class="block space-y-1">
+            <span class="text-xs text-text-muted">Allowed models (one per line; exact ID or prefix ending in *)</span>
+            <textarea bind:value={allowedModels} rows="4" class="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-main font-mono" placeholder={"gpt-4.1-mini\nclaude-3-5-*"}></textarea>
+          </label>
+          <p class="text-[11px] text-text-subtle">An empty model list allows all models. USD spend budgets are not shown because AlphaWay does not yet have authoritative provider pricing data.</p>
+          <div class="flex justify-end gap-2 pt-1">
+            {#if editingId}
+              <Button variant="secondary" size="sm" onclick={resetForm} disabled={saving}>New Plan</Button>
+            {/if}
+            <Button id="plans-submit" variant="primary" size="sm" type="submit" disabled={saving || !name.trim()}>
+              {saving ? "Saving…" : editingId ? "Save Changes" : "Create Plan"}
+            </Button>
+          </div>
+        </fieldset>
       </form>
     </section>
   </div>
