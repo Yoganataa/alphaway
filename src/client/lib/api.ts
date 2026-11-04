@@ -96,11 +96,34 @@ export interface SecurityKeywordRule {
   enabled: boolean;
 }
 
+function isSecurityKeywordRule(value: unknown): value is SecurityKeywordRule {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const rule = value as Record<string, unknown>;
+  return (
+    typeof rule.id === "string" &&
+    typeof rule.pattern === "string" &&
+    (rule.action === "mask" || rule.action === "block") &&
+    typeof rule.description === "string" &&
+    typeof rule.enabled === "boolean"
+  );
+}
+
+function readSecurityRulesResponse(data: unknown): SecurityKeywordRule[] {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid Security Rules response");
+  }
+  const rules = (data as { rules?: unknown }).rules;
+  if (!Array.isArray(rules) || !rules.every(isSecurityKeywordRule)) {
+    throw new Error("Invalid Security Rules response");
+  }
+  return rules;
+}
+
 export async function fetchSecurityRules(): Promise<SecurityKeywordRule[]> {
   const res = await fetch(`${BASE_URL}/api/security/rules`);
-  if (!res.ok) throw new Error(`Fetch security rules failed: ${res.statusText}`);
-  const data = await res.json();
-  return data.rules || [];
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Fetch security rules failed: ${res.statusText}`);
+  return readSecurityRulesResponse(data);
 }
 
 export async function saveSecurityRules(
@@ -111,12 +134,11 @@ export async function saveSecurityRules(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rules }),
   });
+  const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const data = await res.json().catch(() => null);
     throw new Error(data?.error || `Save security rules failed: ${res.statusText}`);
   }
-  const data = await res.json();
-  return data.rules || [];
+  return readSecurityRulesResponse(data);
 }
 
 export interface PersonaKeyword {
