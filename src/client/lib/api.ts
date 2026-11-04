@@ -80,8 +80,12 @@ export async function fetchModels(): Promise<ModelItem[]> {
 
 export async function fetchTokenSaverConfig(): Promise<TokenSaverConfig> {
   const res = await fetch(`${BASE_URL}/api/tokensaver`);
-  if (!res.ok) throw new Error(`Fetch tokensaver failed: ${res.statusText}`);
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Fetch tokensaver failed (${res.status})`);
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Fetch tokensaver returned an invalid configuration");
+  }
+  return data as TokenSaverConfig;
 }
 
 export interface SecurityKeywordRule {
@@ -296,8 +300,13 @@ export async function updateTokenSaverConfig(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config),
   });
-  if (!res.ok) throw new Error(`Update tokensaver failed: ${res.statusText}`);
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Update tokensaver failed (${res.status})`);
+  if (!data || typeof data !== "object" || Array.isArray(data) || data.ok !== true ||
+      !data.config || typeof data.config !== "object" || Array.isArray(data.config)) {
+    throw new Error("Update tokensaver returned an invalid configuration response");
+  }
+  return data.config as TokenSaverConfig;
 }
 
 export async function fetchProxyStatus(): Promise<ProxyStatus> {
