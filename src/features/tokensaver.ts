@@ -326,7 +326,12 @@ function applyTokenSavers(messages, config = currentConfig, modelIds = []) {
 }
 
 function sanitizeInboundContent(text, options) {
-  const builtIn = securityGuard.sanitizeInboundContent(text, options);
+  const effectiveOptions = {
+    sanitizeMarkdownImages: options?.sanitizeMarkdownImages ?? currentConfig.sanitizeMarkdownImages !== false,
+    stripSystemInjections: options?.stripSystemInjections ?? true,
+    blockDangerousExfiltration: options?.blockDangerousExfiltration ?? currentConfig.blockDangerousCommands !== false,
+  };
+  const builtIn = securityGuard.sanitizeInboundContent(text, effectiveOptions);
   return typeof builtIn === "string" ? sanitizeSecurityResponse(builtIn) : builtIn;
 }
 
