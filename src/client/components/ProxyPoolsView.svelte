@@ -236,7 +236,7 @@
           </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
-          Configure one fallback proxy or a persisted multi-egress pool. Runtime credentials are never returned to the browser.
+          Route all upstream inference and discovery requests through your configured single proxy or egress pool. Runtime credentials are never returned to the browser.
         </p>
       </div>
       <span class="text-xs px-2.5 py-1 rounded-[8px] bg-surface-2 text-text-muted border border-border font-mono">
