@@ -6,6 +6,7 @@
   import Button from "../../lib/ui/Button.svelte";
   import Card from "../../lib/ui/Card.svelte";
   import ActivityHeatmap from "./ActivityHeatmap.svelte";
+  import { notifications } from "../../lib/notifications";
   import type { RequestLogEntry, UsageStats } from "../../lib/types";
 
   interface Props {
@@ -24,6 +25,7 @@
   let selectedRequest = $state<RequestLogEntry | null>(null);
   let copiedId = $state(false);
   let copiedJson = $state(false);
+  let copying = $state<"id" | "json" | null>(null);
 
   function fmtNumber(n: number | undefined): string {
     if (!n) return "0";
@@ -77,23 +79,43 @@
     selectedRequest = entry;
     copiedId = false;
     copiedJson = false;
+    copying = null;
   }
 
   function closeDetail() {
     selectedRequest = null;
   }
 
-  async function copyText(text: string, isJson: boolean = false) {
+  async function copyText(text: string, target: "id" | "json") {
+    if (copying !== null) return;
+
+    copying = target;
+    if (target === "id") copiedId = false;
+    else copiedJson = false;
+
     try {
-      await navigator.clipboard.writeText(text);
-      if (isJson) {
-        copiedJson = true;
-        setTimeout(() => (copiedJson = false), 2000);
-      } else {
-        copiedId = true;
-        setTimeout(() => (copiedId = false), 2000);
+      if (typeof navigator === "undefined" || typeof navigator.clipboard?.writeText !== "function") {
+        throw new Error("Clipboard API unavailable");
       }
-    } catch {}
+
+      await navigator.clipboard.writeText(text);
+
+      if (target === "id") {
+        copiedId = true;
+        notifications.success("Request ID copied to clipboard");
+        setTimeout(() => (copiedId = false), 2000);
+      } else {
+        copiedJson = true;
+        notifications.success("Request audit JSON copied to clipboard");
+        setTimeout(() => (copiedJson = false), 2000);
+      }
+    } catch (error) {
+      const reason = error instanceof Error && error.message ? `: ${error.message}` : "";
+      const label = target === "id" ? "request ID" : "request audit JSON";
+      notifications.error(`Could not copy ${label}${reason}`);
+    } finally {
+      copying = null;
+    }
   }
 </script>
 
@@ -286,6 +308,17 @@
         <div class="p-4 px-6 border-b border-border flex items-center justify-between bg-surface-2/60">
           <div class="flex items-center gap-3">
             <span class="font-mono text-sm font-bold text-text-main">{selectedRequest.id}</span>
+            <Button
+              id="usage-copy-request-id"
+              variant="ghost"
+              size="sm"
+              title="Copy Request ID"
+              disabled={copying !== null}
+              loading={copying === "id"}
+              onclick={() => copyText(selectedRequest.id, "id")}
+            >
+              <span>{copying === "id" ? "Copying..." : copiedId ? "Copied!" : "Copy ID"}</span>
+            </Button>
             <span
               class="px-2 py-0.5 rounded text-[11px] font-bold font-mono {selectedRequest.status >= 200 && selectedRequest.status < 300
                 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
@@ -359,14 +392,22 @@
             <div class="flex items-center justify-between">
               <span class="text-xs font-semibold text-text-main uppercase tracking-wider text-[11px]">Audit Telemetry JSON</span>
               <Button
+                id="usage-copy-request-json"
                 variant="outline"
                 size="sm"
-                onclick={() => copyText(JSON.stringify(selectedRequest, null, 2), true)}
+                title="Copy request audit JSON"
+                disabled={copying !== null}
+                loading={copying === "json"}
+                onclick={() => copyText(JSON.stringify(selectedRequest, null, 2), "json")}
               >
-                <span class="material-symbols-outlined text-[14px]">
-                  {copiedJson ? "check" : "content_copy"}
-                </span>
-                <span>{copiedJson ? "Copied!" : "Copy JSON"}</span>
+                {#if copying === "json"}
+                  <span>Copying...</span>
+                {:else}
+                  <span class="material-symbols-outlined text-[14px]">
+                    {copiedJson ? "check" : "content_copy"}
+                  </span>
+                  <span>{copiedJson ? "Copied!" : "Copy JSON"}</span>
+                {/if}
               </Button>
             </div>
             <pre class="p-4 rounded-[12px] bg-surface-2 border border-border-subtle text-xs font-mono text-text-muted overflow-x-auto max-h-56 leading-relaxed selection:bg-brand-500/30">
