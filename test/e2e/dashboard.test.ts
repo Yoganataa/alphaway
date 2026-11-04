@@ -28,25 +28,30 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 15000);
 
-  it("loads the dashboard and verifies BoringSSL Native Parity badges and overview", async () => {
+  it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
     const { page, baseURL } = dashboard;
     await page.goto(`${baseURL}/`);
 
-    // Verify Title & Header Brand
+    const health = await page.evaluate(async () => {
+      const response = await fetch("/health");
+      if (!response.ok) throw new Error(`Health request failed: ${response.status}`);
+      return response.json();
+    });
+
     const headerTitle = await page.textContent("header h1");
     expect(headerTitle).toContain("AlphaWay");
 
-    // Verify BoringSSL Native Parity badge
-    const badgeText = await page.textContent("header");
-    expect(badgeText).toContain("BoringSSL Native Parity");
-    expect(badgeText).toContain(":20129");
+    const headerText = await page.textContent("header");
+    expect(headerText).toContain(health.tls);
+    expect(headerText).toContain(new URL(baseURL).host);
 
-    // Verify Overview cards
     const bodyText = await page.textContent("main");
-    expect(bodyText).toContain("TLS Fingerprint");
-    expect(bodyText).toContain("17 ciphers · 12 extensions");
+    expect(bodyText).toContain("TLS Profile");
+    expect(bodyText).toContain(health.tls);
+    expect(bodyText).toContain("Local Retry Gate");
     expect(bodyText).toContain("OpenAI Client Integration");
     expect(bodyText).toContain(`${new URL(baseURL).origin}/v1`);
+    expect(bodyText).not.toContain("17 ciphers · 12 extensions");
   });
 
   it("navigates to Playground and verifies model selection and prompt inputs", async () => {
@@ -76,23 +81,28 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await sendBtn.isEnabled()).toBe(true);
   }, 15000);
 
-  it("navigates to Providers & Models and checks OpenCode and CodeBuddy cards", async () => {
+  it("renders configured OpenCode request anchors from the health contract", async () => {
     const { page } = dashboard;
 
-    // Click Providers & Models Tab
+    const health = await page.evaluate(async () => {
+      const response = await fetch("/health");
+      if (!response.ok) throw new Error(`Health request failed: ${response.status}`);
+      return response.json();
+    });
+
     await page.getByRole("button", { name: "Providers & Models" }).click();
 
-    // Check OpenCode Free-Tier section
     const mainText = await page.textContent("main");
     expect(mainText).toContain("OpenCode Free-Tier");
-    expect(mainText).toContain("Gate Shape & Fingerprint Anchors");
-    expect(mainText).toContain("BoringSSL 17 Ciphers");
-    expect(mainText).toContain("12 TLS Extensions");
-    expect(mainText).toContain("`read` Tool Anchor");
+    expect(mainText).toContain("Configured Request Anchors");
+    expect(mainText).toContain(`Adapter: ${health.providers.opencode.status}`);
+    expect(mainText).toContain(`Local retry gate: ${health.identity.gate.status.toUpperCase()}`);
+    for (const anchor of health.identity.gate.anchors.tools) expect(mainText).toContain(anchor);
+    for (const anchor of health.identity.gate.anchors.headers) expect(mainText).toContain(anchor);
+    expect(mainText).not.toContain("BoringSSL 17 Ciphers");
+    expect(mainText).not.toContain("12 TLS Extensions");
 
-    // Check CodeBuddy International section
     expect(mainText).toContain("CodeBuddy International");
-    expect(mainText).toContain("WorkBuddy 5.8.4");
     expect(mainText).toContain("Start OAuth Login");
   }, 15000);
 
@@ -207,6 +217,27 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(content.length).toBeGreaterThan(0);
   }, 15000);
  
+  it("labels the dashboard API key as browser-scoped and reports database journal state", async () => {
+    const { page } = dashboard;
+    await page.getByRole("button", { name: "Profile & Settings" }).click();
+
+    const apiKey = page.locator("#dashboard-client-api-key");
+    await apiKey.waitFor({ state: "visible", timeout: 10000 });
+    expect(await apiKey.getAttribute("type")).toBe("password");
+
+    const mainText = await page.textContent("main");
+    expect(mainText).toContain("Dashboard Client API Key");
+    expect(mainText).toContain("does not change server environment variables or create a managed API key");
+
+    const stats = await page.evaluate(async () => {
+      const response = await fetch("/api/settings/database/stats");
+      if (!response.ok) throw new Error(`Database stats request failed: ${response.status}`);
+      return response.json();
+    });
+    expect(mainText).toContain(stats.journalMode.toUpperCase());
+    expect(mainText).toContain(stats.engine);
+  }, 15000);
+
   it("shows an inherited Plan quota for a managed API key in the dashboard", async () => {
     const { page, baseURL, adminCookie } = dashboard;
     const adminHeaders = {
