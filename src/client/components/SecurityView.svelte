@@ -25,6 +25,11 @@
   });
 
   let rules = $state<SecurityKeywordRule[]>([]);
+  let isConfigLoading = $state(true);
+  let configLoaded = $state(false);
+  let configLoadError = $state<string | null>(null);
+  let isSavingConfig = $state(false);
+  let configSaveError = $state<string | null>(null);
 
   let isAddModalOpen = $state(false);
   let newPattern = $state("");
@@ -43,12 +48,27 @@
   let sandboxOutput = $state("");
   let detections = $state<string[]>([]);
 
-  onMount(async () => {
+  function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  async function loadConfig() {
+    isConfigLoading = true;
+    configLoaded = false;
+    configLoadError = null;
     try {
       config = await fetchTokenSaverConfig();
-    } catch {
-      notifications.error("Failed to load security settings");
+      configLoaded = true;
+    } catch (error) {
+      configLoadError = getErrorMessage(error, "Unknown security settings load error");
+      notifications.error(configLoadError);
+    } finally {
+      isConfigLoading = false;
     }
+  }
+
+  onMount(async () => {
+    await loadConfig();
     try {
       rules = await fetchSecurityRules();
     } catch {
@@ -58,11 +78,17 @@
   });
 
   async function saveToggles() {
+    if (!configLoaded || isConfigLoading || isSavingConfig) return;
+    isSavingConfig = true;
+    configSaveError = null;
     try {
-      await updateTokenSaverConfig(config);
+      config = await updateTokenSaverConfig(config);
       notifications.success("Security settings updated");
-    } catch {
-      notifications.error("Failed to update security settings");
+    } catch (error) {
+      configSaveError = getErrorMessage(error, "Unknown security settings save error");
+      notifications.error(configSaveError);
+    } finally {
+      isSavingConfig = false;
     }
   }
 
@@ -139,10 +165,18 @@
       <div>
         <div class="flex items-center gap-2">
           <h2 class="text-lg font-bold text-text-main tracking-tight">Security Armor & DLP Guard</h2>
-          <Badge tone="success" size="sm">Active Defense</Badge>
+          <Badge tone={!configLoaded ? "neutral" : config.dlpEnabled !== false ? "success" : "warning"} size="sm">
+            {#if !configLoaded}
+              Outbound DLP Status Unknown
+            {:else if config.dlpEnabled !== false}
+              Outbound DLP Enabled
+            {:else}
+              Outbound DLP Disabled
+            {/if}
+          </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
-          Enterprise Data Loss Prevention (DLP) secret redaction, Anti-Infostealer defenses, and jailbreak guardrails.
+          Control outbound prompt redaction separately from inbound image and dangerous-command guardrails.
         </p>
       </div>
 
@@ -156,6 +190,66 @@
           <span>Add Rule</span>
         </Button>
       </div>
+    </div>
+
+    {#if isConfigLoading}
+      <p id="security-config-loading" role="status" aria-live="polite" class="text-xs text-text-muted">
+        Loading persisted security settings...
+      </p>
+    {/if}
+    {#if configLoadError}
+      <div id="security-config-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[10px] border border-red-500/25 bg-red-500/5 p-3">
+        <p class="text-xs text-red-500">Could not load security settings: {configLoadError}</p>
+        <Button
+          type="button"
+          id="security-config-load-retry-btn"
+          variant="secondary"
+          size="sm"
+          onclick={loadConfig}
+          disabled={isConfigLoading}
+        >
+          Retry Load
+        </Button>
+      </div>
+    {/if}
+    {#if configSaveError}
+      <div id="security-config-save-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[10px] border border-red-500/25 bg-red-500/5 p-3">
+        <p class="text-xs text-red-500">Could not save security settings: {configSaveError}. Retry to persist the current values.</p>
+        <Button
+          type="button"
+          id="security-config-save-retry-btn"
+          variant="secondary"
+          size="sm"
+          onclick={saveToggles}
+          disabled={isSavingConfig || !configLoaded}
+        >
+          Retry Save
+        </Button>
+      </div>
+    {/if}
+
+    <div class="p-4 rounded-[10px] bg-surface-2 border border-border flex items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-brand-500 text-[18px]">shield_lock</span>
+          <span class="text-xs font-bold text-text-main">Outbound Prompt DLP</span>
+          <Badge tone={config.dlpEnabled !== false ? "success" : "warning"} size="sm">
+            {config.dlpEnabled !== false ? "Enabled" : "Disabled"}
+          </Badge>
+        </div>
+        <p class="text-[11px] text-text-muted mt-0.5">
+          Master switch for outbound secret and local-path redaction before provider dispatch. Inbound guardrails below remain independently configurable.
+        </p>
+      </div>
+      <Toggle
+        label="Outbound Prompt DLP"
+        checked={config.dlpEnabled !== false}
+        disabled={!configLoaded || isConfigLoading || isSavingConfig}
+        onchange={(val) => {
+          config.dlpEnabled = val;
+          void saveToggles();
+        }}
+      />
     </div>
 
     <!-- Active Shield Toggles Grid -->
@@ -173,6 +267,8 @@
         </div>
         <Toggle
           checked={config.maskSecrets ?? true}
+          disabled={!configLoaded || isConfigLoading || isSavingConfig}
+          label="Outbound API Secret Masking"
           onchange={(val) => {
             config.maskSecrets = val;
             saveToggles();
@@ -194,6 +290,8 @@
         </div>
         <Toggle
           checked={config.blockDangerousCommands ?? true}
+          disabled={!configLoaded || isConfigLoading || isSavingConfig}
+          label="Inbound Anti-Infostealer Guard"
           onchange={(val) => {
             config.blockDangerousCommands = val;
             saveToggles();
@@ -215,6 +313,8 @@
         </div>
         <Toggle
           checked={config.maskPaths ?? true}
+          disabled={!configLoaded || isConfigLoading || isSavingConfig}
+          label="Outbound Path Anonymization"
           onchange={(val) => {
             config.maskPaths = val;
             saveToggles();
@@ -236,6 +336,8 @@
         </div>
         <Toggle
           checked={config.sanitizeMarkdownImages ?? true}
+          disabled={!configLoaded || isConfigLoading || isSavingConfig}
+          label="Inbound Image Exfil Neutralizer"
           onchange={(val) => {
             config.sanitizeMarkdownImages = val;
             saveToggles();
@@ -255,7 +357,7 @@
           <span>Security Sandbox & DLP Inspector</span>
         </h3>
         <p class="text-xs text-text-muted">
-          Test sample payloads against the same custom literal rules used by live outbound and inbound traffic.
+          Test payloads against custom Security Rules. Built-in DLP and TokenSaver guardrails run in their own gateway pipelines.
         </p>
       </div>
 
