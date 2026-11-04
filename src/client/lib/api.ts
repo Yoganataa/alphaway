@@ -794,8 +794,22 @@ export async function clearConsoleLogs(): Promise<void> {
 
 export async function fetchDatabaseStats(): Promise<DatabaseStats> {
   const res = await fetch(`${BASE_URL}/api/settings/database/stats`);
-  if (!res.ok) throw new Error(`Failed to load database stats: ${res.statusText}`);
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error || `Failed to load database stats (HTTP ${res.status})`);
+  }
+  if (
+    !data ||
+    typeof data.engine !== "string" ||
+    typeof data.mode !== "string" ||
+    typeof data.path !== "string" ||
+    typeof data.sizeKb !== "number" ||
+    typeof data.requestLogsCount !== "number" ||
+    typeof data.customProvidersCount !== "number"
+  ) {
+    throw new Error("Invalid database statistics response");
+  }
+  return data as DatabaseStats;
 }
 
 export async function downloadDatabaseBackup(): Promise<string> {
