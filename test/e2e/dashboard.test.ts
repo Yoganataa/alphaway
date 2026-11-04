@@ -30,6 +30,15 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
   it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
     const { page, baseURL } = dashboard;
+    const expectedTls = "AlphaWay E2E TLS profile sentinel";
+
+    await page.route("**/health", async (route) => {
+      const response = await route.fetch();
+      const payload = await response.json();
+      payload.tls = expectedTls;
+      await route.fulfill({ response, json: payload });
+    });
+
     await page.goto(`${baseURL}/`);
 
     const health = await page.evaluate(async () => {
@@ -44,12 +53,14 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.locator("header").getByText(new URL(baseURL).host, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     await page.locator("header").getByText(health.tls, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     const headerText = await page.textContent("header");
-    expect(headerText).toContain(health.tls);
+    expect(health.tls).toBe(expectedTls);
+    expect(headerText).toContain(expectedTls);
+    expect(headerText).not.toContain("BoringSSL Native Parity");
     expect(headerText).toContain(new URL(baseURL).host);
 
     await page.getByText("Dashboard origin", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     const sidebarText = await page.locator("aside").textContent();
-    expect(sidebarText).toContain(health.tls);
+    expect(sidebarText).toContain(expectedTls);
     expect(sidebarText).toContain("Local retry gate");
     expect(sidebarText).toContain(health.identity.gate.status.toUpperCase());
     expect(sidebarText).toContain(`${health.identity.gate.anchors.tools.length} tools · ${health.identity.gate.anchors.headers.length} headers`);
@@ -58,7 +69,8 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     const bodyText = await page.textContent("main");
     expect(bodyText).toContain("TLS Profile");
-    expect(bodyText).toContain(health.tls);
+    expect(bodyText).toContain(expectedTls);
+    expect(bodyText).not.toContain("17 ciphers · 12 extensions");
     expect(bodyText).toContain("Local Retry Gate");
     expect(bodyText).toContain("OpenAI Client Integration");
     expect(bodyText).toContain(`${new URL(baseURL).origin}/v1`);
