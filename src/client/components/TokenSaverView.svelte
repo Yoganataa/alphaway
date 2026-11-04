@@ -29,7 +29,11 @@
     blockDangerousCommands: true,
   });
 
+  let isLoadingConfig = $state<boolean>(true);
+  let configLoaded = $state<boolean>(false);
+  let loadError = $state<string | null>(null);
   let isSaving = $state<boolean>(false);
+  let saveError = $state<string | null>(null);
   let saveSuccess = $state<boolean>(false);
   let sandboxInput = $state<string>(
     "Hello there! I hope you are doing well today. Please test connecting with sk-proj-1234567890abcdef1234567890 on C:\\Users\\Administrator\\Code\n" +
@@ -44,21 +48,39 @@
   let compressedTokens = $state<number>(0);
   let savingsPercent = $state<number>(0);
 
-  onMount(async () => {
+  function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  async function loadConfig() {
+    isLoadingConfig = true;
+    loadError = null;
     try {
       config = await fetchTokenSaverConfig();
-    } catch {}
+      configLoaded = true;
+    } catch (error) {
+      loadError = getErrorMessage(error, "Unknown configuration load error");
+    } finally {
+      isLoadingConfig = false;
+    }
+  }
+
+  onMount(() => {
+    void loadConfig();
   });
 
   async function handleSaveConfig() {
+    if (!configLoaded || isLoadingConfig || isSaving) return;
     isSaving = true;
     saveSuccess = false;
+    saveError = null;
     try {
       config = await updateTokenSaverConfig(config);
       saveSuccess = true;
       setTimeout(() => (saveSuccess = false), 2500);
-    } catch {}
-    finally {
+    } catch (error) {
+      saveError = getErrorMessage(error, "Unknown configuration save error");
+    } finally {
       isSaving = false;
     }
   }
@@ -68,13 +90,13 @@
     const origLen = Math.ceil(text.length / 4);
 
     // 1. DLP: Secret Redaction
-    if (config.maskSecrets) {
+    if (config.dlpEnabled && config.maskSecrets) {
       text = text.replace(/\bsk-[A-Za-z0-9_\-]{20,}\b/g, "[REDACTED_API_KEY]");
       text = text.replace(/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED_AWS_KEY]");
     }
 
     // 2. DLP: Path Anonymization
-    if (config.maskPaths) {
+    if (config.dlpEnabled && config.maskPaths) {
       text = text.replace(/[a-zA-Z]:\\Users\\[^\s\\"'`]+(\\.*)?/gi, "/workspace$1");
       text = text.replace(/\/(?:home|Users)\/[^\s\/"'`]+(\/.*)?/gi, "/workspace$1");
     }
@@ -132,7 +154,15 @@
       <div>
         <div class="flex items-center gap-2">
           <h2 class="text-lg font-bold text-text-main tracking-tight">TokenSaver Optimization Engine & Security Guard</h2>
-          <Badge tone="success" size="sm" dot>DLP Guard Active</Badge>
+          <Badge tone={!configLoaded ? "neutral" : config.dlpEnabled ? "success" : "warning"} size="sm" dot>
+            {#if !configLoaded}
+              Outbound DLP Status Unknown
+            {:else if config.dlpEnabled}
+              Outbound DLP Enabled
+            {:else}
+              Outbound DLP Disabled
+            {/if}
+          </Badge>
         </div>
         <p class="text-xs text-text-muted mt-0.5">
           Save prompt tokens, redact sensitive credentials (DLP), and block rogue provider exfiltrations.
@@ -152,7 +182,7 @@
           variant="primary"
           size="sm"
           onclick={handleSaveConfig}
-          disabled={isSaving}
+          disabled={isSaving || isLoadingConfig || !configLoaded}
         >
           {#if isSaving}
             <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
@@ -164,6 +194,32 @@
         </Button>
       </div>
     </div>
+
+    {#if isLoadingConfig}
+      <p id="tokensaver-loading" role="status" aria-live="polite" class="text-xs text-text-muted">
+        Loading TokenSaver settings...
+      </p>
+    {/if}
+    {#if loadError}
+      <div id="tokensaver-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[10px] border border-red-500/25 bg-red-500/5 p-3">
+        <p class="text-xs text-red-500">Could not load TokenSaver settings: {loadError}</p>
+        <Button
+          type="button"
+          id="tokensaver-load-retry-btn"
+          variant="secondary"
+          size="sm"
+          onclick={loadConfig}
+          disabled={isLoadingConfig}
+        >
+          Retry Load
+        </Button>
+      </div>
+    {/if}
+    {#if saveError}
+      <div id="tokensaver-save-error" role="alert" class="rounded-[10px] border border-red-500/25 bg-red-500/5 p-3">
+        <p class="text-xs text-red-500">Could not save TokenSaver settings: {saveError}. Retry with Save Settings.</p>
+      </div>
+    {/if}
 
     <!-- Token Optimization Controls Grid -->
     <div>
@@ -180,6 +236,7 @@
                 type="checkbox"
                 id="tokensaver-rtk-toggle"
                 bind:checked={config.rtkEnabled}
+                disabled={!configLoaded || isLoadingConfig}
                 class="sr-only peer"
               />
               <div class="w-9 h-5 bg-surface-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-500"></div>
@@ -197,6 +254,7 @@
                 type="checkbox"
                 id="tokensaver-caveman-toggle"
                 bind:checked={config.cavemanEnabled}
+                disabled={!configLoaded || isLoadingConfig}
                 class="sr-only peer"
               />
               <div class="w-9 h-5 bg-surface-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-500"></div>
@@ -214,6 +272,7 @@
                 type="checkbox"
                 id="tokensaver-adhd-toggle"
                 bind:checked={config.adhdEnabled}
+                disabled={!configLoaded || isLoadingConfig}
                 class="sr-only peer"
               />
               <div class="w-9 h-5 bg-surface-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-500"></div>
@@ -240,6 +299,7 @@
                 type="checkbox"
                 id="tokensaver-secrets-toggle"
                 bind:checked={config.maskSecrets}
+                disabled={!configLoaded || isLoadingConfig}
                 class="sr-only peer"
               />
               <div class="w-9 h-5 bg-surface-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
@@ -257,6 +317,7 @@
                 type="checkbox"
                 id="tokensaver-paths-toggle"
                 bind:checked={config.maskPaths}
+                disabled={!configLoaded || isLoadingConfig}
                 class="sr-only peer"
               />
               <div class="w-9 h-5 bg-surface-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
@@ -274,6 +335,7 @@
                 type="checkbox"
                 id="tokensaver-exfil-toggle"
                 bind:checked={config.sanitizeMarkdownImages}
+                disabled={!configLoaded || isLoadingConfig}
                 class="sr-only peer"
               />
               <div class="w-9 h-5 bg-surface-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
@@ -299,6 +361,7 @@
         variant="secondary"
         size="sm"
         onclick={runCompressionSandbox}
+        disabled={!configLoaded || isLoadingConfig}
       >
         <span class="material-symbols-outlined text-[16px]">play_arrow</span>
         <span>Run Local Preview</span>
