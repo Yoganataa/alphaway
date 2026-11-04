@@ -41,8 +41,9 @@ describe("Endpoint clipboard feedback", () => {
     expect(await page.getByText("Copied to clipboard", { exact: true }).count()).toBe(0);
 
     await page.locator("#copy-client-snippet").click();
-    await page.getByText("Could not copy to clipboard: clipboard denied", { exact: true })
-      .waitFor({ state: "visible", timeout: 5000 });
+    const clipboardErrors = page.getByText("Could not copy to clipboard: clipboard denied", { exact: true });
+    await clipboardErrors.last().waitFor({ state: "visible", timeout: 5000 });
+    expect(await clipboardErrors.count()).toBe(2);
     expect(await page.locator("#copy-client-snippet").textContent()).not.toContain("Copied");
 
     await page.evaluate(() => {
