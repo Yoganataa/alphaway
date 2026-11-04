@@ -253,13 +253,13 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 
 ### Phase 6 — 9router-go Dashboard Migration and UI/UX Parity
 
-**Status:** In progress. Runtime-truthfulness slice [PR #12](https://github.com/Yoganataa/alphaway/pull/12), sidebar grouping slice [PR #14](https://github.com/Yoganataa/alphaway/pull/14), detailed Connections/Providers audit [PR #17](https://github.com/Yoganataa/alphaway/pull/17), and custom-provider probe correction [PR #18](https://github.com/Yoganataa/alphaway/pull/18) are merged. PR #18 is at `f626f8d0026acc21a6ad7d5af019a2dfa9743ba4`; required CI [#41774065042](https://github.com/Yoganataa/alphaway/actions/runs/41774065042) and both CodeQL analyzers [#41774060270](https://github.com/Yoganataa/alphaway/actions/runs/41774060270) passed. Command Palette/TopBar parity is the active PR [#15](https://github.com/Yoganataa/alphaway/pull/15); its branch is synchronized with current `main`.
+**Status:** In progress. Runtime-truthfulness slice [PR #12](https://github.com/Yoganataa/alphaway/pull/12), sidebar grouping slice [PR #14](https://github.com/Yoganataa/alphaway/pull/14), detailed Connections/Providers audit [PR #17](https://github.com/Yoganataa/alphaway/pull/17), and custom-provider probe correction [PR #18](https://github.com/Yoganataa/alphaway/pull/18) are merged. PR #18 is at `f626f8d0026acc21a6ad7d5af019a2dfa9743ba4`; required CI [#41774065042](https://github.com/Yoganataa/alphaway/actions/runs/41774065042) and both CodeQL analyzers [#41774060270](https://github.com/Yoganataa/alphaway/actions/runs/41774060270) passed. Command Palette/TopBar parity [PR #15](https://github.com/Yoganataa/alphaway/pull/15) merged at `d9d637944a663fb51744033d374f70f324acf8bd`; exact-head CI [#41774389381](https://github.com/Yoganataa/alphaway/actions/runs/41774389381) and both CodeQL analyzers [#41774385519](https://github.com/Yoganataa/alphaway/actions/runs/41774385519) passed.
 
 **Goal:** migrate the remaining 9router-go-inspired dashboard screens and interaction patterns to AlphaWay while mapping every visible control to an existing, verified AlphaWay backend contract. Preserve AlphaWay runtime behavior and persistence.
 
 **Reference pin:** `luqman-v1/9router-go@e328decc174015514f49c7046d4bde57690bedc9`. Treat this commit as the initial design baseline; re-pin deliberately if the reference moves.
 
-**Initial capability matrix (AlphaWay `main` at `f626f8d`)**
+**Initial capability matrix (AlphaWay `main` at `d9d6379`)**
 
 | 9router-go screen / capability | AlphaWay implementation / API | Canonical state | Runtime meaning / gap |
 |---|---|---|---|
@@ -302,7 +302,7 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 - [x] Classify initial screen gaps as UI-only parity, existing API wiring, or genuine backend capability gaps.
 - [x] Complete the detailed Connections/Providers interaction audit and record the route, DTO, persistence, runtime-semantic, and backend-gap mapping in [PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md](PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md).
 - [x] Correct the existing custom-provider probe feedback so it reports only backend-returned HTTP status/result; do not display fabricated latency or model-validation counts (PR #18 merged; route and browser regressions, four required CI jobs, and both CodeQL analyzers passed).
-- [x] Align the Command Palette with implemented navigation/actions, truthful labels, keyboard behavior, and mobile navigation coverage (PR #15; this checkpoint update is included in that merge candidate).
+- [x] Align the Command Palette with implemented navigation/actions, truthful labels, keyboard behavior, and mobile navigation coverage (PR #15 merged; exact-head required CI and both CodeQL analyzers passed).
 - [ ] Decide whether AlphaWay requires the full provider-node + multi-connection domain or a lighter custom-provider registry. Do not design schema or connection routing until this product boundary is explicit.
 - [ ] After the decision, design any required SQLite entities and secured API contracts before adding corresponding provider/model controls.
 - [ ] Implement remaining UI-only parity against existing endpoints in independently reviewable slices with regression coverage.
