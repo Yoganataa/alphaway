@@ -963,15 +963,15 @@ function setPool(raw) {
   const seen = new Set();
   const seenIds = new Set();
   for (const entry of entries) {
-    if (seenIds.has(entry.id)) {
-      return { ok: false, error: "Pool entry IDs must be unique." };
-    }
-    seenIds.add(entry.id);
     const key = keyOf(entry.url);
     if (seen.has(key)) {
       return { ok: false, error: `Egress ganda di pool: ${entry.direct ? "direct" : displayHost(entry.url)}` };
     }
     seen.add(key);
+    if (seenIds.has(entry.id)) {
+      return { ok: false, error: "Pool entry IDs must be unique." };
+    }
+    seenIds.add(entry.id);
   }
 
   const config = readConfigObject();
