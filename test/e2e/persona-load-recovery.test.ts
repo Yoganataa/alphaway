@@ -84,11 +84,22 @@ describe("Persona configuration load recovery", () => {
             await route.fulfill({
               status: 200,
               contentType: "application/json",
-              body: JSON.stringify(state("Protected Persona")),
+              body: JSON.stringify({
+                ...state("Malformed Nested Persona"),
+                excludes: [{ text: "   ", mode: "word" }],
+              }),
             });
             return;
           }
           if (reads === 4) {
+            await route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify(state("Protected Persona")),
+            });
+            return;
+          }
+          if (reads === 5) {
             signalHeldRefresh();
             await refreshGate;
             await route.fulfill({
@@ -137,6 +148,13 @@ describe("Persona configuration load recovery", () => {
       expect(await page.locator("#persona-save-global-excludes").count()).toBe(0);
       expect(writes).toBe(0);
 
+      // A syntactically valid top-level response with a blank nested exclusion
+      // must also fail closed rather than becoming an empty draft.
+      await page.locator("#persona-load-retry").click();
+      await page.getByText("Invalid Persona response", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      expect(await page.locator("#persona-save-global-excludes").count()).toBe(0);
+      expect(writes).toBe(0);
+
       await page.locator("#persona-load-retry").click();
       await page.getByText("Protected Persona", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
       await loadError.waitFor({ state: "detached", timeout: 10000 });
@@ -170,7 +188,7 @@ describe("Persona configuration load recovery", () => {
       await page.locator("#persona-save-global-excludes").click();
       await page.getByText("Global Persona exclusions saved", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
-      expect(reads).toBe(5);
+      expect(reads).toBe(6);
       expect(writes).toBe(1);
       expect(Array.isArray(lastWrite?.excludes)).toBe(true);
       const saved = lastWrite?.excludes as Array<{ text: string; mode?: string }>;
