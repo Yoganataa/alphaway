@@ -288,10 +288,59 @@ export async function inspectSecurityPrompt(text: string): Promise<{
   return data;
 }
 
+function parseSoulInfoResponse(value: unknown, requirePresets: boolean): SoulInfoResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid SOUL configuration response");
+  }
+  const data = value as Record<string, unknown>;
+  const validSources = ["workspace", "global", "custom_path", "custom_content", "preset", "none"];
+  if (
+    data.ok !== true ||
+    typeof data.enabled !== "boolean" ||
+    (data.mode !== "auto" && data.mode !== "preset" && data.mode !== "custom") ||
+    typeof data.preset !== "string" ||
+    typeof data.source !== "string" || !validSources.includes(data.source) ||
+    (data.filePath !== null && typeof data.filePath !== "string") ||
+    typeof data.content !== "string" ||
+    typeof data.tokenEstimate !== "number" ||
+    !Number.isFinite(data.tokenEstimate) || data.tokenEstimate < 0
+  ) {
+    throw new Error("Invalid SOUL configuration response");
+  }
+
+  const presets = data.presets;
+  if (requirePresets && (!presets || typeof presets !== "object" || Array.isArray(presets))) {
+    throw new Error("Invalid SOUL preset catalog response");
+  }
+  if (presets !== undefined) {
+    if (
+      !presets || typeof presets !== "object" || Array.isArray(presets) ||
+      typeof (presets as Record<string, unknown>).atlas !== "string" ||
+      typeof (presets as Record<string, unknown>).minimalist !== "string" ||
+      typeof (presets as Record<string, unknown>).socratic !== "string"
+    ) {
+      throw new Error("Invalid SOUL preset catalog response");
+    }
+  }
+
+  return {
+    ok: true,
+    enabled: data.enabled,
+    mode: data.mode,
+    preset: data.preset,
+    source: data.source as SoulInfoResponse["source"],
+    filePath: data.filePath as string | null,
+    content: data.content,
+    tokenEstimate: data.tokenEstimate,
+    ...(presets ? { presets: presets as SoulInfoResponse["presets"] } : {}),
+  };
+}
+
 export async function fetchSoulConfig(): Promise<SoulInfoResponse> {
   const res = await fetch(`${BASE_URL}/api/soul`);
-  if (!res.ok) throw new Error(`Fetch soul failed: ${res.statusText}`);
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Fetch soul failed (${res.status})`);
+  return parseSoulInfoResponse(data, true);
 }
 
 export async function updateSoulConfig(data: {
@@ -309,8 +358,9 @@ export async function updateSoulConfig(data: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`Update soul failed: ${res.statusText}`);
-  return res.json();
+  const response = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(response?.error || `Update soul failed (${res.status})`);
+  return parseSoulInfoResponse(response, false);
 }
 
 export async function previewSoulPrompt(prompt: string, soulContent?: string): Promise<{
