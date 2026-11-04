@@ -383,11 +383,11 @@
           <span class="material-symbols-outlined text-[14px] {isPoolTesting ? 'animate-spin' : ''}">network_check</span>
           <span>{isPoolTesting ? "Probing..." : "Ping All"}</span>
         </Button>
-        <Button id="proxy-bulk-import" variant="secondary" size="xs" onclick={() => (isBulkModalOpen = true)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
+        <Button id="proxy-bulk-import" variant="secondary" size="xs" onclick={() => (isBulkModalOpen = true)} disabled={!hasLoaded || isLoading || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
           <span class="material-symbols-outlined text-[14px]">file_upload</span>
           <span>Bulk Import</span>
         </Button>
-        <Button id="proxy-add-node" variant="primary" size="xs" onclick={() => (isAddModalOpen = true)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
+        <Button id="proxy-add-node" variant="primary" size="xs" onclick={() => (isAddModalOpen = true)} disabled={!hasLoaded || isLoading || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
           <span class="material-symbols-outlined text-[14px]">add</span>
           <span>Add Node</span>
         </Button>
@@ -470,14 +470,14 @@
                         type="checkbox"
                         checked={entry.enabled}
                         onchange={(event) => handleToggleEntry(entry, (event.currentTarget as HTMLInputElement).checked)}
-                        disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}
+                        disabled={!hasLoaded || isLoading || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}
                       />
                       Enabled
                     </label>
                     <Button variant="ghost" size="xs" onclick={() => runPoolTest(entry.id)} disabled={isPoolTesting || !entry.enabled}>
                       Ping
                     </Button>
-                    <Button variant="ghost" size="xs" class="text-red-400" onclick={() => handleRemoveEntry(entry)} disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
+                    <Button variant="ghost" size="xs" class="text-red-400" onclick={() => handleRemoveEntry(entry)} disabled={!hasLoaded || isLoading || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}>
                       <span class="material-symbols-outlined text-[14px]">delete</span>
                     </Button>
                   </div>
