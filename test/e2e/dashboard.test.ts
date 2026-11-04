@@ -260,36 +260,99 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(mainText).toContain("Start OAuth Login");
   }, 15000);
 
-  it("navigates to TokenSaver, toggles settings and tests compression sandbox", async () => {
-    const { page } = dashboard;
+  it("recovers TokenSaver load and save failures and preserves the returned config", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    const originalResponse = await fetch(`${baseURL}/api/tokensaver`, {
+      headers: { Cookie: adminCookie },
+    });
+    expect(originalResponse.status).toBe(200);
+    const originalConfig = await originalResponse.json();
 
-    // Click TokenSaver Tab
-    await page.getByRole("button", { name: "Token Saver" }).click();
+    let failInitialLoad = true;
+    let failFirstSave = true;
+    await page.route("**/api/tokensaver", async (route) => {
+      const method = route.request().method();
+      if (method === "GET" && failInitialLoad) {
+        failInitialLoad = false;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Temporary settings read failure" }),
+        });
+        return;
+      }
+      if (method === "POST" && failFirstSave) {
+        failFirstSave = false;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: false, error: "Temporary settings write failure" }),
+        });
+        return;
+      }
+      await route.continue();
+    });
 
-    const mainText = await page.textContent("main");
-    expect(mainText).toContain("TokenSaver Optimization Engine");
-    expect(mainText).toContain("RTK Deduplication");
-    expect(mainText).toContain("Caveman Mode");
-    expect(mainText).toContain("ADHD Mode");
+    try {
+      await page.getByRole("button", { name: "Token Saver" }).click();
+      const loadError = page.locator("#tokensaver-load-error");
+      await loadError.waitFor({ state: "visible", timeout: 10000 });
+      expect(await loadError.textContent()).toContain("Temporary settings read failure");
 
-    // Verify Save Button
-    const saveBtn = page.locator("#tokensaver-save-btn");
-    expect(await saveBtn.isVisible()).toBe(true);
+      await page.locator("#tokensaver-load-retry-btn").click();
+      const rtkToggle = page.locator("#tokensaver-rtk-toggle");
+      await page.waitForFunction(() => {
+        const toggle = document.querySelector<HTMLInputElement>("#tokensaver-rtk-toggle");
+        return Boolean(toggle && !toggle.disabled);
+      });
+      expect(await page.locator("#tokensaver-load-error").count()).toBe(0);
 
-    // Verify Compression Sandbox
-    const sandboxInput = page.locator("#sandbox-input");
-    expect(await sandboxInput.isVisible()).toBe(true);
+      await rtkToggle.setChecked(true);
+      const saveButton = page.locator("#tokensaver-save-btn");
+      await saveButton.click();
+      const saveError = page.locator("#tokensaver-save-error");
+      await saveError.waitFor({ state: "visible", timeout: 10000 });
+      expect(await saveError.textContent()).toContain("Temporary settings write failure");
+      expect(await rtkToggle.isChecked()).toBe(true);
 
-    const compressBtn = page.locator("#tokensaver-compress-btn");
-    expect(await compressBtn.isVisible()).toBe(true);
-    await compressBtn.click();
+      await saveButton.click();
+      await page.getByText("Saved!", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      expect(await rtkToggle.isChecked()).toBe(true);
 
-    // Verify sandbox output is populated
-    const sandboxOutput = page.locator("#sandbox-output");
-    expect(await sandboxOutput.isVisible()).toBe(true);
-    const outputVal = await sandboxOutput.inputValue();
-    expect(outputVal.length).toBeGreaterThan(0);
-  }, 15000);
+      const persistedResponse = await fetch(`${baseURL}/api/tokensaver`, {
+        headers: { Cookie: adminCookie },
+      });
+      expect(persistedResponse.status).toBe(200);
+      const persistedConfig = await persistedResponse.json();
+      expect(persistedConfig.rtkEnabled).toBe(true);
+
+      const mainText = await page.textContent("main");
+      expect(mainText).toContain("TokenSaver Optimization Engine");
+      expect(mainText).toContain("Caveman Mode");
+      expect(mainText).toContain("ADHD Mode");
+
+      const sandboxInput = page.locator("#sandbox-input");
+      expect(await sandboxInput.isVisible()).toBe(true);
+      const compressButton = page.locator("#tokensaver-compress-btn");
+      expect(await compressButton.isEnabled()).toBe(true);
+      await compressButton.click();
+      const sandboxOutput = page.locator("#sandbox-output");
+      expect(await sandboxOutput.isVisible()).toBe(true);
+      expect((await sandboxOutput.inputValue()).length).toBeGreaterThan(0);
+
+      expect(failInitialLoad).toBe(false);
+      expect(failFirstSave).toBe(false);
+    } finally {
+      await page.unroute("**/api/tokensaver");
+      if (typeof originalConfig.rtkEnabled === "boolean") {
+        await fetch(`${baseURL}/api/tokensaver`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: adminCookie },
+          body: JSON.stringify({ rtkEnabled: originalConfig.rtkEnabled }),
+        });
+      }
+    }
+  }, 25000);
 
   it("navigates to Proxy Pools and tests proxy configuration form", async () => {
     const { page } = dashboard;
