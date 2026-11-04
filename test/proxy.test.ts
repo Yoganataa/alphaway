@@ -422,6 +422,7 @@ describe("proxy HTTP surface", () => {
       assert.equal(invalidTimeout.status, 400);
     } finally {
       global.fetch = originalFetch;
+      proxy.setPool({ entries: [] });
     }
   });
 
