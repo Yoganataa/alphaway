@@ -4,8 +4,9 @@
 >
 > **Checkpoint date:** 2026-11-04 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Workstream in progress:** Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Phase 0–5 are merged; runtime-truthfulness, sidebar, Connections/Providers audit, custom-provider probe correction, Command Palette/TopBar parity, and Usage trend-window truthfulness slices are merged and verified. Remaining work is the provider-domain product decision and a component-by-component UI parity audit against existing AlphaWay contracts.  
-> **Current `main`:** `75dc66f7bac996201627273f9950a59568459a52`.  
+> **Workstream in progress:** Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Phase 0–5 are merged; runtime-truthfulness, sidebar, Connections/Providers audit, custom-provider probe correction, Command Palette/TopBar parity, Usage trend-window truthfulness, and Quota Tracker error-recovery slices are merged and verified. Remaining work is the provider-domain product decision and a component-by-component UI parity audit against existing AlphaWay contracts.  
+> **Current `main`:** `2b8add9889fe98726b712e62f11d64083f86ee5d`.  
+> **Phase 6 Quota Tracker load recovery:** PR [#22](https://github.com/Yoganataa/alphaway/pull/22) merged at `2b8add9889fe98726b712e62f11d64083f86ee5d`; exact-head CI [#41781165999](https://github.com/Yoganataa/alphaway/actions/runs/41781165999) passed all four required jobs, both CodeQL analyzers [#41781159798](https://github.com/Yoganataa/alphaway/actions/runs/41781159798) passed, and no review threads remained. The UI preserves the last successful rows, distinguishes an initial failure from an empty result, labels stale usage with the last successfully loaded window, and retries the selected window.
 > **Phase 6 Usage trend-window scope:** PR [#20](https://github.com/Yoganataa/alphaway/pull/20) merged at `75dc66f7bac996201627273f9950a59568459a52`; exact-head CI [#41777048203](https://github.com/Yoganataa/alphaway/actions/runs/41777048203) and both CodeQL analyzers [#41777045751](https://github.com/Yoganataa/alphaway/actions/runs/41777045751) passed.  
 > **Phase 6 Connections/Providers audit:** PR [#17](https://github.com/Yoganataa/alphaway/pull/17) merged at `d45dd643e8f73c3fc67f4fc0f7c26aa390349fc8`; the detailed capability audit is retained in `PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md`. PR CI [#41773088591](https://github.com/Yoganataa/alphaway/actions/runs/41773088591) and both CodeQL analyzers [#41773085018](https://github.com/Yoganataa/alphaway/actions/runs/41773085018) passed.  
 > **Phase 6 custom-provider probe correction:** PR [#18](https://github.com/Yoganataa/alphaway/pull/18) merged at `f626f8d0026acc21a6ad7d5af019a2dfa9743ba4`; required CI [#41774065042](https://github.com/Yoganataa/alphaway/actions/runs/41774065042) and both CodeQL analyzers [#41774060270](https://github.com/Yoganataa/alphaway/actions/runs/41774060270) passed.  
@@ -24,7 +25,7 @@
 
 ## 1. Current Status
 
-**Phase 0 through Phase 5 are merged into `main`. Phase 6 remains in progress: PR #12 runtime-truthfulness, PR #14 sidebar grouping, PR #17 Connections/Providers audit, PR #18 custom-provider probe correction, PR #15 Command Palette/TopBar parity, and PR #20 Usage trend-window scope are merged. PR #18, #15, and #20 each passed all four required CI jobs and both CodeQL analyzers on their exact PR heads. Usage range controls now state that the range filters only the chart; summary and breakdown aggregates remain totals since the last reset, and the duplicate 60D/All option is removed. Remaining Phase 6 work is the UI parity audit for implemented AlphaWay screens and the unresolved provider-node/multi-connection product decision.
+**Phase 0 through Phase 5 are merged into `main`. Phase 6 remains in progress: PR #12 runtime-truthfulness, PR #14 sidebar grouping, PR #17 Connections/Providers audit, PR #18 custom-provider probe correction, PR #15 Command Palette/TopBar parity, PR #20 Usage trend-window scope, and PR #22 Quota Tracker load recovery are merged. PR #18, #15, #20, and #22 each passed all four required CI jobs and both CodeQL analyzers on their exact PR heads. Usage range controls now state that the range filters only the chart; summary and breakdown aggregates remain totals since the last reset, and the duplicate 60D/All option is removed. PR #22 also preserves the label of the last successfully loaded usage window after a failed window switch, with browser coverage for initial failure, retry, stale-window messaging, and recovery. Remaining Phase 6 work is the UI parity audit for implemented AlphaWay screens and the unresolved provider-node/multi-connection product decision.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
@@ -304,9 +305,10 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 - PR CI [#41769338132](https://github.com/Yoganataa/alphaway/actions/runs/41769338132) passed all four required jobs and both CodeQL analyzers. Post-merge CI [#41769488886](https://github.com/Yoganataa/alphaway/actions/runs/41769488886) and CodeQL [#41769489120](https://github.com/Yoganataa/alphaway/actions/runs/41769489120) both passed.
 - **Connections/Providers detailed audit completed:** [PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md](PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md). The 9router-go provider-node/provider-connection model has no 1:1 AlphaWay equivalent. AlphaWay currently has fixed OpenCode/CodeBuddy adapters and one custom-provider row/credential per provider ID. Provider-node CRUD, multiple credentials per node, per-connection auth/priority/failover, per-connection proxy binding, node-level limits, per-connection model discovery/capabilities/batch actions, and per-connection usage are missing.
 - **Resolved probe feedback defect (PR #18):** `ProvidersView` now reports the returned upstream HTTP status (or AlphaWay request status), sends one configured/default probe model, and explicitly states that the model list was not validated. No synthetic latency or model-count claim remains; route and browser regressions passed.
+- **Quota Tracker load recovery (PR #22):** usage load failures no longer masquerade as an empty key list. The page preserves the last successful rows, provides an inline retry while retaining the toast, and keeps the recorded-usage column labelled with the last successfully loaded window until a new window load succeeds. Browser coverage forces both initial 24h and subsequent 7d failures, checks stale-window messaging, and verifies retries.
 - **Usage trend-window scope corrected (PR #20):** the range selector filters only `GET /api/usage/chart?period=...`; KPI/distribution summaries remain all recorded totals since the last reset. The duplicate `All` option was removed because the current backend maps it to the same 60-day range as `60D`. Browser regression covers initial and changed chart-period requests.
 - **Provider-domain decision required before backend expansion:** decide whether AlphaWay needs provider nodes plus multiple credential connections. If yes, design SQLite entities, encrypted credential lifecycle, probe state, model registry/import, egress binding, and usage attribution before exposing matching controls.
-- **Remaining Phase 6 scope:** complete the screen/control matrix in `ROADMAP.md`; distinguish existing endpoints from backend gaps before adding screens or controls. PR #14 was a UI/navigation-only change; no backend capability was added.
+- **Remaining Phase 6 scope:** continue the component-by-component UI parity audit against existing endpoints; distinguish existing endpoint semantics from backend gaps before adding controls. PR #14 remains a UI/navigation-only change; no backend capability was added.
 
 
 ## 6. Working Rules for the Next Session
@@ -316,7 +318,7 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 - Keep the backend Bun >=1.4.4 + TypeScript + Hono + native SQLite. Do not port the Go backend from 9router-go; use it only as a behavioral/UI reference.
 - SQLite is the only canonical application-state store. Do not reintroduce flat-file JSON persistence or import paths.
 - Do not weaken or delete tests to make CI green. Do not claim checks passed unless the exact workflow/job result has been inspected.
-- Phase 0–5 are complete and merged. Phase 6 is in progress. PR #12 established the first runtime-truthfulness baseline; continue from the capability matrix and do not reopen completed Phase 0–5 work without a verified regression.
+- Phase 0–5 are complete and merged. Phase 6 is in progress. PR #12 established the first runtime-truthfulness baseline; PR #22 extended recoverable load and stale-window handling in Quota Tracker. Continue from the capability matrix and do not reopen completed Phase 0–5 work without a verified regression.
 - Preserve the existing SOUL behavior and TokenSaver features. Avoid rebuilding existing Phase 0–3 capabilities.
 - Update this checkpoint and roadmap after meaningful work, including exact branch/PR state, changed paths, verification evidence, open risks, and next action.
 - Branch protection is mandatory: use PRs, resolve review threads, and do not force-push.
@@ -327,7 +329,7 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 Lanjutkan AlphaWay dari https://github.com/Yoganataa/alphaway.
 Baca CHECKPOINT.md terlebih dahulu, kemudian ROADMAP.md. Periksa live main, branch, PR, Ruleset Protect main, dan workflow GitHub sebelum mengubah apa pun.
 
-Main saat checkpoint ini: 75dc66f7bac996201627273f9950a59568459a52. Phase 0–5 sudah merged. Phase 6 merged slices:
+Main saat checkpoint ini: 2b8add9889fe98726b712e62f11d64083f86ee5d. Phase 0–5 sudah merged. Phase 6 merged slices:
 - PR #12 runtime-truthfulness.
 - PR #14 sidebar grouping/navigation parity.
 - PR #17 Connections/Providers capability audit.
@@ -335,8 +337,9 @@ Main saat checkpoint ini: 75dc66f7bac996201627273f9950a59568459a52. Phase 0–5 
 - PR #15 Command Palette/TopBar parity.
 - PR #19 checkpoint/roadmap/audit synchronization.
 - PR #20 Usage trend-window scope correction.
+- PR #22 Quota Tracker recoverable load failures and accurate stale-window labels.
 
-Semua PR tersebut lulus empat required CI jobs dan dua CodeQL analyzers pada exact PR head masing-masing. Untuk PR #20, CI #41777048203 dan CodeQL #41777045751 lulus; merge commit saat checkpoint ini `75dc66f7bac996201627273f9950a59568459a52`.
+Semua PR tersebut lulus empat required CI jobs dan dua CodeQL analyzers pada exact PR head masing-masing. Untuk PR #20, CI #41777048203 dan CodeQL #41777045751 lulus. PR #22 CI #41781165999 dan CodeQL #41781159798 juga lulus pada exact head; merge commit terbaru saat checkpoint ini `2b8add9889fe98726b712e62f11d64083f86ee5d`.
 
 UsageView: pilihan Today/24h/7D/30D/60D hanya memfilter `/api/usage/chart`; KPI dan breakdown berasal dari agregat total sejak reset melalui `/api/usage`. Jangan mengembalikan pilihan All, karena backend saat ini memetakannya ke 60 hari yang sama dengan 60D.
 
