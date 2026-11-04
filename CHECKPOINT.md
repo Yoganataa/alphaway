@@ -4,8 +4,9 @@
 >
 > **Checkpoint date:** 2026-11-04 (Asia/Jakarta)  
 > **Repository:** [Yoganataa/alphaway](https://github.com/Yoganataa/alphaway)  
-> **Workstream in progress:** Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Phase 0–5 are merged; the Phase 6 dashboard truthfulness, sidebar, Connections/Providers audit, custom-provider probe correction, and Command Palette/TopBar parity slices are merged and verified. Remaining work is the provider-domain product decision and UI parity against existing AlphaWay contracts.  
-> **Current `main`:** `d9d637944a663fb51744033d374f70f324acf8bd`.  
+> **Workstream in progress:** Phase 6 — 9router-go Dashboard Migration and UI/UX Parity. Phase 0–5 are merged; runtime-truthfulness, sidebar, Connections/Providers audit, custom-provider probe correction, Command Palette/TopBar parity, and Usage trend-window truthfulness slices are merged and verified. Remaining work is the provider-domain product decision and a component-by-component UI parity audit against existing AlphaWay contracts.  
+> **Current `main`:** `75dc66f7bac996201627273f9950a59568459a52`.  
+> **Phase 6 Usage trend-window scope:** PR [#20](https://github.com/Yoganataa/alphaway/pull/20) merged at `75dc66f7bac996201627273f9950a59568459a52`; exact-head CI [#41777048203](https://github.com/Yoganataa/alphaway/actions/runs/41777048203) and both CodeQL analyzers [#41777045751](https://github.com/Yoganataa/alphaway/actions/runs/41777045751) passed.  
 > **Phase 6 Connections/Providers audit:** PR [#17](https://github.com/Yoganataa/alphaway/pull/17) merged at `d45dd643e8f73c3fc67f4fc0f7c26aa390349fc8`; the detailed capability audit is retained in `PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md`. PR CI [#41773088591](https://github.com/Yoganataa/alphaway/actions/runs/41773088591) and both CodeQL analyzers [#41773085018](https://github.com/Yoganataa/alphaway/actions/runs/41773085018) passed.  
 > **Phase 6 custom-provider probe correction:** PR [#18](https://github.com/Yoganataa/alphaway/pull/18) merged at `f626f8d0026acc21a6ad7d5af019a2dfa9743ba4`; required CI [#41774065042](https://github.com/Yoganataa/alphaway/actions/runs/41774065042) and both CodeQL analyzers [#41774060270](https://github.com/Yoganataa/alphaway/actions/runs/41774060270) passed.  
 > **Phase 6 Command Palette/TopBar parity:** PR [#15](https://github.com/Yoganataa/alphaway/pull/15) merged at `d9d637944a663fb51744033d374f70f324acf8bd`; exact-head CI [#41774389381](https://github.com/Yoganataa/alphaway/actions/runs/41774389381) and both CodeQL analyzers [#41774385519](https://github.com/Yoganataa/alphaway/actions/runs/41774385519) passed.
@@ -23,7 +24,7 @@
 
 ## 1. Current Status
 
-**Phase 0 through Phase 5 are merged into `main`. Phase 6 remains in progress: PR #12 runtime-truthfulness, PR #14 sidebar grouping, PR #17 Connections/Providers audit, PR #18 custom-provider probe feedback correction, and PR #15 Command Palette/TopBar parity are merged. PR #18's route and browser regressions passed all four required CI jobs and both CodeQL analyzers. PR #15's command-palette keyboard/empty-state behavior, TopBar labels, and mobile navigation regressions passed all four required CI jobs and both CodeQL analyzers on the exact merge head. Remaining Phase 6 work is UI parity backed by existing AlphaWay contracts and the unresolved product decision on whether a full provider-node/multi-connection domain is required.
+**Phase 0 through Phase 5 are merged into `main`. Phase 6 remains in progress: PR #12 runtime-truthfulness, PR #14 sidebar grouping, PR #17 Connections/Providers audit, PR #18 custom-provider probe correction, PR #15 Command Palette/TopBar parity, and PR #20 Usage trend-window scope are merged. PR #18, #15, and #20 each passed all four required CI jobs and both CodeQL analyzers on their exact PR heads. Usage range controls now state that the range filters only the chart; summary and breakdown aggregates remain totals since the last reset, and the duplicate 60D/All option is removed. Remaining Phase 6 work is the UI parity audit for implemented AlphaWay screens and the unresolved provider-node/multi-connection product decision.
 
 - [x] Phase 0 — Repository Baseline, CI, and Distribution Integrity (Linux x86_64 CI verified).
 - [x] Phase 1 — Database Migrations and Canonical Persistence (PR #3 merged).
@@ -283,13 +284,11 @@ Phase 2 PR #4 is merged into `main` at `dc08b6d42ee0796c964eb5a8a5ecd58aeb0d15d9
 - **Deferred boundaries:** active Cloudflare process/daemon lifecycle telemetry is not exposed by `/health`; do not claim connectivity from a configured URL. Phase 6 should audit any additional dashboard views that still use presentation-only/local preview state before wiring new feature behavior. Windows ACL verification remains Phase 7.
 
 Next actions:
-1. Fix the verified custom-provider probe feedback defect: backend success returns HTTP status only, so remove the `0ms` and configured-model-count fallbacks; add route/UI regression coverage.
+1. Continue the component-by-component Phase 6 audit for screens backed by existing AlphaWay endpoints. For each candidate, verify the API contract, persistence meaning, error/loading/empty states, and browser coverage before changing UI.
 2. Decide whether the product requires the full 9router-go provider-node + multiple credential-connections domain or only AlphaWay's lighter custom-provider registry. Do not invent connection entities or migrations before this boundary is explicit.
-3. Keep UI parity limited to implemented AlphaWay contracts; unsupported node/connection/model operations stay backend gaps until their APIs and SQLite ownership are designed.
-4. Refresh PR #15 (`feat/phase-6-command-palette-parity`) against current `main` `892bd1374507ea13a95f94979ecd3e86b415cd52` before merge. Its CI/CodeQL passed on the old head, but its base remains `61b5489bba4f05c1d45806984c9abc0c61941b82`.
-5. Keep Windows ACL verification in Phase 7 and preserve Bun + TypeScript + Hono + native SQLite. Do not port the 9router-go Go backend.
+3. Keep unsupported node/connection/model, Combos, Media Providers, Skills, Terminal, and browser-managed CLI Tools as documented backend gaps until their capabilities are specified, persisted, secured, and tested.
+4. Keep Windows ACL verification in Phase 7 and preserve Bun + TypeScript + Hono + native SQLite. Do not port the 9router-go Go backend.
 
-Do not reopen or recreate Phase 0–5 work unless a verified regression is found.
 Do not reopen or recreate Phase 0–5 work unless a verified regression is found.
 
 
@@ -304,7 +303,8 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 - E2E intercepts `/health` with a distinct TLS sentinel so a hardcoded former TLS label cannot pass; it checks live host, gate, configured anchors, and DB stats.
 - PR CI [#41769338132](https://github.com/Yoganataa/alphaway/actions/runs/41769338132) passed all four required jobs and both CodeQL analyzers. Post-merge CI [#41769488886](https://github.com/Yoganataa/alphaway/actions/runs/41769488886) and CodeQL [#41769489120](https://github.com/Yoganataa/alphaway/actions/runs/41769489120) both passed.
 - **Connections/Providers detailed audit completed:** [PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md](PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md). The 9router-go provider-node/provider-connection model has no 1:1 AlphaWay equivalent. AlphaWay currently has fixed OpenCode/CodeBuddy adapters and one custom-provider row/credential per provider ID. Provider-node CRUD, multiple credentials per node, per-connection auth/priority/failover, per-connection proxy binding, node-level limits, per-connection model discovery/capabilities/batch actions, and per-connection usage are missing.
-- **Verified probe feedback defect:** `ProvidersView.handleTestCurrent()` falls back to `0ms` and counts operator-entered model IDs as valid, while `/api/custom-providers/test` returns only `{ ok, status, message }` on success. Immediate next slice: display only actual HTTP probe status/scope and add a regression test.
+- **Resolved probe feedback defect (PR #18):** `ProvidersView` now reports the returned upstream HTTP status (or AlphaWay request status), sends one configured/default probe model, and explicitly states that the model list was not validated. No synthetic latency or model-count claim remains; route and browser regressions passed.
+- **Usage trend-window scope corrected (PR #20):** the range selector filters only `GET /api/usage/chart?period=...`; KPI/distribution summaries remain all recorded totals since the last reset. The duplicate `All` option was removed because the current backend maps it to the same 60-day range as `60D`. Browser regression covers initial and changed chart-period requests.
 - **Provider-domain decision required before backend expansion:** decide whether AlphaWay needs provider nodes plus multiple credential connections. If yes, design SQLite entities, encrypted credential lifecycle, probe state, model registry/import, egress binding, and usage attribution before exposing matching controls.
 - **Remaining Phase 6 scope:** complete the screen/control matrix in `ROADMAP.md`; distinguish existing endpoints from backend gaps before adding screens or controls. PR #14 was a UI/navigation-only change; no backend capability was added.
 
@@ -327,11 +327,22 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 Lanjutkan AlphaWay dari https://github.com/Yoganataa/alphaway.
 Baca CHECKPOINT.md terlebih dahulu, kemudian ROADMAP.md. Periksa live main, branch, PR, Ruleset Protect main, dan workflow GitHub sebelum mengubah apa pun.
 
-Phase 0–5 sudah merged. Phase 4 PR #7 merge commit: 4494d2c3371ec723d76f8289485cdebdcb2a988d. Phase 5 PR #9 merge commit: cec10d3cd0e9d9fa6b33f0755b5adb8c30d67393. Phase 5 PR #10 merge commit: dc1c82afbf91ec34a57809b9003318b5b35acdd6. Phase 6 first slice PR #12 merge commit: 786b7f3353a95d26f9f06f3c260ba55d5df2281b. PR #12 CI/CodeQL and post-merge CI #41769488886/CodeQL #41769489120 passed. Phase 6 navigation PR #14 merged at 61b5489bba4f05c1d45806984c9abc0c61941b82; PR CI #41771053548/CodeQL #41771046849 and post-merge CI #41771264497/CodeQL #41771264335 passed. PR #16 docs sync merged at `892bd1374507ea13a95f94979ecd3e86b415cd52`. Main saat checkpoint ini berada pada `892bd1374507ea13a95f94979ecd3e86b415cd52`.
+Main saat checkpoint ini: 75dc66f7bac996201627273f9950a59568459a52. Phase 0–5 sudah merged. Phase 6 merged slices:
+- PR #12 runtime-truthfulness.
+- PR #14 sidebar grouping/navigation parity.
+- PR #17 Connections/Providers capability audit.
+- PR #18 custom-provider probe feedback correction.
+- PR #15 Command Palette/TopBar parity.
+- PR #19 checkpoint/roadmap/audit synchronization.
+- PR #20 Usage trend-window scope correction.
 
-Phase 6 sedang berlangsung. Referensi frontend 9router-go dipin pada commit `e328decc174015514f49c7046d4bde57690bedc9`. PR #12 menyinkronkan indikator runtime; PR #14 menyelaraskan grup sidebar. Audit Connections/Providers lengkap: baca `PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md`. Lanjutkan dengan mengoreksi `ProvidersView` agar hasil probe hanya menampilkan data yang benar-benar dikirim `/api/custom-providers/test`; backend saat ini hanya mengembalikan HTTP status, bukan latency atau model count. Setelah itu putuskan apakah AlphaWay memerlukan provider-node + multiple-connection architecture sebelum merancang schema/API baru. PR #15 Command Palette masih terbuka pada head `1ed436c5de3b5837743cf77271c0894b0b79edb4`, dengan CI #41771740323 dan CodeQL #41771736637 passed; branch perlu disinkronkan ke `main` terbaru sebelum merge karena base masih `61b5489bba4f05c1d45806984c9abc0c61941b82`. Jangan menambahkan menu atau aksi untuk backend yang belum tersedia.
+Semua PR tersebut lulus empat required CI jobs dan dua CodeQL analyzers pada exact PR head masing-masing. Untuk PR #20, CI #41777048203 dan CodeQL #41777045751 lulus; merge commit saat checkpoint ini `75dc66f7bac996201627273f9950a59568459a52`.
 
-Backend tetap Bun >=1.4.4 + TypeScript + Hono + SQLite. Jangan port backend Go dari 9router-go. SQLite satu-satunya persistence store. Pertahankan behavior SOUL dan TokenSaver. Jangan ulang Phase 0–5 tanpa regression terverifikasi.
+UsageView: pilihan Today/24h/7D/30D/60D hanya memfilter `/api/usage/chart`; KPI dan breakdown berasal dari agregat total sejak reset melalui `/api/usage`. Jangan mengembalikan pilihan All, karena backend saat ini memetakannya ke 60 hari yang sama dengan 60D.
 
-Known limitations: public `/health` only indicates a configured public URL, not a live tunnel process; daemon PID/lifecycle state is not exposed. TokenSaver browser sandbox remains an explicitly labelled local illustration. Inbound Security Rule matching saat streaming memeriksa tiap SSE segment; literal yang terpecah antar delta belum tentu terdeteksi. Persona URL/repository/file import belum termasuk, sampai tersedia desain SSRF-safe importer dan validasi file. Model catalog autocomplete/batch binding ditunda. Windows ACL verification tetap Phase 7.
+Baca PHASE6_CONNECTIONS_PROVIDERS_AUDIT.md sebelum mengubah Providers. Jangan mengimplementasikan provider-node/multiple-connection schema sampai keputusan produk eksplisit. Pertahankan backend Bun >=1.4.4 + TypeScript + Hono + native SQLite; 9router-go hanya referensi UI/behavior, bukan backend port. Backend gaps seperti Combos, CLI Tools, Media Providers, Skills, dan Terminal tetap tersembunyi sebagai fitur yang belum tersedia.
+
+Next: lanjutkan audit UI-only parity pada layar AlphaWay yang memiliki endpoint nyata. Untuk setiap slice, verifikasi kontrak API/persistence, loading/empty/error states, keyboard/responsive behavior, E2E coverage, empat required CI jobs, dan CodeQL. Jangan mengulang Phase 0–5 tanpa regression terverifikasi.
+
+Known limitations: /health menunjukkan konfigurasi public URL, bukan koneksi tunnel aktif; daemon PID/lifecycle tidak diekspos. TokenSaver browser sandbox adalah ilustrasi lokal. Inbound Security Rule matching lintas batas SSE delta belum dijamin. Persona URL/repository/file import memerlukan desain SSRF-safe. Model catalog autocomplete/batch binding ditunda. Windows ACL verification tetap Phase 7.
 ```
