@@ -268,6 +268,12 @@ describe("AlphaWay Web Dashboard E2E", () => {
     });
     expect(originalResponse.status).toBe(200);
     const originalConfig = await originalResponse.json();
+    const previewConfigResponse = await fetch(`${baseURL}/api/tokensaver`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ dlpEnabled: false, maskSecrets: true, maskPaths: true }),
+    });
+    expect(previewConfigResponse.status).toBe(200);
 
     let failInitialLoad = true;
     let failFirstSave = true;
@@ -307,6 +313,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
         return Boolean(toggle && !toggle.disabled);
       }, undefined, { timeout: 8000 });
       expect(await page.locator("#tokensaver-load-error").count()).toBe(0);
+      await page.getByText("Outbound DLP Disabled", { exact: true }).waitFor({ state: "visible" });
 
       if (!(await rtkToggle.isChecked())) {
         await page.locator("label").filter({ has: rtkToggle }).click();
@@ -337,24 +344,31 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
       const sandboxInput = page.locator("#sandbox-input");
       expect(await sandboxInput.isVisible()).toBe(true);
+      const previewPayload = "Credential sk-proj-123456789012345678901234 at C:\\Users\\TokenSaverTest\\workspace\\src\\main.ts";
+      await sandboxInput.fill(previewPayload);
       const compressButton = page.locator("#tokensaver-compress-btn");
       expect(await compressButton.isEnabled()).toBe(true);
       await compressButton.click();
       const sandboxOutput = page.locator("#sandbox-output");
       expect(await sandboxOutput.isVisible()).toBe(true);
-      expect((await sandboxOutput.inputValue()).length).toBeGreaterThan(0);
+      const previewOutput = await sandboxOutput.inputValue();
+      expect(previewOutput).toContain("sk-proj-123456789012345678901234");
+      expect(previewOutput).toContain("C:\\Users\\TokenSaverTest\\workspace\\src\\main.ts");
 
       expect(failInitialLoad).toBe(false);
       expect(failFirstSave).toBe(false);
     } finally {
       await page.unroute("**/api/tokensaver");
-      if (typeof originalConfig.rtkEnabled === "boolean") {
-        await fetch(`${baseURL}/api/tokensaver`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: adminCookie },
-          body: JSON.stringify({ rtkEnabled: originalConfig.rtkEnabled }),
-        });
-      }
+      await fetch(`${baseURL}/api/tokensaver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: adminCookie },
+        body: JSON.stringify({
+          rtkEnabled: originalConfig.rtkEnabled,
+          dlpEnabled: originalConfig.dlpEnabled,
+          maskSecrets: originalConfig.maskSecrets,
+          maskPaths: originalConfig.maskPaths,
+        }),
+      });
     }
   }, 25000);
 
