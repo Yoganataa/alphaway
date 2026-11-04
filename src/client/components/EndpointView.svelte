@@ -43,14 +43,27 @@
     }
   });
 
-  function copyText(id: string, text: string) {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
+  async function copyText(id: string, text: string): Promise<boolean> {
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      copiedId = null;
+      notifications.error("Clipboard access is unavailable in this browser context");
+      return false;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
       copiedId = id;
       notifications.success("Copied to clipboard");
       setTimeout(() => {
         if (copiedId === id) copiedId = null;
       }, 2000);
+      return true;
+    } catch (error) {
+      copiedId = null;
+      notifications.error(
+        `Could not copy to clipboard: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return false;
     }
   }
 
@@ -122,8 +135,9 @@ const res = await openai.chat.completions.create({
 console.log(res.choices[0].message.content);`,
   });
 
-  function copyCurrentSnippet() {
-    copyText("snippet", snippets[activeCodeTab]);
+  async function copyCurrentSnippet() {
+    copiedSnippet = false;
+    if (!(await copyText("snippet", snippets[activeCodeTab]))) return;
     copiedSnippet = true;
     setTimeout(() => (copiedSnippet = false), 2000);
   }
@@ -249,6 +263,7 @@ console.log(res.choices[0].message.content);`,
           <Button
             variant="secondary"
             size="xs"
+            data-testid="copy-local-endpoint"
             onclick={() => copyText("local", localEndpoint)}
           >
             <span class="material-symbols-outlined text-[14px]">
@@ -352,6 +367,7 @@ console.log(res.choices[0].message.content);`,
         <Button
           variant="secondary"
           size="xs"
+          data-testid="copy-client-snippet"
           onclick={copyCurrentSnippet}
         >
           <span class="material-symbols-outlined text-[14px]">
