@@ -90,13 +90,13 @@
     const origLen = Math.ceil(text.length / 4);
 
     // 1. DLP: Secret Redaction
-    if (config.maskSecrets) {
+    if (config.dlpEnabled && config.maskSecrets) {
       text = text.replace(/\bsk-[A-Za-z0-9_\-]{20,}\b/g, "[REDACTED_API_KEY]");
       text = text.replace(/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED_AWS_KEY]");
     }
 
     // 2. DLP: Path Anonymization
-    if (config.maskPaths) {
+    if (config.dlpEnabled && config.maskPaths) {
       text = text.replace(/[a-zA-Z]:\\Users\\[^\s\\"'`]+(\\.*)?/gi, "/workspace$1");
       text = text.replace(/\/(?:home|Users)\/[^\s\/"'`]+(\/.*)?/gi, "/workspace$1");
     }
