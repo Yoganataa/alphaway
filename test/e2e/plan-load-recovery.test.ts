@@ -27,6 +27,7 @@ describe("Plans configuration load recovery", () => {
     const refreshGate = new Promise<void>((resolve) => {
       releaseRefresh = resolve;
     });
+    let capturePlans = false;
 
     const plan = (name: string) => ({
       id: "plan-e2e-existing",
@@ -42,11 +43,19 @@ describe("Plans configuration load recovery", () => {
     });
 
     try {
-      // Let dashboard bootstrap finish before intercepting the Plans page's first read.
-      // Other mounted dashboard components may query Plans independently during startup.
-      await page.goto(baseURL + "/");
+      // The default Endpoint view loads ApiKeysTable, which also reads /api/plans.
+      // Pass that bootstrap request through and arm the fixture only for the Plans page.
+      const bootstrapPlans = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === "/api/plans" && response.request().method() === "GET";
+      });
 
       await page.route("**/api/plans", async (route) => {
+        if (!capturePlans) {
+          await route.continue();
+          return;
+        }
+
         const method = route.request().method();
         if (method !== "GET") {
           writes += 1;
@@ -103,6 +112,11 @@ describe("Plans configuration load recovery", () => {
           body: JSON.stringify({ plans: [plan("Recovered Starter")] }),
         });
       });
+
+      await page.goto(baseURL + "/");
+      await bootstrapPlans;
+      await page.getByText("Gateway API Keys", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      capturePlans = true;
 
       await page.getByRole("button", { name: "Plans" }).click();
 
