@@ -135,13 +135,13 @@ describe("Providers configuration load recovery", () => {
       expect(await modelsError.textContent()).toContain("Simulated model catalog outage");
       expect(await providersError.textContent()).toContain("Simulated custom providers outage");
       expect(await addProvider.isDisabled()).toBe(true);
-      expect(await page.getByText("The model catalog is unavailable. Retry the load above.", { exact: true }).isVisible()).toBe(true);
+      expect(await page.locator("#providers-opencode-models-empty").getByText("The model catalog is unavailable. Retry the load above.", { exact: true }).isVisible()).toBe(true);
       expect(await page.locator("#providers-config-empty").count()).toBe(0);
       expect(writes).toBe(0);
 
       await page.locator("#providers-models-retry").click();
       await page.getByText("Invalid models response", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
-      expect(await page.getByText("The model catalog is unavailable. Retry the load above.", { exact: true }).isVisible()).toBe(true);
+      expect(await page.locator("#providers-opencode-models-empty").getByText("The model catalog is unavailable. Retry the load above.", { exact: true }).isVisible()).toBe(true);
 
       await page.locator("#providers-config-retry").click();
       await page.getByText("Invalid custom providers response", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
