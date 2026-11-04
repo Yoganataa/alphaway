@@ -121,16 +121,28 @@
 
   const currentMeta = $derived(titles[activeTab] || titles.overview);
 
-  function copyBaseUrl() {
-    if (!currentOrigin || typeof navigator === "undefined" || !navigator.clipboard) {
+  async function copyBaseUrl() {
+    if (!currentOrigin) {
       notifications.error("Current dashboard origin is not available");
       return;
     }
-    const url = `${currentOrigin}/v1`;
-    navigator.clipboard.writeText(url);
-    copied = true;
-    notifications.success("OpenAI Base URL copied to clipboard");
-    setTimeout(() => (copied = false), 2000);
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      copied = false;
+      notifications.error("Clipboard access is unavailable in this browser context");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(`${currentOrigin}/v1`);
+      copied = true;
+      notifications.success("OpenAI Base URL copied to clipboard");
+      setTimeout(() => (copied = false), 2000);
+    } catch (error) {
+      copied = false;
+      notifications.error(
+        `Could not copy OpenAI Base URL: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 </script>
 
@@ -187,6 +199,7 @@
     <button
       type="button"
       onclick={copyBaseUrl}
+      data-testid="copy-base-url"
       class="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-[8px] bg-surface hover:bg-surface-2 border border-border-subtle text-xs font-mono text-text-muted hover:text-text-main transition-colors cursor-pointer"
       title="Click to copy OpenAI Base URL"
     >
