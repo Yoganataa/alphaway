@@ -11,29 +11,46 @@
 
   let entries = $state<ConsoleLogItem[]>([]);
   let loading = $state(true);
+  let hasLoaded = $state(false);
+  let loadError = $state<string | null>(null);
+  let lastUpdatedAt = $state<number | null>(null);
+  let requestInFlight = false;
   let activeLevel = $state<LogLevel>("all");
   let searchQuery = $state("");
   let followScroll = $state(true);
   let pollHandle: any = null;
   let logViewport = $state<HTMLDivElement | null>(null);
 
+  function formatUpdateTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
   async function loadLogs() {
+    // setInterval must not allow slow requests to overlap and overwrite newer state.
+    if (requestInFlight) return;
+    requestInFlight = true;
+    loading = true;
     try {
       entries = await fetchConsoleLogs();
+      hasLoaded = true;
+      loadError = null;
+      lastUpdatedAt = Date.now();
       if (followScroll && logViewport) {
         setTimeout(() => {
           if (logViewport) logViewport.scrollTop = logViewport.scrollHeight;
         }, 50);
       }
-    } catch {}
-    finally {
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : "Unknown console log refresh error";
+    } finally {
       loading = false;
+      requestInFlight = false;
     }
   }
 
   onMount(() => {
-    loadLogs();
-    pollHandle = setInterval(loadLogs, 3000);
+    void loadLogs();
+    pollHandle = setInterval(() => void loadLogs(), 3000);
   });
 
   onDestroy(() => {
@@ -205,13 +222,44 @@
         <span class="text-xs font-mono text-text-muted ml-2">alphaway-gateway.log</span>
       </div>
 
-      <span class="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span>Streaming (3s poll)</span>
+      <span class="text-[11px] font-mono flex items-center gap-1 {loadError ? 'text-amber-400' : 'text-emerald-400'}">
+        <span class="w-1.5 h-1.5 rounded-full {loadError ? 'bg-amber-500' : 'bg-emerald-500'} {loadError || loading ? '' : 'animate-pulse'}"></span>
+        <span id="console-log-poll-status" role="status" aria-live="polite">
+          {#if loading}
+            Refreshing...
+          {:else if loadError}
+            Refresh failed
+          {:else if lastUpdatedAt !== null}
+            Polling · updated {formatUpdateTime(lastUpdatedAt)}
+          {:else}
+            Waiting for first refresh
+          {/if}
+        </span>
       </span>
     </div>
 
-    <!-- Terminal Output Viewport -->
+    {#if loadError}
+    <div
+      id="console-log-refresh-error"
+      role="alert"
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[10px] border border-amber-500/30 bg-amber-500/5 p-3"
+    >
+      <div class="min-w-0">
+        <p class="text-xs font-semibold text-amber-400">
+          {hasLoaded ? "Console refresh failed. Showing the last successful buffer." : "Console buffer could not be loaded."}
+        </p>
+        <p class="mt-1 break-words text-xs text-text-muted">{loadError}</p>
+        {#if lastUpdatedAt !== null}
+          <p class="mt-1 text-[11px] text-text-muted">Last successful refresh: {formatUpdateTime(lastUpdatedAt)}</p>
+        {/if}
+      </div>
+      <Button variant="secondary" size="sm" onclick={loadLogs} disabled={loading}>
+        Retry Load
+      </Button>
+    </div>
+  {/if}
+
+  <!-- Terminal Output Viewport -->
     <div
       bind:this={logViewport}
       class="p-4 h-[480px] overflow-y-auto font-mono text-xs leading-relaxed space-y-1 select-text"
@@ -232,9 +280,21 @@
         </div>
       {/each}
 
-      {#if filteredEntries.length === 0}
+      {#if !hasLoaded && loading}
+        <div role="status" class="p-8 text-center text-zinc-500 font-sans italic">
+          Loading server console buffer...
+        </div>
+      {:else if !hasLoaded}
+        <div class="p-8 text-center text-amber-400 font-sans">
+          Console buffer unavailable. Retry the last refresh to load server logs.
+        </div>
+      {:else if entries.length === 0}
         <div class="p-8 text-center text-zinc-500 font-sans italic">
-          No log events matched your filters.
+          No server console events are currently buffered.
+        </div>
+      {:else if filteredEntries.length === 0}
+        <div class="p-8 text-center text-zinc-500 font-sans italic">
+          No log events matched the current level and search filters.
         </div>
       {/if}
     </div>

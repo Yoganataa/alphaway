@@ -772,16 +772,24 @@ export async function deleteApiKey(id: string): Promise<void> {
 
 export async function fetchConsoleLogs(): Promise<ConsoleLogItem[]> {
   const res = await fetch(`${BASE_URL}/api/console-logs`);
-  if (!res.ok) throw new Error(`Failed to load console logs: ${res.statusText}`);
-  const data = await res.json();
-  return data.logs || [];
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error || `Failed to load console logs (HTTP ${res.status})`);
+  }
+  if (!data || !Array.isArray(data.logs)) {
+    throw new Error("Invalid console logs response");
+  }
+  return data.logs as ConsoleLogItem[];
 }
 
 export async function clearConsoleLogs(): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/console-logs/clear`, {
     method: "POST",
   });
-  if (!res.ok) throw new Error(`Failed to clear console logs: ${res.statusText}`);
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error || `Failed to clear console logs (HTTP ${res.status})`);
+  }
 }
 
 export async function fetchDatabaseStats(): Promise<DatabaseStats> {
