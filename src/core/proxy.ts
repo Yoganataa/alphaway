@@ -1146,6 +1146,7 @@ async function testRelayEgress(entry, probeUrl, timeoutMs) {
   const started = Date.now();
   const target = new URL(probeUrl);
   const headers = {
+    Authorization: "Bearer public",
     "x-relay-target": target.origin,
     "x-relay-path": target.pathname + target.search,
   };
