@@ -37,9 +37,9 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const advancedGroup = sidebar.locator('[data-nav-section="Advanced Features"]');
     const systemGroup = sidebar.locator('[data-nav-section="System"]');
 
-    await expect(mainGroup).toBeVisible();
-    await expect(advancedGroup).toBeVisible();
-    await expect(systemGroup).toBeVisible();
+    expect(await mainGroup.isVisible()).toBe(true);
+    expect(await advancedGroup.isVisible()).toBe(true);
+    expect(await systemGroup.isVisible()).toBe(true);
 
     const mainText = await mainGroup.textContent();
     const advancedText = await advancedGroup.textContent();
