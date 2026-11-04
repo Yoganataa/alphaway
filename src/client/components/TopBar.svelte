@@ -109,7 +109,7 @@
     },
     profile: {
       title: "Profile & Storage Settings",
-      subtitle: "SQLite storage diagnostics, browser client-key settings, and telemetry maintenance.
+      subtitle: "SQLite storage diagnostics, browser client-key settings, and telemetry maintenance.",
       icon: "settings",
     },
   };
