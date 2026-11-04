@@ -263,7 +263,7 @@ console.log(res.choices[0].message.content);`,
           <Button
             variant="secondary"
             size="xs"
-            data-testid="copy-local-endpoint"
+            id="copy-local-endpoint"
             onclick={() => copyText("local", localEndpoint)}
           >
             <span class="material-symbols-outlined text-[14px]">
@@ -367,7 +367,7 @@ console.log(res.choices[0].message.content);`,
         <Button
           variant="secondary"
           size="xs"
-          data-testid="copy-client-snippet"
+          id="copy-client-snippet"
           onclick={copyCurrentSnippet}
         >
           <span class="material-symbols-outlined text-[14px]">
