@@ -128,7 +128,7 @@
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
   <div class="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
     {#each sections as section}
-      <div class="space-y-1">
+      <div class="space-y-1" data-nav-section={section.title}>
         <div class="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-subtle">
           {section.title}
         </div>
