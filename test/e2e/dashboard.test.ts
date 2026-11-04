@@ -129,6 +129,33 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 20000);
 
+  it("opens and closes the grouped sidebar on mobile navigation", async () => {
+    const { page, baseURL } = dashboard;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${baseURL}/`);
+
+    const sidebar = page.locator("aside");
+    await page.waitForFunction(() => {
+      const element = document.querySelector("aside");
+      return Boolean(element && element.getBoundingClientRect().left < 0);
+    });
+
+    await page.getByRole("button", { name: "Toggle mobile menu" }).click();
+    await page.waitForFunction(() => {
+      const element = document.querySelector("aside");
+      return Boolean(element && Math.abs(element.getBoundingClientRect().left) < 1);
+    });
+
+    await sidebar.locator("button").filter({ hasText: "Proxy Pools" }).click();
+    await page.waitForFunction(() => {
+      const element = document.querySelector("aside");
+      return Boolean(element && element.getBoundingClientRect().left < 0);
+    });
+    await page.getByText("Egress Proxy Configuration", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }, 20000);
+
   it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
     const { page, baseURL } = dashboard;
     const expectedTls = "AlphaWay E2E TLS profile sentinel";
