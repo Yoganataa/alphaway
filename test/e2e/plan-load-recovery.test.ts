@@ -42,6 +42,10 @@ describe("Plans configuration load recovery", () => {
     });
 
     try {
+      // Let dashboard bootstrap finish before intercepting the Plans page's first read.
+      // Other mounted dashboard components may query Plans independently during startup.
+      await page.goto(baseURL + "/");
+
       await page.route("**/api/plans", async (route) => {
         const method = route.request().method();
         if (method !== "GET") {
@@ -100,7 +104,6 @@ describe("Plans configuration load recovery", () => {
         });
       });
 
-      await page.goto(baseURL + "/");
       await page.getByRole("button", { name: "Plans" }).click();
 
       const loadError = page.locator("#plans-load-error");
