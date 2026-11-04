@@ -412,15 +412,27 @@ export async function deleteCustomProvider(id: string): Promise<{ ok: boolean }>
   return res.json();
 }
 
+export interface CustomProviderTestResult {
+  ok: boolean;
+  status?: number;
+  message?: string;
+  error?: string;
+  requestStatus: number;
+}
+
 export async function testCustomProvider(
-  provider: Partial<CustomProviderConfig>
-): Promise<{ ok: boolean; error?: string; latencyMs?: number; modelsCount?: number }> {
+  provider: Partial<CustomProviderConfig> & { model?: string }
+): Promise<CustomProviderTestResult> {
   const res = await fetch(`${BASE_URL}/api/custom-providers/test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(provider),
   });
-  return res.json();
+  const data = await res.json().catch(() => null) as Omit<CustomProviderTestResult, "requestStatus"> | null;
+  if (!data || typeof data !== "object" || typeof data.ok !== "boolean") {
+    throw new Error(`Invalid custom-provider probe response (HTTP ${res.status})`);
+  }
+  return { ...data, requestStatus: res.status };
 }
 
 export async function fetchUsageStats(): Promise<UsageStats> {

@@ -126,6 +126,46 @@ describe("3rd-Party Custom Providers Engine", () => {
     expect(redacted).not.toContain("user:password@");
     expect(redacted).toContain("[REDACTED]");
   });
+  it("returns the upstream status for a single-model custom-provider probe", async () => {
+    const originalFetch = globalThis.fetch;
+    const capturedRequests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = async (input, init) => {
+      capturedRequests.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return new Response(null, { status: 204 });
+    };
+
+    try {
+      const response = await adminRequest("/api/custom-providers/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: "https://provider.example.test/v1",
+          apiKey: "probe-test-key",
+          protocol: "openai",
+          model: "probe-model-one",
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toEqual({
+        ok: true,
+        status: 204,
+        message: "OpenAI endpoint reachable!",
+      });
+      expect(capturedRequests).toHaveLength(1);
+      expect(capturedRequests[0]?.url).toBe("https://provider.example.test/v1/chat/completions");
+      expect(capturedRequests[0]?.body.model).toBe("probe-model-one");
+      expect(body).not.toHaveProperty("latencyMs");
+      expect(body).not.toHaveProperty("modelsCount");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("redacts embedded URL credentials from provider connection-test errors", async () => {
     const urlSecret = "provider-url-query-secret+/= with spaces";
     const originalFetch = globalThis.fetch;
