@@ -29,7 +29,7 @@
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
       <div>
         <div class="flex items-center gap-2">
-          <h2 class="text-lg font-bold text-text-main tracking-tight">Public Ingress Endpoint</h2>
+          <h2 class="text-lg font-bold text-text-main tracking-tight">Cloudflare Named Tunnel</h2>
           <Badge tone={publicEndpointConfigured ? "success" : "neutral"} size="sm" dot>
             {publicEndpointConfigured ? "Configured" : "Not configured"}
           </Badge>
@@ -65,7 +65,7 @@
 
   <Card padding="md" elev class="space-y-4">
     <div class="pb-4 border-b border-border-subtle">
-      <h2 class="text-lg font-bold text-text-main tracking-tight">Daemon CLI Lifecycle</h2>
+      <h2 class="text-lg font-bold text-text-main tracking-tight">Daemon Process Lifecycle</h2>
       <p class="text-xs text-text-muted mt-1">
         The dashboard health endpoint does not expose daemon mode or PID information. Use the CLI to inspect and control an AlphaWay daemon; do not infer daemon state from the dashboard session.
       </p>
