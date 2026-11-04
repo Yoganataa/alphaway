@@ -811,6 +811,8 @@ function describe(now = Date.now()) {
     mode: poolActive ? "pool" : singleActive ? "proxy" : "direct",
     proxy: poolActive ? `${active.length} proxy` : displayHost(current.url),
     hasCredentials: entries.some((entry) => Boolean(entry.token) || hasUrlCredentials(entry.url)) || hasUrlCredentials(current.url),
+    source: poolActive ? pool.source : current.source,
+    locked: (poolActive ? pool.source : current.source) === "env",
     configPath: CONFIG_SETTING_LABEL,
     error: current.error || pool.error || null,
     pool: poolView,
