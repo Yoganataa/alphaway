@@ -107,11 +107,11 @@ The application mounts `models`, `auth`, `proxy`, and `custom-providers` routes.
 
 But `POST /api/custom-providers/test` returns only `{ ok, status, message }` on success (and `{ ok: false, status, error }` for an upstream HTTP failure). It does not return `latencyMs` or `modelsCount`. The fallback therefore manufactures a `0ms` latency and describes the operator-entered model list as if the models were validated. That is not evidence from the backend.
 
-**Required UI correction:** report the returned HTTP status and the scope of the test (one configured model endpoint ping). Do not display a latency or valid-model count unless the backend actually measures/returns them. A browser-measured round trip may be shown only if labelled as client-to-endpoint round-trip time, not upstream/model validation latency.
+**Resolution — PR #18:** the dashboard now reports the returned upstream HTTP status (or AlphaWay HTTP status if no upstream response exists), submits only one configured/default probe model, and explicitly states that the configured model list was not validated. The fabricated latency and model-count claims were removed. The route and browser regression tests passed all four required CI jobs and both CodeQL analyzers; PR #18 merged at `f626f8d0026acc21a6ad7d5af019a2dfa9743ba4`.
 
 ## Recommended implementation order
 
-1. **Immediate existing-contract correction:** fix the custom-provider probe feedback described above; add a route/UI regression proving the displayed result uses only returned fields.
+1. **Completed existing-contract correction (PR #18):** the custom-provider probe now reports only returned HTTP status/result and accurately scopes the single-model test; route and browser regressions are in place.
 2. **Product/architecture decision before backend work:** decide whether AlphaWay needs the full node-plus-multiple-connections domain (including multiple upstream credentials, per-account rotation, auth type, proxy binding, per-connection usage and node limits), or only a lighter custom-provider registry. Do not infer this design from the 9router-go component layout alone.
 3. If full node/connection behavior is required, design SQLite entities and migration boundaries first: provider node, credential connection, encrypted credential material, priority/status history, model overrides/imports, proxy binding, and usage attribution. Preserve single-tenant AlphaWay and the existing Bun/Hono runtime.
 4. Add authenticated API contracts and service tests before exposing corresponding controls. Provider probes and model discovery require bounded timeouts, safe URL/egress validation, credential redaction, and explicit unsupported-probe semantics.
