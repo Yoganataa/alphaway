@@ -371,6 +371,7 @@ describe("proxy HTTP surface", () => {
 
   it("rejects combined proxy URL and pool updates instead of partially applying them", async () => {
     emptyStateDir();
+    dbDeleteSetting("proxy_config");
     proxy.__reload();
 
     const response = await request(port, "POST", "/api/proxy", {
