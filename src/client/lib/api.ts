@@ -309,23 +309,65 @@ export async function updateTokenSaverConfig(
   return data.config as TokenSaverConfig;
 }
 
+function parseProxyStatus(data: unknown): ProxyStatus {
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+  const isFiniteNumber = (value: unknown): value is number =>
+    typeof value === "number" && Number.isFinite(value);
+  const isNullableString = (value: unknown): value is string | null =>
+    value === null || typeof value === "string";
+  const isNullableNumber = (value: unknown): value is number | null =>
+    value === null || isFiniteNumber(value);
+  const strategies = ["round-robin", "random", "failover"];
+  const entryKinds = ["direct", "relay", "http", "https", "proxy"];
+  const entryStates = ["disabled", "cooling", "ready"];
+
+  const validEntries = isRecord(data) && isRecord(data.pool) && Array.isArray(data.pool.entries) &&
+    data.pool.entries.every((entry: unknown) => isRecord(entry) &&
+      typeof entry.id === "string" &&
+      typeof entry.label === "string" &&
+      isNullableString(entry.host) &&
+      typeof entry.kind === "string" && entryKinds.includes(entry.kind) &&
+      typeof entry.enabled === "boolean" &&
+      isFiniteNumber(entry.weight) &&
+      typeof entry.state === "string" && entryStates.includes(entry.state) &&
+      isFiniteNumber(entry.cooldownMsLeft) &&
+      isFiniteNumber(entry.cooldownUntil) &&
+      isFiniteNumber(entry.failures) &&
+      isNullableString(entry.lastError) &&
+      isNullableNumber(entry.lastOkAt) &&
+      isNullableNumber(entry.lastUsedAt));
+
+  if (
+    !isRecord(data) ||
+    !["direct", "proxy", "pool"].includes(String(data.mode)) ||
+    (typeof data.proxy !== "string" && data.proxy !== null) ||
+    typeof data.hasCredentials !== "boolean" ||
+    typeof data.source !== "string" ||
+    typeof data.locked !== "boolean" ||
+    typeof data.configPath !== "string" ||
+    !isNullableString(data.error) ||
+    !isRecord(data.pool) ||
+    typeof data.pool.active !== "boolean" ||
+    !strategies.includes(String(data.pool.strategy)) ||
+    typeof data.pool.source !== "string" ||
+    !["size", "enabled", "ready", "cooling", "cooldownMs", "maxCooldownMs"].every((field) =>
+      isFiniteNumber(data.pool[field]) && Number(data.pool[field]) >= 0) ||
+    !isNullableString(data.pool.error) ||
+    !validEntries
+  ) {
+    throw new Error("Invalid proxy configuration response");
+  }
+  return data as unknown as ProxyStatus;
+}
+
 export async function fetchProxyStatus(): Promise<ProxyStatus> {
   const res = await fetch(`${BASE_URL}/api/proxy`);
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     throw new Error(data?.error || `Fetch proxy failed (HTTP ${res.status})`);
   }
-  if (
-    !data ||
-    !["direct", "proxy", "pool"].includes(data.mode) ||
-    typeof data.locked !== "boolean" ||
-    !data.pool ||
-    !Array.isArray(data.pool.entries) ||
-    typeof data.pool.strategy !== "string"
-  ) {
-    throw new Error("Invalid proxy configuration response");
-  }
-  return data as ProxyStatus;
+  return parseProxyStatus(data);
 }
 
 export async function updateProxy(url: string): Promise<ProxyStatus> {
@@ -336,7 +378,7 @@ export async function updateProxy(url: string): Promise<ProxyStatus> {
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error || `Update proxy failed: ${res.statusText}`);
-  return data;
+  return parseProxyStatus(data);
 }
 
 export interface ProxyPoolEntryInput {
@@ -365,7 +407,7 @@ export async function updateProxyPool(config: ProxyPoolUpdate): Promise<ProxySta
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error || `Update proxy pool failed: ${res.statusText}`);
-  return data;
+  return parseProxyStatus(data);
 }
 
 export async function testProxyPool(options: { timeoutMs?: number; entryId?: string } = {}): Promise<ProxyPoolTestResult> {

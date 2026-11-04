@@ -21,6 +21,14 @@ describe("Proxy pool configuration load recovery", () => {
     let statusReads = 0;
     let configWrites = 0;
     let poolProbes = 0;
+    let signalRefreshStarted!: () => void;
+    const refreshStarted = new Promise<void>((resolve) => {
+      signalRefreshStarted = resolve;
+    });
+    let releaseStatusRefresh!: () => void;
+    const statusRefreshGate = new Promise<void>((resolve) => {
+      releaseStatusRefresh = resolve;
+    });
 
     const statusPayload = (label: string) => ({
       mode: "pool",
@@ -59,7 +67,8 @@ describe("Proxy pool configuration load recovery", () => {
       },
     });
 
-    await page.route("**/api/proxy/pool/test", async (route) => {
+    try {
+      await page.route("**/api/proxy/pool/test", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -86,7 +95,27 @@ describe("Proxy pool configuration load recovery", () => {
       const method = route.request().method();
       if (method === "GET") {
         statusReads += 1;
-        if (statusReads === 1 || statusReads === 3) {
+        if (statusReads === 1) {
+          await route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Simulated proxy configuration outage" }),
+          });
+          return;
+        }
+        if (statusReads === 2) {
+          const malformed = statusPayload("Malformed response");
+          (malformed.pool.entries as unknown[])[0] = null;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(malformed),
+          });
+          return;
+        }
+        if (statusReads === 4) {
+          signalRefreshStarted();
+          await statusRefreshGate;
           await route.fulfill({
             status: 503,
             contentType: "application/json",
@@ -97,7 +126,7 @@ describe("Proxy pool configuration load recovery", () => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify(statusPayload(statusReads === 4 ? "Recovered primary" : "Existing primary")),
+          body: JSON.stringify(statusPayload(statusReads === 5 ? "Recovered primary" : "Existing primary")),
         });
         return;
       }
@@ -120,13 +149,24 @@ describe("Proxy pool configuration load recovery", () => {
     expect(await page.locator("#proxy-save-btn").isDisabled()).toBe(true);
 
     await page.locator("#proxy-config-retry").click();
+    await loadError.waitFor({ state: "visible", timeout: 10000 });
+    expect(await loadError.textContent()).toContain("Invalid proxy configuration response");
+    expect(await page.locator("#proxy-pool-unavailable").isVisible()).toBe(true);
+    expect(await page.locator("#proxy-add-node").isDisabled()).toBe(true);
+
+    await page.locator("#proxy-config-retry").click();
     await page.getByText("Existing primary", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     expect(await loadError.count()).toBe(0);
     expect(await page.locator("#proxy-add-node").isEnabled()).toBe(true);
 
-    // A later status refresh fails after a successful read. The table must
-    // retain the known pool while blocking updates until a fresh read succeeds.
+    // A probe refresh is held open to prove writes remain disabled while its
+    // persisted configuration read is in flight.
     await page.getByRole("button", { name: "Ping All" }).click();
+    await refreshStarted;
+    expect(await page.locator("#proxy-add-node").isDisabled()).toBe(true);
+    expect(await page.locator("#proxy-bulk-import").isDisabled()).toBe(true);
+    expect(await page.locator("#proxy-save-btn").isDisabled()).toBe(true);
+    releaseStatusRefresh();
     await loadError.waitFor({ state: "visible", timeout: 10000 });
     expect(await loadError.textContent()).toContain("last successful snapshot");
     expect(await loadError.textContent()).toContain("Simulated proxy configuration outage");
@@ -139,11 +179,14 @@ describe("Proxy pool configuration load recovery", () => {
     await page.getByText("Recovered primary", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     expect(await loadError.count()).toBe(0);
     expect(await page.locator("#proxy-add-node").isEnabled()).toBe(true);
-    expect(statusReads).toBe(4);
+    expect(statusReads).toBe(5);
     expect(poolProbes).toBe(1);
     expect(configWrites).toBe(0);
 
     await page.unroute("**/api/proxy/pool/test");
     await page.unroute("**/api/proxy");
+    } finally {
+      releaseStatusRefresh();
+    }
   }, 25000);
 });

@@ -108,7 +108,7 @@
   }
 
   async function savePool(nextEntries: EditablePoolEntry[] = pools): Promise<boolean> {
-    if (!hasLoaded || loadError || isSaving) return false;
+    if (!hasLoaded || isLoading || loadError || isSaving) return false;
     isSaving = true;
     statusMessage = null;
     try {
@@ -157,7 +157,7 @@
   }
 
   async function handleSaveProxy() {
-    if (!hasLoaded || loadError || isSaving) return;
+    if (!hasLoaded || isLoading || loadError || isSaving) return;
     isSaving = true;
     statusMessage = null;
     try {
@@ -323,7 +323,7 @@
           bind:value={proxyInput}
           placeholder="Enter a replacement http(s)://[user:pass@]host:port"
           class="flex-1 px-3.5 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-mono focus:outline-hidden focus:border-brand-500"
-          disabled={Boolean(proxyStatus?.locked) || isSaving}
+          disabled={!hasLoaded || isLoading || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}
           autocomplete="new-password"
         />
         <div class="flex items-center gap-2">
@@ -331,12 +331,12 @@
             <span class="material-symbols-outlined text-[16px] {isTesting ? 'animate-spin' : ''}">speed</span>
             <span>{isTesting ? "Testing..." : "Test URL"}</span>
           </Button>
-          <Button id="proxy-save-btn" variant="primary" size="sm" onclick={handleSaveProxy} disabled={!hasLoaded || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>
+          <Button id="proxy-save-btn" variant="primary" size="sm" onclick={handleSaveProxy} disabled={!hasLoaded || isLoading || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>
             <span class="material-symbols-outlined text-[16px]">save</span>
             <span>{isSaving ? "Saving..." : "Save Fallback"}</span>
           </Button>
           {#if proxyInput.trim()}
-            <Button variant="ghost" size="sm" onclick={() => { proxyInput = ""; void handleSaveProxy(); }} disabled={!hasLoaded || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>
+            <Button variant="ghost" size="sm" onclick={() => { proxyInput = ""; void handleSaveProxy(); }} disabled={!hasLoaded || isLoading || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>
               Clear
             </Button>
           {/if}
@@ -372,14 +372,14 @@
         <select
           bind:value={rotationMode}
           onchange={handleStrategyChange}
-          disabled={!hasLoaded || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}
+          disabled={!hasLoaded || isLoading || Boolean(loadError) || Boolean(proxyStatus?.locked) || isSaving}
           class="px-2.5 py-1.5 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main font-medium focus:outline-hidden"
         >
           <option value="round-robin">Strategy: Round-Robin</option>
           <option value="failover">Strategy: Failover</option>
           <option value="random">Strategy: Weighted Random</option>
         </select>
-        <Button variant="secondary" size="xs" onclick={() => runPoolTest()} disabled={isPoolTesting || isLoading || pools.length === 0}>
+        <Button variant="secondary" size="xs" onclick={() => runPoolTest()} disabled={!hasLoaded || isPoolTesting || isLoading || Boolean(loadError) || pools.length === 0}>
           <span class="material-symbols-outlined text-[14px] {isPoolTesting ? 'animate-spin' : ''}">network_check</span>
           <span>{isPoolTesting ? "Probing..." : "Ping All"}</span>
         </Button>
@@ -514,7 +514,7 @@
     <p class="text-[11px] text-text-subtle">SOCKS5 is not supported by Bun fetch. Existing credentials remain in SQLite when editing or removing pool entries by ID.</p>
     <div class="flex justify-end gap-2 pt-2">
       <Button variant="ghost" onclick={() => (isAddModalOpen = false)}>Cancel</Button>
-      <Button variant="primary" type="submit" disabled={!newUrl.trim() || !hasLoaded || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>Add Node</Button>
+      <Button variant="primary" type="submit" disabled={!newUrl.trim() || !hasLoaded || isLoading || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>Add Node</Button>
     </div>
   </form>
 </Modal>
@@ -540,7 +540,7 @@
     </div>
     <div class="flex justify-end gap-2 pt-2">
       <Button variant="ghost" onclick={() => (isBulkModalOpen = false)}>Cancel</Button>
-      <Button variant="primary" type="submit" disabled={!bulkInput.trim() || !hasLoaded || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>Import List</Button>
+      <Button variant="primary" type="submit" disabled={!bulkInput.trim() || !hasLoaded || isLoading || Boolean(loadError) || isSaving || Boolean(proxyStatus?.locked)}>Import List</Button>
     </div>
   </form>
 </Modal>
