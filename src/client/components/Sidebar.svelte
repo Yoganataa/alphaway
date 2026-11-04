@@ -122,7 +122,7 @@
         <p class="text-[11px] text-text-muted font-mono">{health?.version ? `v${health.version}` : "v0.0.1"}</p>
       </div>
     </div>
-    <Badge tone={healthAvailable ? "success" : "neutral"} size="sm" dot>{healthAvailable ? "HEALTHY" : "UNKNOWN"}</Badge>
+    <Badge tone={healthAvailable ? "success" : "neutral"} size="sm" dot>{healthAvailable ? "API RESPONDING" : "UNKNOWN"}</Badge>
   </div>
 
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
