@@ -2,6 +2,7 @@
   import Card from "../lib/ui/Card.svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
+  import { notifications } from "../lib/notifications";
   import type { HealthResponse } from "../lib/types";
 
   let { health }: { health: HealthResponse | null } = $props();
@@ -13,13 +14,23 @@
   const publicEndpointConfigured = $derived(publicEndpointUrl.length > 0);
 
   async function copyPublicEndpoint() {
-    if (!publicEndpointUrl || typeof navigator === "undefined" || !navigator.clipboard) return;
+    if (!publicEndpointUrl) return;
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      copiedUrl = false;
+      notifications.error("Clipboard access is unavailable in this browser context");
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(publicEndpointUrl);
       copiedUrl = true;
+      notifications.success("Public endpoint copied to clipboard");
       setTimeout(() => (copiedUrl = false), 2000);
-    } catch {
+    } catch (error) {
       copiedUrl = false;
+      notifications.error(
+        `Could not copy public endpoint: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 </script>
@@ -46,7 +57,7 @@
           <span class="text-xs text-text-muted font-medium">Configured public API endpoint:</span>
           <p class="text-xs font-mono text-brand-400 font-semibold break-all">{publicEndpointUrl}</p>
         </div>
-        <Button variant="secondary" size="sm" onclick={copyPublicEndpoint}>
+        <Button id="copy-public-endpoint" variant="secondary" size="sm" onclick={copyPublicEndpoint}>
           {#if copiedUrl}
             <span class="material-symbols-outlined text-[16px] text-emerald-400">check</span>
             <span class="text-emerald-400">Copied</span>
