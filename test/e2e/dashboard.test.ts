@@ -47,6 +47,15 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(headerText).toContain(health.tls);
     expect(headerText).toContain(new URL(baseURL).host);
 
+    await page.getByText("Dashboard origin", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    const sidebarText = await page.locator("aside").textContent();
+    expect(sidebarText).toContain(health.tls);
+    expect(sidebarText).toContain("Local retry gate");
+    expect(sidebarText).toContain(health.identity.gate.status.toUpperCase());
+    expect(sidebarText).toContain(`${health.identity.gate.anchors.tools.length} tools · ${health.identity.gate.anchors.headers.length} headers`);
+    expect(sidebarText).toContain(new URL(baseURL).host);
+    expect(sidebarText).not.toContain("OPEN (5/5)");
+
     const bodyText = await page.textContent("main");
     expect(bodyText).toContain("TLS Profile");
     expect(bodyText).toContain(health.tls);
