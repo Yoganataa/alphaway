@@ -304,6 +304,7 @@ Phase 4 is merged into `main` at `4494d2c3371ec723d76f8289485cdebdcb2a988d`. All
 - [x] Correct the existing custom-provider probe feedback so it reports only backend-returned HTTP status/result; do not display fabricated latency or model-validation counts (PR #18 merged; route and browser regressions, four required CI jobs, and both CodeQL analyzers passed).
 - [x] Align the Command Palette with implemented navigation/actions, truthful labels, keyboard behavior, and mobile navigation coverage (PR #15 merged; exact-head required CI and both CodeQL analyzers passed).
 - [x] Make Usage range controls truthful: the selected range applies only to the chart; KPI/breakdown totals remain since-reset aggregates, and the duplicate 60D/All option is removed (PR #20 merged; browser regression, four required CI jobs, and both CodeQL analyzers passed).
+- [x] Make Quota Tracker load errors recoverable and distinguish stale usage-window data from the selected window (PR #22 merged; browser regression, four required CI jobs, and both CodeQL analyzers passed).
 - [ ] Decide whether AlphaWay requires the full provider-node + multi-connection domain or a lighter custom-provider registry. Do not design schema or connection routing until this product boundary is explicit.
 - [ ] After the decision, design any required SQLite entities and secured API contracts before adding corresponding provider/model controls.
 - [ ] Implement remaining UI-only parity against existing endpoints in independently reviewable slices with regression coverage.
