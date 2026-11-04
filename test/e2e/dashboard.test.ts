@@ -471,7 +471,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(mainText).toContain("Allowed models");
   }, 20000);
 
-  it("shows a recoverable error instead of an empty-key state when Quota Tracker loading fails", async () => {
+  it("recovers from Quota Tracker load failures without mislabeling stale usage windows", async () => {
     const { page, baseURL, adminCookie } = dashboard;
     const keyName = "Quota Tracker Error Recovery";
     const keyResponse = await fetch(baseURL + "/api/keys", {
@@ -485,11 +485,12 @@ describe("AlphaWay Web Dashboard E2E", () => {
     });
     expect(keyResponse.status).toBe(201);
 
-    let failedFirstRequest = false;
+    const failedWindows = new Set<string>();
     await page.route("**/api/keys/usage**", async (route) => {
       const requestUrl = new URL(route.request().url());
-      if (requestUrl.searchParams.get("window") === "24h" && !failedFirstRequest) {
-        failedFirstRequest = true;
+      const windowName = requestUrl.searchParams.get("window");
+      if ((windowName === "24h" || windowName === "7d") && !failedWindows.has(windowName)) {
+        failedWindows.add(windowName);
         await route.fulfill({
           status: 503,
           contentType: "application/json",
@@ -502,16 +503,31 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     await page.getByRole("button", { name: "Quota Tracker" }).click();
     const alert = page.getByRole("alert");
-    await alert.getByText(/Could not refresh managed key usage: Temporary usage read failure/).waitFor({
+    await alert.getByText(/Could not load usage for Last 24 hours: Temporary usage read failure/).waitFor({
       state: "visible",
       timeout: 10000,
     });
     expect(await page.getByText("No active managed API keys match this filter.", { exact: true }).count()).toBe(0);
 
     await alert.getByRole("button", { name: "Retry managed key usage" }).click();
-    await page.getByRole("row").filter({ hasText: keyName }).waitFor({ state: "visible", timeout: 10000 });
+    const keyRow = page.getByRole("row").filter({ hasText: keyName });
+    await keyRow.waitFor({ state: "visible", timeout: 10000 });
+    await page.getByText("Recorded usage (Last 24 hours)", { exact: true }).waitFor({ state: "visible" });
     await alert.waitFor({ state: "detached", timeout: 10000 });
-    expect(failedFirstRequest).toBe(true);
+
+    await page.getByRole("combobox", { name: "Usage window" }).selectOption("7d");
+    await alert.getByText(/Could not refresh usage for Last 7 days: Temporary usage read failure/).waitFor({
+      state: "visible",
+      timeout: 10000,
+    });
+    await alert.getByText(/Values still shown use the Last 24 hours window/).waitFor({ state: "visible" });
+    await page.getByText("Recorded usage (Last 24 hours)", { exact: true }).waitFor({ state: "visible" });
+    await keyRow.waitFor({ state: "visible", timeout: 10000 });
+
+    await alert.getByRole("button", { name: "Retry managed key usage" }).click();
+    await page.getByText("Recorded usage (Last 7 days)", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await alert.waitFor({ state: "detached", timeout: 10000 });
+    expect(failedWindows).toEqual(new Set(["24h", "7d"]));
   }, 20000);
 
   it("creates, edits, and deletes a Plan through the dashboard UI", async () => {
