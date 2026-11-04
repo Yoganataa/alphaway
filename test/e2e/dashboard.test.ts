@@ -312,11 +312,14 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await saveBtn.isVisible()).toBe(true);
   }, 15000);
 
-  it("navigates to Usage and verifies persisted telemetry", async () => {
+  it("navigates to Usage and keeps chart-window scope distinct from lifetime summaries", async () => {
     const { page } = dashboard;
 
-    // Click Usage Tab
+    const initialChartRequest = page.waitForRequest((request) =>
+      request.url().includes("/api/usage/chart?period=7d")
+    );
     await page.getByRole("button", { name: "Usage" }).click();
+    await initialChartRequest;
 
     const mainText = await page.textContent("main");
     expect(mainText).toContain("Total Requests");
@@ -324,7 +327,24 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(mainText).toContain("TokenSaver Savings");
     expect(mainText).toContain("Protocol Distribution");
     expect(mainText).toContain("Recent Request Audit Log");
-  }, 15000);
+    expect(mainText).toContain("Trend Chart Window");
+    expect(mainText).toContain("This range changes the chart only.");
+    expect(mainText).toContain("all recorded totals since the last reset");
+
+    const range = page.getByRole("group", { name: "Usage trend chart range" });
+    expect(await range.getByRole("button", { name: "7D", exact: true }).getAttribute("aria-pressed")).toBe("true");
+    expect(await range.getByRole("button", { name: "All", exact: true }).count()).toBe(0);
+
+    const sixtyDayChartRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === "/api/usage/chart" && url.searchParams.get("period") === "60d";
+    });
+    await range.getByRole("button", { name: "60D", exact: true }).click();
+    await sixtyDayChartRequest;
+
+    expect(await range.getByRole("button", { name: "60D", exact: true }).getAttribute("aria-pressed")).toBe("true");
+    expect(await range.getByRole("button", { name: "7D", exact: true }).getAttribute("aria-pressed")).toBe("false");
+  }, 20000);
 
   it("navigates to Tunnel & Daemon and verifies status cards", async () => {
     const { page } = dashboard;

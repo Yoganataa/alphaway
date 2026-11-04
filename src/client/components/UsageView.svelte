@@ -24,7 +24,6 @@
     { value: "7d", label: "7D" },
     { value: "30d", label: "30D" },
     { value: "60d", label: "60D" },
-    { value: "all", label: "All" },
   ];
 
   let autoRefresh = $state(true);
@@ -193,17 +192,29 @@
 
   <!-- TAB 1: OVERVIEW -->
   {#if activeTab === "overview"}
-    <!-- Period Selector Filter on Overview (9router style) -->
-    <div class="flex items-center justify-between gap-3 bg-surface border border-border-subtle rounded-[12px] p-2.5 px-4 shadow-[var(--shadow-soft)]">
-      <div class="flex items-center gap-2">
-        <span class="material-symbols-outlined text-[18px] text-brand-400">tune</span>
-        <span class="text-xs font-semibold text-text-main">Reporting Window</span>
+    <!-- The API exposes a period-filtered chart, while KPI and breakdown totals
+         are lifetime-since-reset aggregates from GET /api/usage. -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface border border-border-subtle rounded-[12px] p-3 px-4 shadow-[var(--shadow-soft)]">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px] text-brand-400" aria-hidden="true">tune</span>
+          <span class="text-xs font-semibold text-text-main">Trend Chart Window</span>
+        </div>
+        <p class="text-[11px] text-text-muted mt-1">
+          This range changes the chart only. KPI cards and breakdowns show all recorded totals since the last reset.
+        </p>
       </div>
 
-      <div class="flex items-center gap-1 bg-surface-2 p-1 rounded-[8px] border border-border-subtle">
+      <div
+        role="group"
+        aria-label="Usage trend chart range"
+        class="flex flex-wrap items-center gap-1 bg-surface-2 p-1 rounded-[8px] border border-border-subtle shrink-0"
+      >
         {#each PERIODS as p}
           <button
             type="button"
+            aria-pressed={period === p.value}
+            title={p.value === "60d" ? "Last 60 days" : undefined}
             onclick={() => (period = p.value)}
             class="px-2.5 py-1 text-xs font-semibold rounded-[6px] transition-all font-mono {period === p.value
               ? 'bg-surface text-brand-400 shadow-sm border border-border-subtle'
