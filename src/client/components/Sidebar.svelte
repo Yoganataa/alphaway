@@ -39,27 +39,27 @@
 
   const sections: NavSection[] = [
     {
-      title: "Gateway & Routing",
+      title: "Main",
       items: [
-        { id: "endpoint", label: "Endpoint", icon: "hub" },
-        { id: "providers", label: "Providers & Models", icon: "dns" },
-        { id: "usage", label: "Usage & Analytics", icon: "monitoring" },
+        { id: "endpoint", label: "Endpoint & Key", icon: "hub" },
+        { id: "providers", label: "Providers", icon: "dns" },
+        { id: "usage", label: "Usage", icon: "monitoring" },
         { id: "quota", label: "Quota Tracker", icon: "speed" },
+        { id: "tokensaver", label: "Token Saver", icon: "bolt", badge: "RTK" },
+      ],
+    },
+    {
+      title: "Advanced Features",
+      items: [
+        { id: "security", label: "Security", icon: "shield", badge: "DLP" },
+        { id: "persona", label: "Persona", icon: "masks", badge: "AI" },
         { id: "plans", label: "Plans", icon: "layers" },
       ],
     },
     {
-      title: "Armor & Optimization",
+      title: "System",
       items: [
-        { id: "tokensaver", label: "TokenSaver", icon: "bolt", badge: "RTK" },
-        { id: "security", label: "Security & DLP", icon: "shield", badge: "DLP" },
-        { id: "proxy", label: "Egress Proxy", icon: "vpn_lock" },
-        { id: "persona", label: "Persona", icon: "masks", badge: "AI" },
-      ],
-    },
-    {
-      title: "System & Diagnostics",
-      items: [
+        { id: "proxy", label: "Proxy Pools", icon: "vpn_lock" },
         { id: "playground", label: "Playground", icon: "terminal" },
         { id: "consolelog", label: "Console Log", icon: "receipt_long" },
         { id: "tunnel", label: "Tunnel & Daemon", icon: "cloud" },
@@ -128,7 +128,7 @@
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
   <div class="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
     {#each sections as section}
-      <div class="space-y-1">
+      <div class="space-y-1" data-nav-section={section.title}>
         <div class="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-subtle">
           {section.title}
         </div>

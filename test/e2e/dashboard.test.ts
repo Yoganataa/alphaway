@@ -28,6 +28,38 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 15000);
 
+  it("groups implemented navigation into Main, Advanced Features, and System", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    const sidebar = page.locator("aside");
+    const mainGroup = sidebar.locator('[data-nav-section="Main"]');
+    const advancedGroup = sidebar.locator('[data-nav-section="Advanced Features"]');
+    const systemGroup = sidebar.locator('[data-nav-section="System"]');
+
+    expect(await mainGroup.isVisible()).toBe(true);
+    expect(await advancedGroup.isVisible()).toBe(true);
+    expect(await systemGroup.isVisible()).toBe(true);
+
+    const mainText = await mainGroup.textContent();
+    const advancedText = await advancedGroup.textContent();
+    const systemText = await systemGroup.textContent();
+
+    for (const label of ["Endpoint & Key", "Providers", "Usage", "Quota Tracker", "Token Saver"]) {
+      expect(mainText).toContain(label);
+    }
+    for (const label of ["Security", "Persona", "Plans"]) {
+      expect(advancedText).toContain(label);
+    }
+    for (const label of ["Proxy Pools", "Playground", "Console Log", "Tunnel & Daemon", "Profile & Settings"]) {
+      expect(systemText).toContain(label);
+    }
+
+    for (const unavailable of ["Combos", "CLI Tools", "Media Providers", "Skills", "Terminal"]) {
+      expect(`${mainText} ${advancedText} ${systemText}`).not.toContain(unavailable);
+    }
+  }, 15000);
+
   it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
     const { page, baseURL } = dashboard;
     const expectedTls = "AlphaWay E2E TLS profile sentinel";
@@ -113,7 +145,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
       return response.json();
     });
 
-    await page.getByRole("button", { name: "Providers & Models" }).click();
+    await page.getByRole("button", { name: "Providers" }).click();
 
     await page.getByText(health.identity.gate.anchors.tools.join(", "), { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     await page.getByText(health.identity.gate.anchors.headers.join(", "), { exact: true }).waitFor({ state: "visible", timeout: 10000 });
@@ -136,7 +168,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const { page } = dashboard;
 
     // Click TokenSaver Tab
-    await page.getByRole("button", { name: "TokenSaver" }).click();
+    await page.getByRole("button", { name: "Token Saver" }).click();
 
     const mainText = await page.textContent("main");
     expect(mainText).toContain("TokenSaver Optimization Engine");
@@ -163,11 +195,11 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(outputVal.length).toBeGreaterThan(0);
   }, 15000);
 
-  it("navigates to Egress Proxy and tests proxy configuration form", async () => {
+  it("navigates to Proxy Pools and tests proxy configuration form", async () => {
     const { page } = dashboard;
 
-    // Click Egress Proxy Tab
-    await page.getByRole("button", { name: "Egress Proxy" }).click();
+    // Click Proxy Pools Tab
+    await page.getByRole("button", { name: "Proxy Pools" }).click();
 
     const mainText = await page.textContent("main");
     expect(mainText).toContain("Egress Proxy Configuration");
@@ -184,11 +216,11 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await saveBtn.isVisible()).toBe(true);
   }, 15000);
 
-  it("navigates to Usage & Analytics and verifies real-time telemetry", async () => {
+  it("navigates to Usage and verifies persisted telemetry", async () => {
     const { page } = dashboard;
 
-    // Click Usage & Analytics Tab
-    await page.getByRole("button", { name: "Usage & Analytics" }).click();
+    // Click Usage Tab
+    await page.getByRole("button", { name: "Usage" }).click();
 
     const mainText = await page.textContent("main");
     expect(mainText).toContain("Total Requests");
