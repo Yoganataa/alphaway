@@ -188,7 +188,7 @@ export interface HealthResponse {
       diagnostics: string;
     };
     codebuddy: {
-      status: "connected" | "unauthenticated" | string;
+      status: string;
       models: number;
     };
   };
