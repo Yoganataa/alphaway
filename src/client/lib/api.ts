@@ -200,13 +200,79 @@ async function personaRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+function isPersonaKeyword(value: unknown): value is PersonaKeyword {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keyword = value as Record<string, unknown>;
+  return (
+    typeof keyword.text === "string" &&
+    (keyword.mode === undefined || keyword.mode === "word" || keyword.mode === "partial")
+  );
+}
+
+function isPersonaPreset(value: unknown): value is PersonaPreset {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const preset = value as Record<string, unknown>;
+  return (
+    typeof preset.id === "string" &&
+    typeof preset.name === "string" &&
+    typeof preset.prompt === "string" &&
+    typeof preset.kind === "string" &&
+    typeof preset.source === "string" &&
+    Array.isArray(preset.keywords) &&
+    preset.keywords.every(isPersonaKeyword) &&
+    Array.isArray(preset.excludes) &&
+    preset.excludes.every(isPersonaKeyword) &&
+    typeof preset.order === "number" &&
+    typeof preset.usageCount === "number" &&
+    typeof preset.createdAt === "string" &&
+    typeof preset.updatedAt === "string"
+  );
+}
+
+function isPersonaModelBinding(value: unknown): value is PersonaModelBinding {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const binding = value as Record<string, unknown>;
+  return (
+    typeof binding.modelId === "string" &&
+    typeof binding.enabled === "boolean" &&
+    (binding.presetId === null || typeof binding.presetId === "string") &&
+    typeof binding.updatedAt === "string"
+  );
+}
+
+function readPersonaState(data: unknown): {
+  presets: PersonaPreset[];
+  bindings: PersonaModelBinding[];
+  excludes: PersonaKeyword[];
+} {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid Persona response");
+  }
+  const state = data as Record<string, unknown>;
+  if (
+    !Array.isArray(state.presets) ||
+    !state.presets.every(isPersonaPreset) ||
+    !Array.isArray(state.bindings) ||
+    !state.bindings.every(isPersonaModelBinding) ||
+    !Array.isArray(state.excludes) ||
+    !state.excludes.every(isPersonaKeyword)
+  ) {
+    throw new Error("Invalid Persona response");
+  }
+  return {
+    presets: state.presets,
+    bindings: state.bindings,
+    excludes: state.excludes,
+  };
+}
+
 export async function fetchPersonaState(): Promise<{
   presets: PersonaPreset[];
   bindings: PersonaModelBinding[];
   excludes: PersonaKeyword[];
 }> {
-  const data = await personaRequest<{ presets: PersonaPreset[]; bindings: PersonaModelBinding[]; excludes: PersonaKeyword[] }>("");
-  return { presets: data.presets || [], bindings: data.bindings || [], excludes: data.excludes || [] };
+  const data = await personaRequest<unknown>("");
+  return readPersonaState(data);
 }
 
 export async function savePersonaPreset(preset: Partial<PersonaPreset> & Pick<PersonaPreset, "id" | "name" | "prompt">): Promise<PersonaPreset> {
@@ -244,12 +310,19 @@ export async function deletePersonaModelBinding(modelId: string): Promise<void> 
 }
 
 export async function savePersonaGlobalExcludes(excludes: PersonaKeyword[]): Promise<PersonaKeyword[]> {
-  const data = await personaRequest<{ excludes: PersonaKeyword[] }>("/excludes", {
+  const data = await personaRequest<unknown>("/excludes", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ excludes }),
   });
-  return data.excludes || [];
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid Persona exclusions response");
+  }
+  const returned = (data as { excludes?: unknown }).excludes;
+  if (!Array.isArray(returned) || !returned.every(isPersonaKeyword)) {
+    throw new Error("Invalid Persona exclusions response");
+  }
+  return returned;
 }
 
 export async function resolvePersona(modelIds: string[]): Promise<PersonaResolution> {
