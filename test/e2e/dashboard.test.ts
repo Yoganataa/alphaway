@@ -46,7 +46,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(bodyText).toContain("TLS Fingerprint");
     expect(bodyText).toContain("17 ciphers · 12 extensions");
     expect(bodyText).toContain("OpenAI Client Integration");
-    expect(bodyText).toContain("http://127.0.0.1:20129/v1");
+    expect(bodyText).toContain(`${new URL(baseURL).origin}/v1`);
   });
 
   it("navigates to Playground and verifies model selection and prompt inputs", async () => {
