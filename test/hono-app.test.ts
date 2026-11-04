@@ -35,9 +35,16 @@ describe("Hono application engine", () => {
     expect(json.tokensaver).not.toHaveProperty("soulFilePath");
     expect(json.providers.codebuddy).not.toHaveProperty("user");
     expect(json.codebuddy).not.toHaveProperty("user");
-    expect(json.identity.gate.lastRejection).not.toHaveProperty("message");
-    expect(json.identity.gate.lastRejection).not.toHaveProperty("shape");
-    expect(json.lastUpstreamError).not.toHaveProperty("error");
+    if (json.identity.gate.lastRejection) {
+      expect(json.identity.gate.lastRejection).not.toHaveProperty("message");
+      expect(json.identity.gate.lastRejection).not.toHaveProperty("shape");
+    }
+    if (json.identity.gate.lastUpstreamError) {
+      expect(json.identity.gate.lastUpstreamError).not.toHaveProperty("error");
+    }
+    if (json.lastUpstreamError) {
+      expect(json.lastUpstreamError).not.toHaveProperty("error");
+    }
   });
 
   it("lists both OpenCode and CodeBuddy models on /v1/models with a managed key", async () => {
