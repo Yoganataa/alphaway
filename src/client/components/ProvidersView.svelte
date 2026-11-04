@@ -658,7 +658,7 @@
                   <span class="material-symbols-outlined text-[16px]">edit</span>
                   <span>Edit</span>
                 </Button>
-                <Button variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={() => handleDelete(p.id)} disabled={providerWritesBlocked()}>
+                <Button id={`providers-delete-${p.id}`} variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={() => handleDelete(p.id)} disabled={providerWritesBlocked()} title="Delete custom provider">
                   <span class="material-symbols-outlined text-[16px]">delete</span>
                 </Button>
               </div>
