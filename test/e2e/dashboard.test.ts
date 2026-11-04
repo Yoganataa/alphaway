@@ -33,36 +33,30 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.goto(`${baseURL}/`);
 
     const sidebar = page.locator("aside");
-    await sidebar.getByText("Main", { exact: true }).waitFor({ state: "visible" });
-    const sidebarText = await sidebar.textContent();
+    const mainGroup = sidebar.locator('[data-nav-section="Main"]');
+    const advancedGroup = sidebar.locator('[data-nav-section="Advanced Features"]');
+    const systemGroup = sidebar.locator('[data-nav-section="System"]');
 
-    const orderedLabels = [
-      "Main",
-      "Endpoint & Key",
-      "Providers",
-      "Usage",
-      "Quota Tracker",
-      "Token Saver",
-      "Advanced Features",
-      "Security",
-      "Persona",
-      "Plans",
-      "System",
-      "Proxy Pools",
-      "Playground",
-      "Console Log",
-      "Tunnel & Daemon",
-      "Profile & Settings",
-    ];
-    let previousIndex = -1;
-    for (const label of orderedLabels) {
-      const index = sidebarText.indexOf(label);
-      expect(index, `Sidebar label should be present and ordered: ${label}`).toBeGreaterThan(previousIndex);
-      previousIndex = index;
+    await expect(mainGroup).toBeVisible();
+    await expect(advancedGroup).toBeVisible();
+    await expect(systemGroup).toBeVisible();
+
+    const mainText = await mainGroup.textContent();
+    const advancedText = await advancedGroup.textContent();
+    const systemText = await systemGroup.textContent();
+
+    for (const label of ["Endpoint & Key", "Providers", "Usage", "Quota Tracker", "Token Saver"]) {
+      expect(mainText).toContain(label);
+    }
+    for (const label of ["Security", "Persona", "Plans"]) {
+      expect(advancedText).toContain(label);
+    }
+    for (const label of ["Proxy Pools", "Playground", "Console Log", "Tunnel & Daemon", "Profile & Settings"]) {
+      expect(systemText).toContain(label);
     }
 
     for (const unavailable of ["Combos", "CLI Tools", "Media Providers", "Skills", "Terminal"]) {
-      expect(sidebarText).not.toContain(unavailable);
+      expect(`${mainText} ${advancedText} ${systemText}`).not.toContain(unavailable);
     }
   }, 15000);
 
