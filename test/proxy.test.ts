@@ -426,6 +426,62 @@ describe("proxy HTTP surface", () => {
     }
   });
 
+  it("probes authenticated relay entries with runtime headers without exposing relay tokens", async () => {
+    emptyStateDir();
+    proxy.__reload();
+    proxy.setPool({
+      entries: [{
+        id: "relay-entry",
+        label: "Authenticated relay",
+        relay: true,
+        url: "https://relay.example.test/gateway",
+        token: "relay-secret",
+      }],
+      strategy: "failover",
+    });
+
+    const originalFetch = global.fetch;
+    try {
+      global.fetch = async (url, init) => {
+        assert.equal(String(url), "https://relay.example.test/gateway");
+        assert.equal(init.headers["x-relay-target"], "https://opencode.ai");
+        assert.equal(init.headers["x-relay-path"], "/inference/v1/models");
+        assert.equal(init.headers["x-relay-auth"], "relay-secret");
+        return { ok: true, status: 200 };
+      };
+
+      const status = await request(port, "GET", "/api/proxy");
+      assert.equal(status.status, 200);
+      assert.equal(JSON.parse(status.raw).hasCredentials, true);
+      assert.equal(status.raw.includes("relay-secret"), false);
+
+      const response = await request(port, "POST", "/api/proxy/pool/test", { entryId: "relay-entry" });
+      assert.equal(response.status, 200);
+      const body = JSON.parse(response.raw);
+      assert.equal(body.ok, true);
+      assert.equal(body.entries[0].id, "relay-entry");
+      assert.equal(body.entries[0].apiStatus, 200);
+      assert.equal(response.raw.includes("relay-secret"), false);
+    } finally {
+      global.fetch = originalFetch;
+      proxy.setPool({ entries: [] });
+    }
+  });
+
+  it("does not report a successful probe when the pool is empty", async () => {
+    emptyStateDir();
+    proxy.__reload();
+    proxy.setPool({ entries: [] });
+
+    const response = await request(port, "POST", "/api/proxy/pool/test", {});
+    assert.equal(response.status, 409);
+    assert.deepEqual(JSON.parse(response.raw), {
+      ok: false,
+      entries: [],
+      error: "No proxy pool entries are configured.",
+    });
+  });
+
   it("answers /api/proxy/test with the probe verdict", async () => {
     if (typeof Bun === "undefined") return;
     const original = global.fetch;
