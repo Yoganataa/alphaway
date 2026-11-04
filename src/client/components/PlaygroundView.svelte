@@ -4,6 +4,7 @@
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
   import { fetchModels, streamChatCompletion } from "../lib/api";
+  import { notifications } from "../lib/notifications";
   import type { ModelItem, ChatMessage } from "../lib/types";
 
   let models = $state<ModelItem[]>([]);
@@ -17,6 +18,7 @@
   let ttftMs = $state<number | null>(null);
   let totalTimeMs = $state<number | null>(null);
   let copiedResponse = $state<boolean>(false);
+  let copyingResponse = $state<boolean>(false);
 
   onMount(async () => {
     try {
@@ -82,11 +84,29 @@
     }
   }
 
-  function copyResponse() {
-    if (typeof navigator !== "undefined" && navigator.clipboard && assistantResponse) {
-      navigator.clipboard.writeText(assistantResponse);
+  async function copyResponse(): Promise<void> {
+    if (!assistantResponse || copyingResponse) return;
+
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      copiedResponse = false;
+      notifications.error("Clipboard access is unavailable in this browser context");
+      return;
+    }
+
+    copyingResponse = true;
+    copiedResponse = false;
+    try {
+      await navigator.clipboard.writeText(assistantResponse);
       copiedResponse = true;
+      notifications.success("Playground response copied to clipboard");
       setTimeout(() => (copiedResponse = false), 2000);
+    } catch (error) {
+      copiedResponse = false;
+      notifications.error(
+        `Could not copy Playground response: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      copyingResponse = false;
     }
   }
 </script>
@@ -221,10 +241,13 @@
             <span class="text-xs font-semibold text-text-main">Assistant Output (SSE Stream)</span>
           </div>
           {#if assistantResponse}
-            <Button variant="ghost" size="sm" onclick={copyResponse}>
+            <Button id="playground-copy-response" variant="ghost" size="sm" onclick={copyResponse} disabled={copyingResponse}>
               {#if copiedResponse}
                 <span class="material-symbols-outlined text-[14px] text-emerald-400">check</span>
                 <span class="text-emerald-400">Copied</span>
+              {:else if copyingResponse}
+                <span class="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                <span>Copying...</span>
               {:else}
                 <span class="material-symbols-outlined text-[14px]">content_copy</span>
                 <span>Copy</span>
