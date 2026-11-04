@@ -16,6 +16,9 @@ describe("Hono application engine", () => {
     expect(json.framework).toBe("Hono.js");
     expect(json.tls).toBe("BoringSSL Native Parity");
     expect(json.providers.codebuddy).toBeDefined();
+    expect(json.providers.opencode.status).toBe("registered");
+    expect(["configured", "not-configured"]).toContain(json.providers.codebuddy.status);
+    expect(json.codebuddy.configured).toBe(json.providers.codebuddy.status === "configured");
     expect(json.providers.opencode).toBeDefined();
     expect(typeof json.uptimeSeconds).toBe("number");
     expect(json.uptimeSeconds).toBeGreaterThanOrEqual(0);
