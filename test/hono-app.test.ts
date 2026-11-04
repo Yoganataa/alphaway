@@ -25,6 +25,14 @@ describe("Hono application engine", () => {
     expect(["open", "throttled", "ip-blocked"]).toContain(json.identity.gate.status);
     expect(json).not.toHaveProperty("tunnel");
     expect(json).not.toHaveProperty("daemon");
+    expect(json.tokensaver).toEqual({
+      rtkEnabled: expect.any(Boolean),
+      cavemanEnabled: expect.any(Boolean),
+      adhdEnabled: expect.any(Boolean),
+      dlpEnabled: expect.any(Boolean),
+    });
+    expect(json.tokensaver).not.toHaveProperty("soulCustomContent");
+    expect(json.tokensaver).not.toHaveProperty("soulFilePath");
   });
 
   it("lists both OpenCode and CodeBuddy models on /v1/models with a managed key", async () => {
