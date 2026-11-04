@@ -41,7 +41,8 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const headerTitle = await page.textContent("header h1");
     expect(headerTitle).toContain("AlphaWay");
 
-    await page.getByText(new URL(baseURL).host, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("header").getByText(new URL(baseURL).host, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("header").getByText(health.tls, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     const headerText = await page.textContent("header");
     expect(headerText).toContain(health.tls);
     expect(headerText).toContain(new URL(baseURL).host);
@@ -92,6 +93,9 @@ describe("AlphaWay Web Dashboard E2E", () => {
     });
 
     await page.getByRole("button", { name: "Providers & Models" }).click();
+
+    await page.getByText(health.identity.gate.anchors.tools.join(", "), { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.getByText(health.identity.gate.anchors.headers.join(", "), { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     const mainText = await page.textContent("main");
     expect(mainText).toContain("OpenCode Free-Tier");
@@ -235,8 +239,8 @@ describe("AlphaWay Web Dashboard E2E", () => {
       if (!response.ok) throw new Error(`Database stats request failed: ${response.status}`);
       return response.json();
     });
-    expect(mainText).toContain(stats.journalMode.toUpperCase());
-    expect(mainText).toContain(stats.engine);
+    await page.getByText(stats.journalMode.toUpperCase(), { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.getByText(stats.engine, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
   }, 15000);
 
   it("shows an inherited Plan quota for a managed API key in the dashboard", async () => {
