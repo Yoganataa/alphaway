@@ -8,6 +8,8 @@ import type {
   TokenSaverConfig,
   ProxyStatus,
   ProxyTestResult,
+  ProxyPoolTestResult,
+  ProxyPoolStrategy,
   CodeBuddyOAuthStart,
   ChatMessage,
   CustomProviderConfig,
@@ -18,6 +20,8 @@ import type {
 } from "./types";
 
 const BASE_URL = "";
+
+export type { ProxyStatus, ProxyTestResult, ProxyPoolTestResult, ProxyPoolStrategy } from "./types";
 
 declare global {
   interface Window {
@@ -302,14 +306,53 @@ export async function fetchProxyStatus(): Promise<ProxyStatus> {
   return res.json();
 }
 
-export async function updateProxy(url: string): Promise<{ ok: boolean; url: string }> {
+export async function updateProxy(url: string): Promise<ProxyStatus> {
   const res = await fetch(`${BASE_URL}/api/proxy`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
-  if (!res.ok) throw new Error(`Update proxy failed: ${res.statusText}`);
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Update proxy failed: ${res.statusText}`);
+  return data;
+}
+
+export interface ProxyPoolEntryInput {
+  id?: string;
+  label?: string;
+  url?: string;
+  direct?: boolean;
+  enabled?: boolean;
+  weight?: number;
+}
+
+export interface ProxyPoolUpdate {
+  entries: ProxyPoolEntryInput[];
+  strategy: ProxyPoolStrategy;
+  cooldownMs?: number;
+  maxCooldownMs?: number;
+}
+
+export async function updateProxyPool(config: ProxyPoolUpdate): Promise<ProxyStatus> {
+  const res = await fetch(`${BASE_URL}/api/proxy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pool: config }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Update proxy pool failed: ${res.statusText}`);
+  return data;
+}
+
+export async function testProxyPool(options: { timeoutMs?: number; entryId?: string } = {}): Promise<ProxyPoolTestResult> {
+  const res = await fetch(`${BASE_URL}/api/proxy/pool/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Proxy pool test failed: ${res.statusText}`);
+  return data;
 }
 
 export async function testProxy(url: string): Promise<ProxyTestResult> {
@@ -318,11 +361,9 @@ export async function testProxy(url: string): Promise<ProxyTestResult> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
-  if (!res.ok) {
-    const errText = await res.text();
-    return { ok: false, error: errText || res.statusText };
-  }
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, error: data?.error || res.statusText };
+  return data;
 }
 
 export async function startCodeBuddyOAuth(): Promise<CodeBuddyOAuthStart> {
