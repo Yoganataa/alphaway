@@ -37,6 +37,17 @@
   const origin = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:20129";
   const baseUrl = `${origin}/v1`;
   const apiKey = $derived(getActiveApiKey());
+  const gateStatus = $derived(health?.identity?.gate?.status ?? "unknown");
+  const gateTone = $derived(gateStatus === "open" ? "success" : gateStatus === "unknown" ? "neutral" : "warning");
+  const gateLabel = $derived(
+    gateStatus === "open"
+      ? "No active local block"
+      : gateStatus === "ip-blocked"
+        ? "IP blocked"
+        : gateStatus === "throttled"
+          ? "Throttled"
+          : "Not reported"
+  );
 
   const snippets = $derived({
     curl: `curl -s ${baseUrl}/chat/completions \\
@@ -125,35 +136,32 @@ console.log(completion.choices[0].message.content);`,
 <div class="space-y-6">
   <!-- Top 4 Metric Cards (9Router Card Style) -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    <!-- Card 1: TLS Fingerprint -->
+    <!-- Card 1: Runtime TLS profile -->
     <Card padding="md" hover>
       <div class="flex items-center justify-between text-xs text-text-muted mb-2">
-        <span class="font-medium">TLS Fingerprint</span>
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="font-medium">TLS Profile</span>
+        <span class="w-2 h-2 rounded-full {health?.tls ? 'bg-emerald-500' : 'bg-zinc-500'}"></span>
       </div>
       <div class="text-lg font-bold text-text-main tracking-tight">
-        BoringSSL Parity
+        {health?.tls || "Not reported"}
       </div>
-      <p class="text-xs text-emerald-400 font-mono mt-1 flex items-center gap-1">
-        <span class="material-symbols-outlined text-[14px]">verified</span>
-        <span>17 ciphers · 12 extensions</span>
+      <p class="text-xs text-text-muted font-mono mt-1">
+        Runtime health metadata; not a live upstream connectivity test.
       </p>
     </Card>
 
-    <!-- Card 2: Upstream Gate -->
+    <!-- Card 2: Local retry gate -->
     <Card padding="md" hover>
       <div class="flex items-center justify-between text-xs text-text-muted mb-2">
-        <span class="font-medium">Upstream Gate</span>
-        <span class="w-2 h-2 rounded-full {health?.identity?.gate?.status === 'open' ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
+        <span class="font-medium">Local Retry Gate</span>
+        <span class="w-2 h-2 rounded-full {gateTone === 'success' ? 'bg-emerald-500' : gateTone === 'warning' ? 'bg-amber-500' : 'bg-zinc-500'}"></span>
       </div>
       <div class="text-lg font-bold text-text-main tracking-tight flex items-center gap-2">
-        <span>{(health?.identity?.gate?.status || "unknown").toUpperCase()}</span>
-        <Badge tone={health?.identity?.gate?.status === "open" ? "success" : "warning"} size="sm">
-          {health?.identity?.gate?.status === "open" ? "Ready" : "Restricted"}
-        </Badge>
+        <span>{gateStatus.toUpperCase()}</span>
+        <Badge tone={gateTone} size="sm">{gateLabel}</Badge>
       </div>
-      <p class="text-xs text-text-muted mt-1 font-mono">
-        Retry cooldown: {health?.identity?.gate?.cooldownMs ?? 0}ms
+      <p class="text-xs text-text-muted mt-1">
+        Local abuse/retry state, not an upstream availability probe. Configured retry window: {health?.identity?.gate?.cooldownMs ?? "—"}ms
       </p>
     </Card>
 
