@@ -34,8 +34,8 @@
     }
   }
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:20129";
-  const baseUrl = `${origin}/v1`;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const baseUrl = origin ? `${origin}/v1` : "/v1";
   const apiKey = $derived(getActiveApiKey());
   const gateStatus = $derived(health?.identity?.gate?.status ?? "unknown");
   const gateTone = $derived(gateStatus === "open" ? "success" : gateStatus === "unknown" ? "neutral" : "warning");
@@ -394,7 +394,7 @@ console.log(completion.choices[0].message.content);`,
         {health?.endpoint?.tunnel ? "Public endpoint configured" : "Local endpoint only"}
       </div>
       <p class="text-[11px] text-text-muted truncate">
-        {health?.endpoint?.publicUrl || "http://127.0.0.1:20129/v1"}
+        {health?.endpoint?.publicUrl || baseUrl}
       </p>
     </Card>
   </div>
