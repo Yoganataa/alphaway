@@ -325,6 +325,105 @@ describe("proxy HTTP surface", () => {
     assert.equal(noUrl.status, 400);
   });
 
+  it("returns safe persisted pool state and preserves credentials on metadata-only updates", async () => {
+    emptyStateDir();
+    proxy.__reload();
+
+    const secretUrl = "http://pool-user:pool-password@127.0.0.1:3128";
+    const configured = proxy.setPool({
+      entries: [{ id: "primary", label: "Primary", url: secretUrl, weight: 3 }],
+      strategy: "failover",
+    });
+    assert.equal(configured.ok, true);
+
+    const read = await request(port, "GET", "/api/proxy");
+    assert.equal(read.status, 200);
+    const publicState = JSON.parse(read.raw);
+    assert.equal(publicState.mode, "pool");
+    assert.equal(publicState.pool.strategy, "failover");
+    assert.deepEqual(
+      publicState.pool.entries.map((entry) => [entry.id, entry.label, entry.host, entry.kind, entry.weight]),
+      [["primary", "Primary", "127.0.0.1:3128", "http", 3]]
+    );
+    assert.equal(read.raw.includes("pool-user"), false);
+    assert.equal(read.raw.includes("pool-password"), false);
+    assert.equal(read.raw.includes(secretUrl), false);
+
+    const update = await request(port, "POST", "/api/proxy", {
+      pool: {
+        entries: [{ id: "primary", label: "Renamed", enabled: false, weight: 7 }],
+        strategy: "random",
+      },
+    });
+    assert.equal(update.status, 200);
+    const updatedState = JSON.parse(update.raw);
+    assert.equal(updatedState.pool.strategy, "random");
+    assert.equal(updatedState.pool.entries[0].label, "Renamed");
+    assert.equal(updatedState.pool.entries[0].enabled, false);
+    assert.equal(updatedState.pool.entries[0].weight, 7);
+    assert.equal(update.raw.includes("pool-user"), false);
+    assert.equal(update.raw.includes("pool-password"), false);
+
+    const stored = dbGetSetting("proxy_config", null);
+    assert.match(stored.pool[0].url, /^awenc:v1:/);
+    assert.equal(decryptSecret(stored.pool[0].url), secretUrl);
+  });
+
+  it("rejects combined proxy URL and pool updates instead of partially applying them", async () => {
+    emptyStateDir();
+    proxy.__reload();
+
+    const response = await request(port, "POST", "/api/proxy", {
+      url: "http://single:9000",
+      pool: { entries: ["http://pool:9001"] },
+    });
+    assert.equal(response.status, 400);
+    assert.match(JSON.parse(response.raw).error, /exactly one of url or pool/);
+    assert.equal(proxy.getProxyUrl(), "");
+    assert.equal(proxy.getPool().length, 0);
+  });
+
+  it("probes the persisted pool by ID through the configured egress and validates probe options", async () => {
+    emptyStateDir();
+    proxy.__reload();
+    proxy.setPool({
+      entries: [{ id: "probe-entry", label: "Probe entry", url: "http://127.0.0.1:3128" }],
+      strategy: "failover",
+    });
+
+    const originalFetch = global.fetch;
+    try {
+      global.fetch = async (url, init) => {
+        if (String(url).includes("cdn-cgi/trace")) {
+          assert.equal(init.proxy, "http://127.0.0.1:3128");
+          return { ok: true, text: async () => "ip=198.51.100.42\\n" };
+        }
+        assert.equal(init.proxy, "http://127.0.0.1:3128");
+        return { ok: true, status: 200 };
+      };
+
+      const response = await request(port, "POST", "/api/proxy/pool/test", {
+        entryId: "probe-entry",
+        timeoutMs: 2500,
+      });
+      assert.equal(response.status, 200);
+      const body = JSON.parse(response.raw);
+      assert.equal(body.ok, true);
+      assert.equal(body.entries.length, 1);
+      assert.equal(body.entries[0].id, "probe-entry");
+      assert.equal(body.entries[0].apiStatus, 200);
+      assert.equal(body.entries[0].exitIp, "198.51.100.42");
+      assert.equal(typeof body.entries[0].latencyMs, "number");
+
+      const missing = await request(port, "POST", "/api/proxy/pool/test", { entryId: "missing" });
+      assert.equal(missing.status, 404);
+      const invalidTimeout = await request(port, "POST", "/api/proxy/pool/test", { timeoutMs: 999 });
+      assert.equal(invalidTimeout.status, 400);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("answers /api/proxy/test with the probe verdict", async () => {
     if (typeof Bun === "undefined") return;
     const original = global.fetch;
