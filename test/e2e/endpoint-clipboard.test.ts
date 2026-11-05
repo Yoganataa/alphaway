@@ -85,6 +85,20 @@ describe("Endpoint clipboard feedback", () => {
       .waitFor({ state: "visible", timeout: 5000 });
     expect(await baseUrlCopy.isDisabled()).toBe(false);
     expect(await baseUrlCopy.getAttribute("aria-busy")).not.toBe("true");
+
+    await page.evaluate(() => {
+      const target = window as typeof window & { __clipboardWrites?: string[] };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (value: string) => {
+            target.__clipboardWrites ??= [];
+            target.__clipboardWrites.push(value);
+          },
+        },
+      });
+    });
+
     await page.locator("#copy-local-endpoint").click();
     await page.getByText("Copied to clipboard", { exact: true })
       .waitFor({ state: "visible", timeout: 5000 });
