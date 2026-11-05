@@ -600,11 +600,11 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     // Shift+Tab from the dialog container wraps to the last control; Tab wraps to the first.
     await page.keyboard.press("Shift+Tab");
-    await page.waitForFunction(() => document.activeElement?.textContent?.includes("Generate Key"));
+    await page.waitForFunction(() => document.activeElement?.textContent?.includes("Cancel"));
     await page.keyboard.press("Tab");
     await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Close dialog");
     await page.keyboard.press("Shift+Tab");
-    await page.waitForFunction(() => document.activeElement?.textContent?.includes("Generate Key"));
+    await page.waitForFunction(() => document.activeElement?.textContent?.includes("Cancel"));
 
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await dialog.waitFor({ state: "detached", timeout: 5000 });
