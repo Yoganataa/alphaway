@@ -60,6 +60,58 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 15000);
 
+  it("collapses sidebar groups, persists the preference, and keeps the active group open", async () => {
+    const { page, baseURL } = dashboard;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${baseURL}/`);
+
+    const advanced = page.locator('[data-nav-section="Advanced Features"]');
+    const toggle = advanced.locator('[data-section-toggle="advanced-features"]');
+    const items = advanced.locator('[data-nav-items="advanced-features"]');
+
+    expect(await toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(await items.isVisible()).toBe(true);
+
+    await toggle.click();
+    expect(await toggle.getAttribute("aria-expanded")).toBe("false");
+    await items.waitFor({ state: "detached", timeout: 5000 });
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("alphaway-sidebar-collapsed-sections") || "[]"))).toContain("advanced-features");
+
+    await page.reload();
+    const reloadedAdvanced = page.locator('[data-nav-section="Advanced Features"]');
+    const reloadedToggle = reloadedAdvanced.locator('[data-section-toggle="advanced-features"]');
+    await page.waitForFunction(() => {
+      const section = document.querySelector('[data-nav-section="Advanced Features"]');
+      return section?.querySelector('[data-section-toggle="advanced-features"]')?.getAttribute("aria-expanded") === "false";
+    });
+    expect(await reloadedAdvanced.locator('[data-nav-items="advanced-features"]').count()).toBe(0);
+
+    // Navigate through the Command Palette: the section containing the active page must stay expanded.
+    await page.keyboard.press("Control+k");
+    const search = page.getByRole("textbox", { name: "Search commands and pages" });
+    await search.waitFor({ state: "visible", timeout: 10000 });
+    await search.fill("Security");
+    await search.press("Enter");
+    await page.getByRole("heading", { name: "Security", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+    const activeAdvanced = page.locator('[data-nav-section="Advanced Features"]');
+    expect(await activeAdvanced.locator('[data-section-toggle="advanced-features"]').getAttribute("aria-expanded")).toBe("true");
+    expect(await activeAdvanced.locator('[data-nav-items="advanced-features"]').isVisible()).toBe(true);
+
+    await page.getByRole("button", { name: "Usage" }).click();
+    await page.waitForFunction(() => document.querySelector('[data-nav-section="Advanced Features"] [data-section-toggle="advanced-features"]')?.getAttribute("aria-expanded") === "false");
+    expect(await page.locator('[data-nav-section="Advanced Features"] [data-nav-items="advanced-features"]').count()).toBe(0);
+
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('[data-nav-section="Advanced Features"] [data-section-toggle="advanced-features"]')?.getAttribute("aria-expanded") === "false");
+    expect(await page.locator('[data-nav-section="Advanced Features"] [data-nav-items="advanced-features"]').count()).toBe(0);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Toggle mobile menu" }).click();
+    const mobileAdvancedToggle = page.locator('[data-nav-section="Advanced Features"] [data-section-toggle="advanced-features"]');
+    expect(await mobileAdvancedToggle.getAttribute("aria-expanded")).toBe("false");
+  }, 25000);
+
   it("searches implemented pages in the command palette and handles empty keyboard results", async () => {
     const { page, baseURL } = dashboard;
     await page.goto(`${baseURL}/`);

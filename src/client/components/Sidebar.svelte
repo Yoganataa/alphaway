@@ -18,6 +18,8 @@
 
   let currentHost = $state("Current host");
   let isMobileViewport = $state(false);
+  let collapsedSections = $state<Set<string>>(new Set());
+  const collapsedSectionsStorageKey = "alphaway-sidebar-collapsed-sections";
   let mobileCloseButton = $state<HTMLButtonElement | null>(null);
   const healthAvailable = $derived(health?.status === "ok");
   const localGateStatus = $derived(health?.identity?.gate?.status ?? "unknown");
@@ -26,6 +28,22 @@
 
   onMount(() => {
     currentHost = window.location.host;
+
+    try {
+      const raw = localStorage.getItem(collapsedSectionsStorageKey);
+      if (raw) {
+        const stored: unknown = JSON.parse(raw);
+        if (Array.isArray(stored)) {
+          const validIds = new Set(sections.map((section) => section.id));
+          collapsedSections = new Set(
+            stored.filter((id): id is string => typeof id === "string" && validIds.has(id))
+          );
+        }
+      }
+    } catch {
+      // Invalid or unavailable browser storage keeps every section expanded.
+      collapsedSections = new Set();
+    }
 
     const mobileQuery = window.matchMedia("(max-width: 767px)");
     const syncViewport = () => {
@@ -57,12 +75,14 @@
   }
 
   interface NavSection {
+    id: string;
     title: string;
     items: NavItem[];
   }
 
   const sections: NavSection[] = [
     {
+      id: "main",
       title: "Main",
       items: [
         { id: "endpoint", label: "Endpoint & Key", icon: "hub" },
@@ -73,6 +93,7 @@
       ],
     },
     {
+      id: "advanced-features",
       title: "Advanced Features",
       items: [
         { id: "security", label: "Security", icon: "shield", badge: "DLP" },
@@ -81,6 +102,7 @@
       ],
     },
     {
+      id: "system",
       title: "System",
       items: [
         { id: "proxy", label: "Proxy Pools", icon: "vpn_lock" },
@@ -91,6 +113,28 @@
       ],
     },
   ];
+
+  function toggleSection(sectionId: string) {
+    const next = new Set(collapsedSections);
+    if (next.has(sectionId)) next.delete(sectionId);
+    else next.add(sectionId);
+    collapsedSections = next;
+
+    try {
+      localStorage.setItem(collapsedSectionsStorageKey, JSON.stringify([...next]));
+    } catch {
+      // A storage-restricted browser still gets this session's collapsed state.
+    }
+  }
+
+  function sectionContainsActiveTab(section: NavSection) {
+    return section.items.some((item) =>
+      activeTab === item.id ||
+      (item.id === "endpoint" && activeTab === "overview") ||
+      (item.id === "profile" && activeTab === "settings") ||
+      (item.id === "proxy" && activeTab === "proxypools")
+    );
+  }
 
   function selectTab(id: string) {
     activeTab = id;
@@ -157,35 +201,52 @@
 
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
   <div class="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
-    {#each sections as section}
+    {#each sections as section (section.id)}
+      {@const sectionActive = sectionContainsActiveTab(section)}
+      {@const sectionOpen = sectionActive || !collapsedSections.has(section.id)}
       <div class="space-y-1" data-nav-section={section.title}>
-        <div class="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-subtle">
-          {section.title}
-        </div>
-        {#each section.items as item}
-          {@const isActive =
-            activeTab === item.id ||
-            (item.id === "endpoint" && activeTab === "overview") ||
-            (item.id === "profile" && activeTab === "settings") ||
-            (item.id === "proxy" && activeTab === "proxypools")}
-          <button
-            type="button"
-            onclick={() => selectTab(item.id)}
-            class="w-full flex items-center justify-between px-3 py-2 rounded-[10px] text-sm font-medium transition-all duration-150 cursor-pointer {isActive
-              ? 'bg-brand-500/10 text-brand-500 dark:text-brand-400 border border-brand-500/30 font-semibold shadow-xs'
-              : 'text-text-muted hover:text-text-main hover:bg-surface-2 border border-transparent'}"
-          >
-            <div class="flex items-center gap-2.5 min-w-0">
-              <span class="material-symbols-outlined text-[19px] shrink-0 {isActive ? 'text-brand-500 dark:text-brand-400' : 'text-text-muted'}">{item.icon}</span>
-              <span class="truncate">{item.label}</span>
-            </div>
-            {#if item.badge}
-              <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-surface border border-border-subtle {isActive ? 'text-brand-500 border-brand-500/30' : 'text-text-subtle'}">
-                {item.badge}
-              </span>
-            {/if}
-          </button>
-        {/each}
+        <button
+          type="button"
+          data-section-toggle={section.id}
+          aria-expanded={sectionOpen}
+          aria-controls={`nav-section-${section.id}-items`}
+          onclick={() => toggleSection(section.id)}
+          class="w-full flex items-center justify-between px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-subtle hover:text-text-muted transition-colors"
+        >
+          <span>{section.title}</span>
+          <span
+            aria-hidden="true"
+            class="material-symbols-outlined text-[14px] transition-transform duration-150 {sectionOpen ? '' : '-rotate-90'}"
+          >expand_more</span>
+        </button>
+        {#if sectionOpen}
+          <div id={`nav-section-${section.id}-items`} data-nav-items={section.id} class="space-y-1">
+            {#each section.items as item}
+              {@const isActive =
+                activeTab === item.id ||
+                (item.id === "endpoint" && activeTab === "overview") ||
+                (item.id === "profile" && activeTab === "settings") ||
+                (item.id === "proxy" && activeTab === "proxypools")}
+              <button
+                type="button"
+                onclick={() => selectTab(item.id)}
+                class="w-full flex items-center justify-between px-3 py-2 rounded-[10px] text-sm font-medium transition-all duration-150 cursor-pointer {isActive
+                  ? 'bg-brand-500/10 text-brand-500 dark:text-brand-400 border border-brand-500/30 font-semibold shadow-xs'
+                  : 'text-text-muted hover:text-text-main hover:bg-surface-2 border border-transparent'}"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="material-symbols-outlined text-[19px] shrink-0 {isActive ? 'text-brand-500 dark:text-brand-400' : 'text-text-muted'}">{item.icon}</span>
+                  <span class="truncate">{item.label}</span>
+                </div>
+                {#if item.badge}
+                  <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-surface border border-border-subtle {isActive ? 'text-brand-500 border-brand-500/30' : 'text-text-subtle'}">
+                    {item.badge}
+                  </span>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
     {/each}
   </div>
