@@ -67,7 +67,10 @@ describe("Endpoint clipboard feedback", () => {
 
     const baseUrlCopy = page.getByTestId("copy-base-url");
     await baseUrlCopy.click();
-    await baseUrlCopy.waitFor({ state: "visible" });
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="copy-base-url"]');
+      return button?.getAttribute("aria-busy") === "true" && (button as HTMLButtonElement).disabled;
+    }, { timeout: 5000 });
     expect(await baseUrlCopy.isDisabled()).toBe(true);
     expect(await baseUrlCopy.getAttribute("aria-busy")).toBe("true");
     expect(await page.getByText("OpenAI Base URL copied to clipboard", { exact: true }).count()).toBe(0);
