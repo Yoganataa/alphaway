@@ -134,7 +134,7 @@
         Secrets are shown only when created or rotated. Existing credentials cannot be retrieved.
       </p>
     </div>
-    <Button variant="primary" size="sm" onclick={() => { closeModal(); isCreateModalOpen = true; }}>
+    <Button id="api-key-create-trigger" variant="primary" size="sm" onclick={() => { closeModal(); isCreateModalOpen = true; }}>
       <span class="material-symbols-outlined text-[16px]">add</span>
       <span>Create Key</span>
     </Button>

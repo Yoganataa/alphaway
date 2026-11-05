@@ -27,6 +27,57 @@
     footer?: Snippet;
   } = $props();
 
+  let dialogElement: HTMLDivElement | null = null;
+  let lastFocusedElement: HTMLElement | null = null;
+
+  const focusableSelector = [
+    "a[href]:not([tabindex^='-'])",
+    "area[href]:not([tabindex^='-'])",
+    "input:not([type='hidden']):not([disabled]):not([tabindex^='-'])",
+    "select:not([disabled]):not([tabindex^='-'])",
+    "textarea:not([disabled]):not([tabindex^='-'])",
+    "button:not([disabled]):not([tabindex^='-'])",
+    "iframe:not([tabindex^='-'])",
+    "object:not([tabindex^='-'])",
+    "embed:not([tabindex^='-'])",
+    "[contenteditable='true']:not([tabindex^='-'])",
+    "[tabindex]:not([tabindex^='-'])",
+  ].join(", ");
+
+  function getFocusableElements(dialog: HTMLElement): HTMLElement[] {
+    return Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => {
+      if (element.matches(":disabled") || element.closest("[hidden], [inert], [aria-hidden='true']")) {
+        return false;
+      }
+      const style = window.getComputedStyle(element);
+      return style.display !== "none" && style.visibility !== "hidden" && element.getClientRects().length > 0;
+    });
+  }
+
+  function handleDialogKeydown(event: KeyboardEvent) {
+    if (event.key !== "Tab" || !dialogElement) return;
+
+    const dialog = dialogElement;
+    const focusableElements = getFocusableElements(dialog);
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      dialog.focus({ preventScroll: true });
+      return;
+    }
+
+    const first = focusableElements[0];
+    const last = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && (activeElement === dialog || activeElement === first)) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && (activeElement === dialog || activeElement === last)) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+    }
+  }
+
   const sizes = {
     sm: "max-w-sm",
     md: "max-w-md",
@@ -35,6 +86,26 @@
     full: "max-w-4xl",
   };
 
+  // Track the last meaningful focus target while this Modal consumer is mounted.
+  // Portaling the dialog can make document.activeElement unreliable during open.
+  $effect(() => {
+    if (typeof document === "undefined") return;
+
+    const recordFocus = (event: FocusEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target !== document.body &&
+        target !== document.documentElement
+      ) {
+        lastFocusedElement = target;
+      }
+    };
+
+    document.addEventListener("focusin", recordFocus, true);
+    return () => document.removeEventListener("focusin", recordFocus, true);
+  });
+
   // Lock background scroll while modal is open
   $effect(() => {
     if (!isOpen || typeof document === "undefined") return;
@@ -42,6 +113,36 @@
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
+    };
+  });
+
+  // Move focus into the dialog and restore it to the invoker when the dialog closes.
+  // A child component may schedule its own initial focus (for example, Command Palette search),
+  // so only focus the dialog container when focus has not already moved inside it.
+  $effect(() => {
+    if (!isOpen || typeof document === "undefined") return;
+
+    const activeElement = document.activeElement;
+    const previouslyFocused =
+      activeElement instanceof HTMLElement &&
+      activeElement !== document.body &&
+      activeElement !== document.documentElement
+        ? activeElement
+        : lastFocusedElement;
+    const focusFrame = requestAnimationFrame(() => {
+      const dialog = dialogElement;
+      const activeElement = document.activeElement;
+      if (dialog && (!activeElement || !dialog.contains(activeElement))) {
+        dialog.focus({ preventScroll: true });
+      }
+    });
+
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      if (!previouslyFocused?.isConnected) return;
+      requestAnimationFrame(() => {
+        if (previouslyFocused.isConnected) previouslyFocused.focus({ preventScroll: true });
+      });
     };
   });
 
@@ -64,10 +165,13 @@
 
     <!-- Modal Box -->
     <div
+      bind:this={dialogElement}
       class="relative w-full {sizes[size]} bg-surface border border-border rounded-[14px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] z-10 animate-in fade-in zoom-in-95 duration-150 {klass}"
       role="dialog"
       aria-modal="true"
+      aria-label={title || undefined}
       tabindex="-1"
+      onkeydown={handleDialogKeydown}
     >
       <!-- Modal Header -->
       <div class="px-5 py-4 border-b border-border-subtle flex items-center justify-between bg-surface-2/40">

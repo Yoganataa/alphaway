@@ -67,6 +67,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.keyboard.press("Control+k");
     const search = page.getByRole("textbox", { name: "Search commands and pages" });
     await search.waitFor({ state: "visible", timeout: 10000 });
+    expect(await search.evaluate((element) => element === document.activeElement)).toBe(true);
 
     // Query changes reset the selected row; Enter opens the single matching page.
     await search.press("ArrowDown");
@@ -590,12 +591,25 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const { page, baseURL } = dashboard;
     await page.goto(`${baseURL}/`);
 
-    await page.getByRole("button", { name: /Create Key/ }).click();
+    const trigger = page.locator("#api-key-create-trigger");
+    await trigger.click();
     const dialog = page.locator('[role="dialog"]').filter({ hasText: "Create New API Key" });
     await dialog.waitFor({ state: "visible", timeout: 10000 });
+    await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "dialog");
     expect(await dialog.locator("#new-key-name").isVisible()).toBe(true);
+
+    // Shift+Tab from the dialog container wraps to the last control; Tab wraps to the first.
+    await page.keyboard.press("Shift+Tab");
+    await page.waitForFunction(() => document.activeElement?.textContent?.includes("Cancel"));
+    await page.keyboard.press("Tab");
+    await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Close dialog");
+    await page.keyboard.press("Shift+Tab");
+    await page.waitForFunction(() => document.activeElement?.textContent?.includes("Cancel"));
+
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await dialog.waitFor({ state: "detached", timeout: 5000 });
+    await page.waitForFunction(() => document.activeElement?.id === "api-key-create-trigger");
+    expect(await trigger.evaluate((element) => element === document.activeElement)).toBe(true);
   }, 15000);
 
   it("opens and cancels Profile Settings destructive confirmations", async () => {
@@ -603,19 +617,26 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.goto(`${baseURL}/`);
     await page.getByRole("button", { name: "Profile & Settings" }).click();
 
-    await page.getByRole("button", { name: "Clear Logs", exact: true }).click();
+    const clearTrigger = page.locator("#clear-logs-trigger");
+    await clearTrigger.click();
     const clearDialog = page.locator('[role="dialog"]').filter({ hasText: "Clear Request Audit Logs?" });
     await clearDialog.waitFor({ state: "visible", timeout: 10000 });
+    await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "dialog");
     expect(await clearDialog.getByText(/delete all stored request audit logs/).isVisible()).toBe(true);
     await clearDialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await clearDialog.waitFor({ state: "detached", timeout: 5000 });
+    await page.waitForFunction(() => document.activeElement?.id === "clear-logs-trigger");
+    expect(await clearTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
 
-    await page.getByRole("button", { name: "Reset Usage", exact: true }).click();
+    const resetTrigger = page.locator("#reset-usage-trigger");
+    await resetTrigger.click();
     const resetDialog = page.locator('[role="dialog"]').filter({ hasText: "Reset All Usage Metrics?" });
     await resetDialog.waitFor({ state: "visible", timeout: 10000 });
     expect(await resetDialog.getByRole("button", { name: "Reset Everything", exact: true }).isVisible()).toBe(true);
     await resetDialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await resetDialog.waitFor({ state: "detached", timeout: 5000 });
+    await page.waitForFunction(() => document.activeElement?.id === "reset-usage-trigger");
+    expect(await resetTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
   }, 20000);
 
   it("labels the dashboard API key as browser-scoped and reports database journal state", async () => {
