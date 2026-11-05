@@ -491,7 +491,7 @@
   </Card>
 </div>
 
-<Modal open={isAddModalOpen} title="Add Proxy Egress Node" onclose={() => (isAddModalOpen = false)}>
+<Modal isOpen={isAddModalOpen} title="Add Proxy Egress Node" onClose={() => (isAddModalOpen = false)}>
   <form
     class="space-y-4"
     onsubmit={(event) => {
@@ -519,7 +519,7 @@
   </form>
 </Modal>
 
-<Modal open={isBulkModalOpen} title="Bulk Import Proxies" onclose={() => (isBulkModalOpen = false)}>
+<Modal isOpen={isBulkModalOpen} title="Bulk Import Proxies" onClose={() => (isBulkModalOpen = false)}>
   <form
     class="space-y-4"
     onsubmit={(event) => {

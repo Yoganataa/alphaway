@@ -490,7 +490,23 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     const saveBtn = page.locator("#proxy-save-btn");
     expect(await saveBtn.isVisible()).toBe(true);
-  }, 15000);
+
+    // Add Node and Bulk Import must use the shared Modal's isOpen/onClose contract.
+    await page.locator("#proxy-add-node").click();
+    const addDialog = page.locator('[role="dialog"]').filter({ hasText: "Add Proxy Egress Node" });
+    await addDialog.waitFor({ state: "visible", timeout: 5000 });
+    expect(await addDialog.locator("#node-url").isVisible()).toBe(true);
+    expect(await addDialog.locator("#node-token").isVisible()).toBe(true);
+    await addDialog.getByRole("button", { name: "Cancel" }).click();
+    await addDialog.waitFor({ state: "detached", timeout: 5000 });
+
+    await page.locator("#proxy-bulk-import").click();
+    const bulkDialog = page.locator('[role="dialog"]').filter({ hasText: "Bulk Import Proxies" });
+    await bulkDialog.waitFor({ state: "visible", timeout: 5000 });
+    expect(await bulkDialog.locator("#bulk-text").isVisible()).toBe(true);
+    await bulkDialog.getByRole("button", { name: "Cancel" }).click();
+    await bulkDialog.waitFor({ state: "detached", timeout: 5000 });
+  }, 20000);
 
   it("navigates to Usage and keeps chart-window scope distinct from lifetime summaries", async () => {
     const { page } = dashboard;
