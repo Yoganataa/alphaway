@@ -13,6 +13,9 @@
   let stats = $state<UsageStats | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let lastLoadedAt = $state<number | null>(null);
+  let mutating = $state(false);
+  let loadInFlight = false;
 
   // Tab & Period state
   let activeTab = $state<"overview" | "details">("overview");
@@ -29,21 +32,38 @@
   let autoRefresh = $state(true);
   let refreshTimer: any = null;
 
-  async function loadData() {
+  const writesBlocked = () => !stats || loading || error !== null || mutating;
+
+  function getErrorMessage(reason: unknown, fallback: string): string {
+    return reason instanceof Error && reason.message ? reason.message : fallback;
+  }
+
+  function formatLoadedTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
+  async function loadData(): Promise<boolean> {
+    if (loadInFlight) return false;
+    loadInFlight = true;
+    loading = true;
     try {
       stats = await fetchUsageStats();
       error = null;
-    } catch (err: any) {
-      error = err.message || "Failed to load usage data";
+      lastLoadedAt = Date.now();
+      return true;
+    } catch (reason) {
+      error = getErrorMessage(reason, "Failed to load usage data");
+      return false;
     } finally {
       loading = false;
+      loadInFlight = false;
     }
   }
 
   onMount(() => {
-    loadData();
+    void loadData();
     refreshTimer = setInterval(() => {
-      if (autoRefresh) loadData();
+      if (autoRefresh && !mutating) void loadData();
     }, 4000);
 
     return () => {
@@ -52,22 +72,36 @@
   });
 
   async function handleResetStats() {
+    if (writesBlocked()) return;
     if (!confirm("Are you sure you want to reset all usage statistics? This will clear historical counters.")) return;
+
+    mutating = true;
     try {
       await resetUsageStats();
-      await loadData();
-    } catch (err: any) {
-      alert(`Reset failed: ${err.message}`);
+      if (!await loadData()) {
+        alert("Usage statistics were reset, but the refreshed view could not be loaded. Retry the Usage refresh.");
+      }
+    } catch (reason) {
+      alert(`Reset failed: ${getErrorMessage(reason, "Unknown error")}`);
+    } finally {
+      mutating = false;
     }
   }
 
   async function handleClearLogs() {
+    if (writesBlocked() || !stats?.recentLogs?.length) return;
     if (!confirm("Clear all recent request audit logs?")) return;
+
+    mutating = true;
     try {
       await clearRecentLogs();
-      await loadData();
-    } catch (err: any) {
-      alert(`Clear logs failed: ${err.message}`);
+      if (!await loadData()) {
+        alert("Recent logs were cleared, but the refreshed view could not be loaded. Retry the Usage refresh.");
+      }
+    } catch (reason) {
+      alert(`Clear logs failed: ${getErrorMessage(reason, "Unknown error")}`);
+    } finally {
+      mutating = false;
     }
   }
 
@@ -105,7 +139,7 @@
       l.stream ? "true" : "false",
     ]);
 
-    const csvContent = [headers.join(","), ...rows.map((r) => r.map((c) => `"${c}"`).join(","))].join("\n");
+    const csvContent = [headers.join(","), ...rows.map((r) => r.map((value) => `"${value}"`).join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -124,7 +158,7 @@
       return iso;
     }
   }
-</script>
+</script>>
 
 <div class="space-y-6">
   <!-- Top Navigation & Global Controls -->
@@ -161,22 +195,22 @@
         <span class="font-mono text-[11px]">Live Poll</span>
       </label>
 
-      <Button variant="outline" size="sm" onclick={loadData}>
+      <Button id="usage-refresh" variant="outline" size="sm" onclick={loadData} disabled={loading || mutating}>
         <span class="material-symbols-outlined text-[15px]">refresh</span>
-        <span>Refresh</span>
+        <span>{loading ? "Refreshing…" : "Refresh"}</span>
       </Button>
 
-      <Button variant="outline" size="sm" onclick={exportCsv} disabled={!stats?.recentLogs?.length}>
+      <Button variant="outline" size="sm" onclick={exportCsv} disabled={!stats?.recentLogs?.length || loading || mutating}>
         <span class="material-symbols-outlined text-[15px]">download</span>
         <span>Export CSV</span>
       </Button>
 
-      <Button variant="ghost" size="sm" onclick={handleClearLogs} disabled={!stats?.recentLogs?.length}>
+      <Button variant="ghost" size="sm" onclick={handleClearLogs} disabled={!stats?.recentLogs?.length || writesBlocked()}>
         <span class="material-symbols-outlined text-[15px]">cleaning_services</span>
         <span>Clear Logs</span>
       </Button>
 
-      <Button variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={handleResetStats}>
+      <Button id="usage-reset-stats" variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={handleResetStats} disabled={writesBlocked()}>
         <span class="material-symbols-outlined text-[15px]">restart_alt</span>
         <span>Reset Stats</span>
       </Button>
@@ -184,12 +218,39 @@
   </div>
 
   {#if error}
-    <div class="p-4 rounded-[12px] bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
-      <span class="material-symbols-outlined text-[18px]">error</span>
-      <span>{error}</span>
+    <div id="usage-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[12px] border border-amber-500/30 bg-amber-500/5 p-4">
+      <div class="min-w-0">
+        <p class="text-xs font-semibold text-amber-400">
+          {stats
+            ? "Usage refresh failed. The last successful snapshot remains visible; reset and clear actions are blocked until refresh succeeds."
+            : "Usage data is unavailable. Metrics are hidden until a valid response is loaded."}
+        </p>
+        <p class="mt-1 break-words text-xs text-text-muted">{error}</p>
+        {#if lastLoadedAt !== null}
+          <p class="mt-1 text-[11px] text-text-muted">Last successful load: {formatLoadedTime(lastLoadedAt)}</p>
+        {/if}
+      </div>
+      <Button id="usage-load-retry" variant="secondary" size="sm" onclick={loadData} disabled={loading || mutating}>
+        {loading ? "Retrying…" : "Retry Load"}
+      </Button>
     </div>
   {/if}
 
+  {#if loading && !stats}
+    <p id="usage-loading" role="status" class="rounded-lg border border-border-subtle bg-surface p-4 text-xs text-text-muted">
+      Loading recorded usage…
+    </p>
+  {:else if loading && stats}
+    <p id="usage-refreshing" role="status" class="text-xs text-text-muted">Refreshing recorded usage…</p>
+  {/if}
+
+  {#if !stats && !loading && error}
+    <p id="usage-unavailable" class="rounded-lg border border-border-subtle bg-surface p-4 text-xs text-text-muted">
+      The aggregate usage summary is unavailable. Retry the load before using dashboard metrics or destructive actions.
+    </p>
+  {/if}
+
+  {#if stats}
   <!-- TAB 1: OVERVIEW -->
   {#if activeTab === "overview"}
     <!-- The API exposes a period-filtered chart, while KPI and breakdown totals
@@ -457,5 +518,6 @@
   <!-- TAB 2: REQUEST DETAILS & AUDIT DRAWER -->
   {#if activeTab === "details"}
     <RequestDetailsTab {stats} onRefresh={loadData} />
+  {/if}
   {/if}
 </div>
