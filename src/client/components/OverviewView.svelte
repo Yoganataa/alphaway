@@ -3,6 +3,7 @@
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
   import { getActiveApiKey } from "../lib/api";
+  import { notifications } from "../lib/notifications";
   import type { HealthResponse } from "../lib/types";
 
   let { health = null }: { health?: HealthResponse | null } = $props();
@@ -12,25 +13,56 @@
   let copiedModel = $state<string | null>(null);
   let showKey = $state(false);
   let copiedKey = $state(false);
+  let clipboardPending = $state<string | null>(null);
 
   function maskKey(key: string): string {
     if (!key || key.length <= 10) return "sk-••••••••••••";
     return `${key.slice(0, 7)}••••••••${key.slice(-4)}`;
   }
 
-  function copyKey() {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(apiKey);
+  async function copyKey() {
+    if (clipboardPending) return;
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      notifications.error("Clipboard access is unavailable in this browser context");
+      return;
+    }
+
+    clipboardPending = "key";
+    copiedKey = false;
+    try {
+      await navigator.clipboard.writeText(apiKey);
       copiedKey = true;
+      notifications.success("OpenAI Standard API Key copied to clipboard");
       setTimeout(() => (copiedKey = false), 2000);
+    } catch (error) {
+      notifications.error(
+        `Could not copy OpenAI Standard API Key: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      clipboardPending = null;
     }
   }
 
-  function copyModel(name: string) {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(name);
+  async function copyModel(name: string) {
+    if (clipboardPending) return;
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      notifications.error("Clipboard access is unavailable in this browser context");
+      return;
+    }
+
+    clipboardPending = `model:${name}`;
+    copiedModel = null;
+    try {
+      await navigator.clipboard.writeText(name);
       copiedModel = name;
+      notifications.success(`Model ID ${name} copied to clipboard`);
       setTimeout(() => (copiedModel = null), 2000);
+    } catch (error) {
+      notifications.error(
+        `Could not copy model ID: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      clipboardPending = null;
     }
   }
 
@@ -104,11 +136,26 @@ const completion = await openai.chat.completions.create({
 console.log(completion.choices[0].message.content);`,
   });
 
-  function copyCurrentSnippet() {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(snippets[activeCodeTab]);
+  async function copyCurrentSnippet() {
+    if (clipboardPending) return;
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      notifications.error("Clipboard access is unavailable in this browser context");
+      return;
+    }
+
+    clipboardPending = "snippet";
+    copiedSnippet = false;
+    try {
+      await navigator.clipboard.writeText(snippets[activeCodeTab]);
       copiedSnippet = true;
+      notifications.success("Integration snippet copied to clipboard");
       setTimeout(() => (copiedSnippet = false), 2000);
+    } catch (error) {
+      notifications.error(
+        `Could not copy integration snippet: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      clipboardPending = null;
     }
   }
 
@@ -224,7 +271,9 @@ console.log(completion.choices[0].message.content);`,
             <button
               type="button"
               onclick={copyKey}
-              class="text-text-muted hover:text-text-main transition-colors cursor-pointer"
+              disabled={clipboardPending !== null}
+              aria-busy={clipboardPending === "key"}
+              class="text-text-muted hover:text-text-main transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
               title="Copy OpenAI Standard API Key"
             >
               {#if copiedKey}
@@ -309,7 +358,7 @@ console.log(completion.choices[0].message.content);`,
         </div>
 
         <!-- Copy Snippet Button -->
-        <Button variant="outline" size="sm" onclick={copyCurrentSnippet}>
+        <Button variant="outline" size="sm" onclick={copyCurrentSnippet} disabled={clipboardPending !== null}>
           {#if copiedSnippet}
             <span class="material-symbols-outlined text-[16px] text-emerald-400">check</span>
             <span class="text-emerald-400">Copied to Clipboard!</span>
@@ -336,7 +385,9 @@ console.log(completion.choices[0].message.content);`,
             <button
               type="button"
               onclick={() => copyModel(m)}
-              class="px-2 py-1 rounded-[6px] font-mono text-[11px] bg-surface-2 border border-border-subtle hover:border-brand-500/50 hover:text-brand-400 transition-colors cursor-pointer flex items-center gap-1"
+              disabled={clipboardPending !== null}
+              aria-busy={clipboardPending === `model:${m}`}
+              class="px-2 py-1 rounded-[6px] font-mono text-[11px] bg-surface-2 border border-border-subtle hover:border-brand-500/50 hover:text-brand-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait flex items-center gap-1"
               title="Click to copy model ID to clipboard"
             >
               <span>{m}</span>
