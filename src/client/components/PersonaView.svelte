@@ -3,6 +3,7 @@
   import SoulStudioView from "./SoulStudioView.svelte";
   import {
     fetchPersonaState,
+    PersonaApiError,
     savePersonaPreset,
     deletePersonaPreset,
     setPersonaModelBinding,
@@ -21,7 +22,12 @@
 
   let section = $state<"presets" | "soul">("presets");
   let loading = $state(true);
+  let loaded = $state(false);
+  let loadError = $state<string | null>(null);
+  let lastLoadedAt = $state<number | null>(null);
+  let loadInFlight = false;
   let saving = $state(false);
+  let mutating = $state(false);
   let presets = $state<PersonaPreset[]>([]);
   let bindings = $state<PersonaModelBinding[]>([]);
   let globalExcludes = $state<PersonaKeyword[]>([]);
@@ -44,22 +50,51 @@
   let previewResult = $state<{ resolution: PersonaResolution; messages: any[] } | null>(null);
   let statusError = $state("");
 
+  const writesBlocked = () =>
+    !loaded || loading || loadError !== null || saving || mutating;
+
+  function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  function formatLoadedTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
+  }
+
   onMount(() => { void load(); });
 
-  async function load() {
+  async function load(): Promise<boolean> {
+    if (loadInFlight) return false;
+    loadInFlight = true;
     loading = true;
+    loadError = null;
     statusError = "";
     try {
       const state = await fetchPersonaState();
       presets = state.presets;
       bindings = state.bindings;
       globalExcludes = state.excludes;
-      excludeDraft = globalExcludes.map((rule) => rule.mode === "partial" ? `partial:${rule.text}` : rule.text).join(String.fromCharCode(10));
-      if (!selectedId && presets.length > 0) selectPreset(presets[0].id);
+      excludeDraft = globalExcludes
+        .map((rule) => rule.mode === "partial" ? `partial:${rule.text}` : rule.text)
+        .join(String.fromCharCode(10));
+      loaded = true;
+      lastLoadedAt = Date.now();
+      if (selectedId) {
+        if (presets.some((preset) => preset.id === selectedId)) {
+          selectPreset(selectedId);
+        } else {
+          startNewPreset();
+        }
+      } else if (presets.length > 0) {
+        selectPreset(presets[0].id);
+      }
+      return true;
     } catch (error) {
-      statusError = error instanceof Error ? error.message : "Failed to load Persona";
+      loadError = getErrorMessage(error, "Failed to load Persona");
+      return false;
     } finally {
       loading = false;
+      loadInFlight = false;
     }
   }
 
@@ -95,6 +130,7 @@
   }
 
   async function savePreset() {
+    if (writesBlocked()) return;
     saving = true;
     statusError = "";
     try {
@@ -108,29 +144,44 @@
         excludes: parseKeywords(draftExcludes),
         order: presets.find((item) => item.id === draftId)?.order || 0,
       });
-      await load();
-      selectPreset(saved.id);
-      notifications.success("Persona preset saved");
+      if (await load()) {
+        selectPreset(saved.id);
+        notifications.success("Persona preset saved");
+      } else {
+        notifications.warning("Persona preset was saved, but the library could not be refreshed. Retry before making further changes.");
+      }
     } catch (error) {
-      statusError = error instanceof Error ? error.message : "Failed to save Persona preset";
+      const message = getErrorMessage(error, "Failed to save Persona preset");
+      await load();
+      statusError = message;
     } finally {
       saving = false;
     }
   }
 
   async function removePreset(id: string) {
+    if (writesBlocked()) return;
     if (!confirm(`Delete Persona preset "${id}"? Model bindings to this preset will be removed.`)) return;
+    mutating = true;
+    statusError = "";
     try {
       await deletePersonaPreset(id);
       if (selectedId === id) startNewPreset();
-      await load();
-      notifications.info("Persona preset removed");
+      if (await load()) notifications.info("Persona preset removed");
+      else notifications.warning("Persona preset was deleted, but the library could not be refreshed. Retry before making further changes.");
     } catch (error) {
-      statusError = error instanceof Error ? error.message : "Failed to delete preset";
+      const message = getErrorMessage(error, "Failed to delete preset");
+      await load();
+      statusError = message;
+    } finally {
+      mutating = false;
     }
   }
 
   async function saveBinding() {
+    if (writesBlocked()) return;
+    mutating = true;
+    statusError = "";
     try {
       await setPersonaModelBinding({
         modelId: modelId.trim(),
@@ -138,38 +189,65 @@
         presetId: bindingEnabled ? selectedPresetId : null,
       });
       modelId = "";
-      await load();
-      notifications.success("Model Persona binding saved");
+      if (await load()) notifications.success("Model Persona binding saved");
+      else notifications.warning("Model binding was saved, but the library could not be refreshed. Retry before making further changes.");
     } catch (error) {
-      statusError = error instanceof Error ? error.message : "Failed to save model binding";
+      const message = getErrorMessage(error, "Failed to save model binding");
+      await load();
+      statusError = message;
+    } finally {
+      mutating = false;
     }
   }
 
   async function removeBinding(id: string) {
+    if (writesBlocked()) return;
+    mutating = true;
+    statusError = "";
     try {
       await deletePersonaModelBinding(id);
-      await load();
+      if (await load()) notifications.info("Model Persona binding removed");
+      else notifications.warning("Model binding was removed, but the library could not be refreshed. Retry before making further changes.");
     } catch (error) {
-      statusError = error instanceof Error ? error.message : "Failed to remove model binding";
+      const message = getErrorMessage(error, "Failed to remove model binding");
+      await load();
+      statusError = message;
+    } finally {
+      mutating = false;
     }
   }
 
   async function saveGlobalExcludes() {
+    if (writesBlocked()) return;
+    mutating = true;
+    statusError = "";
     try {
       globalExcludes = await savePersonaGlobalExcludes(parseKeywords(excludeDraft));
-      excludeDraft = globalExcludes.map((rule) => rule.mode === "partial" ? `partial:${rule.text}` : rule.text).join("\n");
+      excludeDraft = globalExcludes
+        .map((rule) => rule.mode === "partial" ? `partial:${rule.text}` : rule.text)
+        .join("\n");
       notifications.success("Global Persona exclusions saved");
     } catch (error) {
-      statusError = error instanceof Error ? error.message : "Failed to save global exclusions";
+      const message = getErrorMessage(error, "Failed to save global exclusions");
+      // Definitive 4xx responses reject the list without committing it; keep the
+      // user's draft so they can correct it. Network/5xx/invalid-success outcomes
+      // are uncertain for a full-replacement PUT, so reload canonical state.
+      if (!(error instanceof PersonaApiError && error.status >= 400 && error.status < 500)) {
+        await load();
+      }
+      statusError = message;
+    } finally {
+      mutating = false;
     }
   }
 
   async function runPreview() {
+    if (!loaded || loading || loadError !== null) return;
     try {
       const result = await previewPersona([previewModelId.trim()], [{ role: "user", content: previewPrompt }]);
       previewResult = result;
     } catch (error) {
-      statusError = error instanceof Error ? error.message : "Persona preview failed";
+      statusError = getErrorMessage(error, "Persona preview failed");
     }
   }
 </script>
@@ -190,12 +268,38 @@
     <SoulStudioView />
   {:else}
     {#if statusError}
-      <div class="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{statusError}</div>
+      <div id="persona-action-error" role="alert" class="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{statusError}</div>
     {/if}
 
-    {#if loading}
-      <p class="text-sm text-text-muted">Loading Persona library…</p>
-    {:else}
+    {#if loadError}
+      <div id="persona-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+        <div class="min-w-0">
+          <p class="text-xs font-semibold text-amber-400">
+            {loaded
+              ? "Persona refresh failed. The last successful snapshot is shown; all changes are blocked until the library is refreshed."
+              : "Saved Persona configuration could not be loaded. Changes are blocked until the complete state is available."}
+          </p>
+          <p class="mt-1 break-words text-xs text-text-muted">{loadError}</p>
+          {#if lastLoadedAt !== null}
+            <p class="mt-1 text-[11px] text-text-muted">Last successful load: {formatLoadedTime(lastLoadedAt)}</p>
+          {/if}
+        </div>
+        <Button id="persona-load-retry" variant="secondary" size="sm" onclick={load} disabled={loading || saving || mutating}>
+          {loading ? "Retrying…" : "Retry Load"}
+        </Button>
+      </div>
+    {:else if loading && loaded}
+      <p id="persona-refreshing" role="status" class="text-xs text-text-muted">Refreshing saved Persona configuration…</p>
+    {/if}
+
+    {#if loading && !loaded}
+      <p id="persona-loading" role="status" class="text-sm text-text-muted">Loading Persona library…</p>
+    {:else if !loaded && loadError}
+      <p id="persona-unavailable" class="text-sm text-text-muted">The saved Persona library is unavailable. Presets, bindings, and exclusions cannot be changed until retry succeeds.</p>
+    {:else if loaded}
+      <div class="mb-3 flex justify-end">
+        <Button id="persona-refresh" variant="secondary" size="sm" onclick={load} disabled={loading || saving || mutating}>Refresh</Button>
+      </div>
       <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] gap-5">
         <div class="space-y-5">
           <Card padding="md" elev class="space-y-4">
@@ -204,7 +308,7 @@
                 <h3 class="font-semibold text-text-main">Preset Library</h3>
                 <p class="text-xs text-text-muted">Prompts are inert until an exact model binding or keyword matches.</p>
               </div>
-              <Button size="sm" variant="primary" onclick={startNewPreset}>New preset</Button>
+              <Button id="persona-new-preset" size="sm" variant="primary" onclick={startNewPreset} disabled={writesBlocked()}>New preset</Button>
             </div>
             {#if presets.length > 0}
               <div class="flex flex-wrap gap-2">
@@ -252,8 +356,8 @@
             </div>
             <p class="text-[11px] text-text-muted">One literal keyword per line. Prefix with <code>partial:</code> for substring matching. Default word matching requires a model-ID boundary. Regex is intentionally unsupported.</p>
             <div class="flex justify-end gap-2">
-              {#if selectedId}<Button size="sm" color="danger" variant="ghost" onclick={() => removePreset(selectedId)}>Delete</Button>{/if}
-              <Button size="sm" variant="primary" loading={saving} onclick={savePreset} disabled={!draftId.trim() || !draftName.trim()}>Save preset</Button>
+              {#if selectedId}<Button id="persona-delete-preset" size="sm" color="danger" variant="ghost" onclick={() => removePreset(selectedId)} disabled={writesBlocked()}>Delete</Button>{/if}
+              <Button id="persona-save-preset" size="sm" variant="primary" loading={saving} onclick={savePreset} disabled={!draftId.trim() || !draftName.trim() || writesBlocked()}>Save preset</Button>
             </div>
           </Card>
 
@@ -262,8 +366,8 @@
               <h3 class="font-semibold text-text-main">Global exclusions</h3>
               <p class="text-xs text-text-muted mt-1">A match here always prevents Persona injection, including exact bindings.</p>
             </div>
-            <textarea bind:value={excludeDraft} rows="3" placeholder="model-family-to-never-inject" class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-sm text-text-main font-mono"></textarea>
-            <div class="flex justify-end"><Button size="sm" variant="secondary" onclick={saveGlobalExcludes}>Save global exclusions</Button></div>
+            <textarea id="persona-global-excludes" bind:value={excludeDraft} rows="3" placeholder="model-family-to-never-inject" disabled={writesBlocked()} class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-sm text-text-main font-mono disabled:opacity-60"></textarea>
+            <div class="flex justify-end"><Button id="persona-save-global-excludes" size="sm" variant="secondary" onclick={saveGlobalExcludes} disabled={writesBlocked()}>Save global exclusions</Button></div>
           </Card>
         </div>
 
@@ -286,7 +390,7 @@
               <input type="checkbox" bind:checked={bindingEnabled} />
               Enable this binding
             </label>
-            <div class="flex justify-end"><Button size="sm" variant="primary" onclick={saveBinding} disabled={!modelId.trim() || (bindingEnabled && !selectedPresetId)}>Save binding</Button></div>
+            <div class="flex justify-end"><Button id="persona-save-binding" size="sm" variant="primary" onclick={saveBinding} disabled={!modelId.trim() || (bindingEnabled && !selectedPresetId) || writesBlocked()}>Save binding</Button></div>
             <div class="space-y-2">
               {#each bindings as binding (binding.modelId)}
                 <div class="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-2 px-3 py-2">
@@ -294,7 +398,7 @@
                     <p class="text-xs font-mono text-text-main break-all">{binding.modelId}</p>
                     <p class="text-[11px] text-text-muted">{binding.enabled ? binding.presetId : 'Disabled'} · exact match</p>
                   </div>
-                  <Button size="xs" variant="ghost" color="danger" onclick={() => removeBinding(binding.modelId)}>Remove</Button>
+                  <Button id={`persona-remove-binding-${binding.modelId}`} size="xs" variant="ghost" color="danger" onclick={() => removeBinding(binding.modelId)} disabled={writesBlocked()}>Remove</Button>
                 </div>
               {/each}
               {#if bindings.length === 0}<p class="text-xs text-text-muted">No exact bindings configured.</p>{/if}
@@ -312,7 +416,7 @@
             <label class="space-y-1 text-xs text-text-muted block">Sample prompt
               <textarea bind:value={previewPrompt} rows="3" class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-sm text-text-main"></textarea>
             </label>
-            <div class="flex justify-end"><Button size="sm" variant="secondary" onclick={runPreview} disabled={!previewModelId.trim()}>Resolve and preview</Button></div>
+            <div class="flex justify-end"><Button size="sm" variant="secondary" onclick={runPreview} disabled={!previewModelId.trim() || !loaded || loading || loadError !== null}>Resolve and preview</Button></div>
             {#if previewResult}
               <div class="rounded-lg border border-border bg-surface-2 p-3 space-y-2">
                 <Badge tone={previewResult.resolution.injected ? "success" : "neutral"}>{previewResult.resolution.reason}</Badge>
