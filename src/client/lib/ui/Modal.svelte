@@ -28,6 +28,7 @@
   } = $props();
 
   let dialogElement: HTMLDivElement | null = null;
+  let lastFocusedElement: HTMLElement | null = null;
 
   const focusableSelector = [
     "a[href]:not([tabindex^='-'])",
@@ -85,6 +86,26 @@
     full: "max-w-4xl",
   };
 
+  // Track the last meaningful focus target while this Modal consumer is mounted.
+  // Portaling the dialog can make document.activeElement unreliable during open.
+  $effect(() => {
+    if (typeof document === "undefined") return;
+
+    const recordFocus = (event: FocusEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target !== document.body &&
+        target !== document.documentElement
+      ) {
+        lastFocusedElement = target;
+      }
+    };
+
+    document.addEventListener("focusin", recordFocus, true);
+    return () => document.removeEventListener("focusin", recordFocus, true);
+  });
+
   // Lock background scroll while modal is open
   $effect(() => {
     if (!isOpen || typeof document === "undefined") return;
@@ -101,7 +122,13 @@
   $effect(() => {
     if (!isOpen || typeof document === "undefined") return;
 
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const activeElement = document.activeElement;
+    const previouslyFocused =
+      activeElement instanceof HTMLElement &&
+      activeElement !== document.body &&
+      activeElement !== document.documentElement
+        ? activeElement
+        : lastFocusedElement;
     const focusFrame = requestAnimationFrame(() => {
       const dialog = dialogElement;
       const activeElement = document.activeElement;
