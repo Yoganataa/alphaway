@@ -217,7 +217,7 @@ describe("Usage aggregate load recovery", () => {
       await loadError.waitFor({ state: "visible", timeout: 10000 });
       expect(await loadError.textContent()).toContain("last successful snapshot");
       expect(await loadError.textContent()).toContain("Temporary aggregate Usage refresh failure");
-      expect(await page.getByRole("cell", { name: "existing-usage-model", exact: true }).isVisible()).toBe(true);
+      expect(await auditTable.getByRole("cell", { name: "existing-usage-model" }).isVisible()).toBe(true);
       expect(await reset.isDisabled()).toBe(true);
       expect(await clearLogs.isDisabled()).toBe(true);
       expect(await loadError.textContent()).toContain("Last successful load:");
