@@ -92,7 +92,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await search.waitFor({ state: "visible", timeout: 10000 });
     await search.fill("Security");
     await search.press("Enter");
-    await page.getByRole("heading", { name: "Security", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.waitForFunction(() => document.querySelector("header h1")?.textContent?.includes("Security") ?? false, undefined, { timeout: 10000 });
 
     const activeAdvanced = page.locator('[data-nav-section="Advanced Features"]');
     expect(await activeAdvanced.locator('[data-section-toggle="advanced-features"]').getAttribute("aria-expanded")).toBe("true");

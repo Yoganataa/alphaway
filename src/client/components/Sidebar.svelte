@@ -114,6 +114,21 @@
     },
   ];
 
+  const renderedSections = $derived.by(() =>
+    sections.map((section) => {
+      const containsActiveTab = section.items.some((item) =>
+        activeTab === item.id ||
+        (item.id === "endpoint" && activeTab === "overview") ||
+        (item.id === "profile" && activeTab === "settings") ||
+        (item.id === "proxy" && activeTab === "proxypools")
+      );
+      return {
+        ...section,
+        isOpen: containsActiveTab || !collapsedSections.has(section.id),
+      };
+    })
+  );
+
   function toggleSection(sectionId: string) {
     const next = new Set(collapsedSections);
     if (next.has(sectionId)) next.delete(sectionId);
@@ -192,19 +207,12 @@
 
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
   <div class="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
-    {#each sections as section (section.id)}
-      {@const sectionActive = section.items.some((item) =>
-        activeTab === item.id ||
-        (item.id === "endpoint" && activeTab === "overview") ||
-        (item.id === "profile" && activeTab === "settings") ||
-        (item.id === "proxy" && activeTab === "proxypools")
-      )}
-      {@const sectionOpen = sectionActive || !collapsedSections.has(section.id)}
+    {#each renderedSections as section (section.id)}
       <div class="space-y-1" data-nav-section={section.title}>
         <button
           type="button"
           data-section-toggle={section.id}
-          aria-expanded={sectionOpen}
+          aria-expanded={section.isOpen}
           aria-controls={`nav-section-${section.id}-items`}
           onclick={() => toggleSection(section.id)}
           class="w-full flex items-center justify-between px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-subtle hover:text-text-muted transition-colors"
@@ -212,10 +220,10 @@
           <span>{section.title}</span>
           <span
             aria-hidden="true"
-            class="material-symbols-outlined text-[14px] transition-transform duration-150 {sectionOpen ? '' : '-rotate-90'}"
+            class="material-symbols-outlined text-[14px] transition-transform duration-150 {section.isOpen ? '' : '-rotate-90'}"
           >expand_more</span>
         </button>
-        {#if sectionOpen}
+        {#if section.isOpen}
           <div id={`nav-section-${section.id}-items`} data-nav-items={section.id} class="space-y-1">
             {#each section.items as item}
               {@const isActive =
