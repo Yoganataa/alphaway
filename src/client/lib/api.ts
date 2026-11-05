@@ -692,10 +692,104 @@ export async function testCustomProvider(
   return { ...data, requestStatus: res.status };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isUsageNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isUsageBreakdown(value: unknown): boolean {
+  if (!isRecord(value) || !isUsageNumber(value.requests) || !isUsageNumber(value.tokens)) return false;
+  return (
+    (value.promptTokens === undefined || isUsageNumber(value.promptTokens)) &&
+    (value.completionTokens === undefined || isUsageNumber(value.completionTokens)) &&
+    (value.lastUsed === undefined || typeof value.lastUsed === "string")
+  );
+}
+
+function isUsageModelSummary(value: unknown): boolean {
+  return isRecord(value) &&
+    isUsageNumber(value.requests) &&
+    isUsageNumber(value.promptTokens) &&
+    isUsageNumber(value.completionTokens) &&
+    isUsageNumber(value.totalTokens) &&
+    typeof value.lastUsed === "string";
+}
+
+function isUsageRequestLog(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    typeof value.timestamp === "string" &&
+    (value.protocol === "openai" || value.protocol === "anthropic" || value.protocol === "responses") &&
+    typeof value.model === "string" &&
+    (value.provider === "opencode" || value.provider === "codebuddy" || value.provider === "custom") &&
+    isUsageNumber(value.status) &&
+    isUsageNumber(value.latencyMs) &&
+    isUsageNumber(value.promptTokens) &&
+    isUsageNumber(value.completionTokens) &&
+    isUsageNumber(value.totalTokens) &&
+    isUsageNumber(value.savedTokens) &&
+    typeof value.stream === "boolean" &&
+    (value.clientApiKeyId === undefined || value.clientApiKeyId === null || typeof value.clientApiKeyId === "string")
+  );
+}
+
+function isNumericRecord(value: unknown): boolean {
+  return isRecord(value) && Object.values(value).every(isUsageNumber);
+}
+
+function isUsageStatsResponse(value: unknown): value is UsageStats {
+  if (!isRecord(value)) return false;
+  const protocol = value.byProtocol;
+  const provider = value.byProvider;
+  const models = value.byModel;
+  const daily = value.dailyHistory;
+  const hourly = value.hourlyHistory;
+
+  return (
+    isUsageNumber(value.totalRequests) &&
+    isUsageNumber(value.successfulRequests) &&
+    isUsageNumber(value.failedRequests) &&
+    isUsageNumber(value.totalPromptTokens) &&
+    isUsageNumber(value.totalCompletionTokens) &&
+    isUsageNumber(value.totalTokens) &&
+    isUsageNumber(value.savedTokens) &&
+    isUsageNumber(value.estimatedSavingsUsd) &&
+    isRecord(models) && Object.values(models).every(isUsageModelSummary) &&
+    isRecord(protocol) &&
+    isUsageBreakdown(protocol.openai) &&
+    isUsageBreakdown(protocol.anthropic) &&
+    isUsageBreakdown(protocol.responses) &&
+    isRecord(provider) &&
+    isUsageBreakdown(provider.opencode) &&
+    isUsageBreakdown(provider.codebuddy) &&
+    isUsageBreakdown(provider.custom) &&
+    (daily === undefined || (
+      isRecord(daily) &&
+      Object.values(daily).every((entry) =>
+        isRecord(entry) && isUsageNumber(entry.requests) && isUsageNumber(entry.tokens)
+      )
+    )) &&
+    (hourly === undefined || (
+      isRecord(hourly) &&
+      Object.values(hourly).every((entry) =>
+        isRecord(entry) && isUsageNumber(entry.tokens) && isUsageNumber(entry.cost) && isNumericRecord(entry.byModel)
+      )
+    )) &&
+    Array.isArray(value.recentLogs) &&
+    value.recentLogs.every(isUsageRequestLog)
+  );
+}
+
 export async function fetchUsageStats(): Promise<UsageStats> {
   const res = await fetch(`${BASE_URL}/api/usage`);
-  if (!res.ok) throw new Error(`Failed to load usage stats: ${res.statusText}`);
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `Failed to load usage stats: ${res.statusText}`);
+  if (!isUsageStatsResponse(data)) throw new Error("Invalid usage stats response");
+  return data;
 }
 
 export async function fetchUsageChart(period: string = "7d"): Promise<ChartBucket[]> {
