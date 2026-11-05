@@ -110,6 +110,15 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.getByRole("button", { name: "Toggle mobile menu" }).click();
     const mobileAdvancedToggle = page.locator('[data-nav-section="Advanced Features"] [data-section-toggle="advanced-features"]');
     expect(await mobileAdvancedToggle.getAttribute("aria-expanded")).toBe("false");
+
+    // Restore the shared browser fixture so later E2E cases start with default desktop navigation.
+    await page.evaluate(() => localStorage.removeItem("alphaway-sidebar-collapsed-sections"));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.reload();
+    await page.waitForFunction(() => {
+      const sections = ["main", "advanced-features", "system"];
+      return sections.every((id) => document.querySelector(`[data-nav-section][data-nav-items="${id}"]`) !== null);
+    });
   }, 25000);
 
   it("searches implemented pages in the command palette and handles empty keyboard results", async () => {
