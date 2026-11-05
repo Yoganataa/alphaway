@@ -228,6 +228,68 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(bodyText).not.toContain("17 ciphers · 12 extensions");
   });
 
+  it("reports Overview clipboard failures and confirms success only after write resolution", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText(text: string) {
+            return new Promise<void>((_resolve, reject) => {
+              (window as typeof window & {
+                __alphawayClipboardReject?: (error: Error) => void;
+                __alphawayClipboardText?: string;
+              }).__alphawayClipboardText = text;
+              (window as typeof window & {
+                __alphawayClipboardReject?: (error: Error) => void;
+              }).__alphawayClipboardReject = reject;
+            });
+          },
+        },
+      });
+    });
+
+    const keyCopy = page.getByTitle("Copy OpenAI Standard API Key");
+    await keyCopy.click();
+    await page.waitForFunction(() => document.querySelector('[title="Copy OpenAI Standard API Key"]')?.getAttribute("aria-busy") === "true");
+    expect(await keyCopy.isDisabled()).toBe(true);
+
+    await page.evaluate(() => {
+      const reject = (window as typeof window & {
+        __alphawayClipboardReject?: (error: Error) => void;
+      }).__alphawayClipboardReject;
+      reject?.(new Error("Clipboard write denied"));
+    });
+
+    await page.waitForFunction(() => document.querySelector('[title="Copy OpenAI Standard API Key"]')?.getAttribute("aria-busy") === "false" || document.querySelector('[title="Copy OpenAI Standard API Key"]')?.getAttribute("aria-busy") === null);
+    expect(await keyCopy.isDisabled()).toBe(false);
+    expect(await keyCopy.locator(".material-symbols-outlined").textContent()).toBe("content_copy");
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText(text: string) {
+            (window as typeof window & { __alphawayClipboardText?: string }).__alphawayClipboardText = text;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+
+    const snippetCopy = page.getByRole("button", { name: "Copy Snippet", exact: true });
+    await snippetCopy.click();
+    await page.getByRole("button", { name: "Copied to Clipboard!", exact: true }).waitFor({ state: "visible", timeout: 5000 });
+    expect(await page.evaluate(() => (window as typeof window & { __alphawayClipboardText?: string }).__alphawayClipboardText)).toContain("/v1/chat/completions");
+
+    const modelCopy = page.getByRole("button", { name: "mimo-v2.6-flash-free", exact: true });
+    await modelCopy.click();
+    await modelCopy.locator(".material-symbols-outlined").filter({ hasText: "check" }).waitFor({ state: "visible", timeout: 5000 });
+    expect(await page.evaluate(() => (window as typeof window & { __alphawayClipboardText?: string }).__alphawayClipboardText)).toBe("mimo-v2.6-flash-free");
+  }, 15000);
+
   it("navigates to Playground and verifies model selection and prompt inputs", async () => {
     const { page } = dashboard;
 
