@@ -163,6 +163,7 @@ describe("Usage aggregate load recovery", () => {
         return url.pathname === "/api/usage/chart" && url.searchParams.get("period") === "7d";
       });
       await page.getByRole("button", { name: "Usage" }).click();
+      await page.getByLabel("Live Poll", { exact: true }).uncheck();
 
       const loadError = page.locator("#usage-load-error");
       const reset = page.locator("#usage-reset-stats");
@@ -185,6 +186,7 @@ describe("Usage aggregate load recovery", () => {
       await page.getByText("No requests recorded yet.", { exact: true })
         .waitFor({ state: "visible", timeout: 10000 });
       await page.getByText("Total Requests", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      expect(await page.locator("#usage-success-rate").textContent()).toContain("—");
       await loadError.waitFor({ state: "detached", timeout: 10000 });
       const chart = await chartRequest;
       expect(new URL(chart.url()).searchParams.get("period")).toBe("7d");
