@@ -310,21 +310,21 @@
 
 <!-- Confirm Modals -->
 <ConfirmModal
-  open={showClearLogsConfirm}
+  isOpen={showClearLogsConfirm}
   title="Clear Request Audit Logs?"
   message="This will delete all stored request audit logs from the SQLite database. Aggregated token usage KPI numbers will not be affected."
   confirmLabel="Clear Logs"
-  confirmTone="warning"
-  onconfirm={handleClearLogs}
-  onclose={() => (showClearLogsConfirm = false)}
+  danger={true}
+  onConfirm={handleClearLogs}
+  onClose={() => (showClearLogsConfirm = false)}
 />
 
 <ConfirmModal
-  open={showResetUsageConfirm}
+  isOpen={showResetUsageConfirm}
   title="Reset All Usage Metrics?"
   message="Are you sure you want to reset all token usage stats, charts, and activity heatmap data? This action cannot be undone."
   confirmLabel="Reset Everything"
-  confirmTone="danger"
-  onconfirm={handleResetUsage}
-  onclose={() => (showResetUsageConfirm = false)}
+  danger={true}
+  onConfirm={handleResetUsage}
+  onClose={() => (showResetUsageConfirm = false)}
 />

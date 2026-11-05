@@ -216,9 +216,9 @@
 </div>
 
 <Modal
-  open={isCreateModalOpen}
+  isOpen={isCreateModalOpen}
   title={createdKeyResult ? "Copy Your API Key" : "Create New API Key"}
-  onclose={closeModal}
+  onClose={closeModal}
 >
   {#if createdKeyResult}
     <div class="space-y-4">
