@@ -173,7 +173,10 @@ describe("SOUL Studio configuration load recovery", () => {
       expect(writes).toBe(0);
 
       await page.locator("#soul-load-retry").click();
-      await page.locator("#soul-editor").waitFor({ state: "visible", timeout: 10000 });
+      await page.waitForFunction(() => {
+        const editor = document.querySelector<HTMLTextAreaElement>("#soul-editor");
+        return editor?.value === "Recovered SOUL content";
+      }, undefined, { timeout: 10000 });
       await loadError.waitFor({ state: "detached", timeout: 10000 });
       expect(await page.locator("#soul-editor").inputValue()).toBe("Recovered SOUL content");
       expect(await page.getByRole("button", { name: "Save to ./SOUL.md" }).isEnabled()).toBe(true);
