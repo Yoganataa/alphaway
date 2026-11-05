@@ -35,7 +35,6 @@
     className?: string
     onclick?: (e: MouseEvent) => void
     children?: Snippet
-    ariaBusy?: boolean
   } = $props()
 
   const variants: Record<Variant, string> = {
@@ -65,7 +64,6 @@
   {title}
   class="inline-flex items-center justify-center gap-2 font-semibold transition-all duration-150 ease-out cursor-pointer active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 {variants[variant]} {sizes[size]} {fullWidth ? 'w-full' : ''} {computedClass}"
   disabled={disabled || loading}
-  aria-busy={ariaBusy ? "true" : undefined}
   {onclick}
 >
   {#if loading}
