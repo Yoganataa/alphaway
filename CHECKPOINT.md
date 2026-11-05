@@ -356,7 +356,7 @@ Do not reopen or recreate Phase 0–5 work unless a verified regression is found
 Lanjutkan AlphaWay dari https://github.com/Yoganataa/alphaway.
 Baca CHECKPOINT.md terlebih dahulu, kemudian ROADMAP.md. Periksa live main, branch, PR, Ruleset Protect main, dan workflow GitHub sebelum mengubah apa pun.
 
-Main code baseline saat checkpoint ini: d08fa19bb4cd0b96cf0da5a8f27fedfeb779753b; latest `main` includes docs-only PR #37 at `5f35a6b6dd7976ad468a049cd8fafc40f8e3b38c`. Phase 0–5 sudah merged. Phase 6 merged slices:
+Main code baseline saat checkpoint ini: `4fd4a72df5d3a20a16e46d352ae7b5dd8f9fe69b`. Phase 0–5 sudah merged. Phase 6 recovery PR #43 Plans, #44 Security Rules, #45 Providers, #47 Plans E2E fixture isolation, #48 Persona, dan #49 SOUL Studio sudah merged. Exact-head CI/CodeQL berhasil pada masing-masing slice; #49 E2E melaporkan 29 pass dan 0 fail. Post-merge CI pada `main` #41965783606 sudah passed. Phase 6 selanjutnya adalah UsageView aggregate-load recovery, lalu keputusan domain provider-node/multiple-credentials sebelum backend expansion. Phase 6 merged slices:
 - PR #12 runtime-truthfulness.
 - PR #14 sidebar grouping/navigation parity.
 - PR #17 Connections/Providers capability audit.
