@@ -129,31 +129,53 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 20000);
 
-  it("opens and closes the grouped sidebar on mobile navigation", async () => {
+  it("keeps the mobile sidebar keyboard-accessible and dismissible", async () => {
     const { page, baseURL } = dashboard;
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${baseURL}/`);
 
-    const sidebar = page.locator("aside");
+    const sidebar = page.locator("#primary-navigation");
+    const menuToggle = page.getByRole("button", { name: "Toggle mobile menu" });
     await page.waitForFunction(() => {
-      const element = document.querySelector("aside");
-      return Boolean(element && element.getBoundingClientRect().left < 0);
+      const element = document.querySelector("#primary-navigation");
+      return Boolean(element && element.getBoundingClientRect().left < 0 && element.getAttribute("aria-hidden") === "true");
     });
 
-    await page.getByRole("button", { name: "Toggle mobile menu" }).click();
+    expect(await menuToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(await sidebar.getAttribute("inert")).not.toBeNull();
+
+    await menuToggle.click();
     await page.waitForFunction(() => {
-      const element = document.querySelector("aside");
+      const element = document.querySelector("#primary-navigation");
       return Boolean(element && Math.abs(element.getBoundingClientRect().left) < 1);
     });
+    expect(await menuToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(await sidebar.getAttribute("aria-hidden")).toBeNull();
+    await page.waitForFunction(() => document.activeElement?.id === "close-mobile-sidebar");
 
+    // Escape dismisses the drawer and restores focus to its trigger.
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => {
+      const element = document.querySelector("#primary-navigation");
+      return Boolean(element && element.getBoundingClientRect().left < 0);
+    });
+    expect(await menuToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.id)).toBe("mobile-menu-toggle");
+
+    // Selecting a page also closes the drawer and restores trigger focus.
+    await menuToggle.click();
+    await page.waitForFunction(() => document.activeElement?.id === "close-mobile-sidebar");
     await sidebar.locator("button").filter({ hasText: "Proxy Pools" }).click();
     await page.waitForFunction(() => {
-      const element = document.querySelector("aside");
+      const element = document.querySelector("#primary-navigation");
       return Boolean(element && element.getBoundingClientRect().left < 0);
     });
     await page.getByText("Egress Proxy Configuration", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    expect(await menuToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.id)).toBe("mobile-menu-toggle");
 
     await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForFunction(() => document.querySelector("#primary-navigation")?.getAttribute("aria-hidden") === null);
   }, 20000);
 
   it("loads the dashboard and renders runtime metadata from health and the active origin", async () => {
