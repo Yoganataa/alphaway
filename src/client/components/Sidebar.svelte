@@ -127,15 +127,6 @@
     }
   }
 
-  function sectionContainsActiveTab(section: NavSection) {
-    return section.items.some((item) =>
-      activeTab === item.id ||
-      (item.id === "endpoint" && activeTab === "overview") ||
-      (item.id === "profile" && activeTab === "settings") ||
-      (item.id === "proxy" && activeTab === "proxypools")
-    );
-  }
-
   function selectTab(id: string) {
     activeTab = id;
     if (onCloseMobile) onCloseMobile();
@@ -202,7 +193,12 @@
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
   <div class="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
     {#each sections as section (section.id)}
-      {@const sectionActive = sectionContainsActiveTab(section)}
+      {@const sectionActive = section.items.some((item) =>
+        activeTab === item.id ||
+        (item.id === "endpoint" && activeTab === "overview") ||
+        (item.id === "profile" && activeTab === "settings") ||
+        (item.id === "proxy" && activeTab === "proxypools")
+      )}
       {@const sectionOpen = sectionActive || !collapsedSections.has(section.id)}
       <div class="space-y-1" data-nav-section={section.title}>
         <button
