@@ -193,10 +193,22 @@ export interface PersonaResolution {
   detail: string;
 }
 
+export class PersonaApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "PersonaApiError";
+  }
+}
+
 async function personaRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}/api/persona${path}`, init);
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.error || `Persona request failed: ${response.statusText}`);
+  if (!response.ok) {
+    throw new PersonaApiError(
+      data?.error || `Persona request failed: ${response.statusText}`,
+      response.status,
+    );
+  }
   return data as T;
 }
 
