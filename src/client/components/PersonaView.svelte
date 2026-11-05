@@ -3,6 +3,7 @@
   import SoulStudioView from "./SoulStudioView.svelte";
   import {
     fetchPersonaState,
+    PersonaApiError,
     savePersonaPreset,
     deletePersonaPreset,
     setPersonaModelBinding,
@@ -78,7 +79,15 @@
         .join(String.fromCharCode(10));
       loaded = true;
       lastLoadedAt = Date.now();
-      if (!selectedId && presets.length > 0) selectPreset(presets[0].id);
+      if (selectedId) {
+        if (presets.some((preset) => preset.id === selectedId)) {
+          selectPreset(selectedId);
+        } else {
+          startNewPreset();
+        }
+      } else if (presets.length > 0) {
+        selectPreset(presets[0].id);
+      }
       return true;
     } catch (error) {
       loadError = getErrorMessage(error, "Failed to load Persona");
@@ -220,8 +229,12 @@
       notifications.success("Global Persona exclusions saved");
     } catch (error) {
       const message = getErrorMessage(error, "Failed to save global exclusions");
-      // PUT replaces the full list; re-read the canonical state before enabling another write.
-      await load();
+      // Definitive 4xx responses reject the list without committing it; keep the
+      // user's draft so they can correct it. Network/5xx/invalid-success outcomes
+      // are uncertain for a full-replacement PUT, so reload canonical state.
+      if (!(error instanceof PersonaApiError && error.status >= 400 && error.status < 500)) {
+        await load();
+      }
       statusError = message;
     } finally {
       mutating = false;
