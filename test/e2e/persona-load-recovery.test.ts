@@ -121,6 +121,14 @@ describe("Persona configuration load recovery", () => {
           writes += 1;
           const payload = request.postDataJSON() as { excludes?: unknown };
           lastWrite = payload;
+          if (writes === 2) {
+            await route.fulfill({
+              status: 400,
+              contentType: "application/json",
+              body: JSON.stringify({ ok: false, error: "Invalid global exclusions" }),
+            });
+            return;
+          }
           await route.fulfill({
             status: 200,
             contentType: "application/json",
@@ -182,6 +190,7 @@ describe("Persona configuration load recovery", () => {
       await page.locator("#persona-load-retry").click();
       await page.getByText("Recovered Persona", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
       await loadError.waitFor({ state: "detached", timeout: 10000 });
+      expect(await page.getByLabel("Name", { exact: true }).inputValue()).toBe("Recovered Persona");
       expect(await page.locator("#persona-save-global-excludes").isEnabled()).toBe(true);
 
       await page.locator("#persona-global-excludes").fill("protected-marker\nnew-sensitive-marker");
@@ -194,6 +203,16 @@ describe("Persona configuration load recovery", () => {
       const saved = lastWrite?.excludes as Array<{ text: string; mode?: string }>;
       expect(saved.some((item) => item.text === "protected-marker")).toBe(true);
       expect(saved.some((item) => item.text === "new-sensitive-marker")).toBe(true);
+
+      // A definitive validation rejection must leave the user's draft intact and
+      // must not trigger a GET that overwrites the invalid line with saved values.
+      await page.locator("#persona-global-excludes").fill("partial:");
+      await page.locator("#persona-save-global-excludes").click();
+      await page.getByText("Invalid global exclusions", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+      expect(await page.locator("#persona-global-excludes").inputValue()).toBe("partial:");
+      expect(await page.locator("#persona-save-global-excludes").isEnabled()).toBe(true);
+      expect(reads).toBe(6);
+      expect(writes).toBe(2);
     } finally {
       releaseRefresh();
       await page.unroute("**/api/persona**");
