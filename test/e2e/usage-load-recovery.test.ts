@@ -146,13 +146,8 @@ describe("Usage aggregate load recovery", () => {
           return;
         }
 
-        if (
-          url.pathname === "/api/usage/reset" ||
-          url.pathname === "/api/usage/clear-logs"
-        ) {
+        if (url.pathname.startsWith("/api/usage") && request.method() !== "GET") {
           writes += 1;
-          await route.continue();
-          return;
         }
         await route.continue();
       });
