@@ -192,7 +192,7 @@ describe("Usage aggregate load recovery", () => {
       expect(new URL(chart.url()).searchParams.get("period")).toBe("7d");
 
       await page.locator("#usage-refresh").click();
-      await page.getByText("existing-usage-model", { exact: true })
+      await page.getByRole("cell", { name: "existing-usage-model", exact: true })
         .waitFor({ state: "visible", timeout: 10000 });
       expect(await reset.isEnabled()).toBe(true);
 
@@ -214,7 +214,7 @@ describe("Usage aggregate load recovery", () => {
       await loadError.waitFor({ state: "visible", timeout: 10000 });
       expect(await loadError.textContent()).toContain("last successful snapshot");
       expect(await loadError.textContent()).toContain("Temporary aggregate Usage refresh failure");
-      expect(await page.getByText("existing-usage-model", { exact: true }).isVisible()).toBe(true);
+      expect(await page.getByRole("cell", { name: "existing-usage-model", exact: true }).isVisible()).toBe(true);
       expect(await reset.isDisabled()).toBe(true);
       expect(await clearLogs.isDisabled()).toBe(true);
       expect(await loadError.textContent()).toContain("Last successful load:");
