@@ -203,6 +203,13 @@ describe("Usage aggregate load recovery", () => {
       expect(await clearLogs.isDisabled()).toBe(true);
       expect(writes).toBe(0);
 
+      // Re-enable the 4-second poll while a manual refresh is held. The
+      // single-flight guard must prevent the timer from issuing another GET.
+      await page.getByLabel("Live Poll", { exact: true }).check();
+      await page.waitForTimeout(4500);
+      expect(reads).toBe(5);
+      await page.getByLabel("Live Poll", { exact: true }).uncheck();
+
       releaseRefresh();
       await loadError.waitFor({ state: "visible", timeout: 10000 });
       expect(await loadError.textContent()).toContain("last successful snapshot");
