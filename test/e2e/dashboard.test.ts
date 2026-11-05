@@ -721,6 +721,39 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.getByText(stats.engine, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
   }, 15000);
 
+  it("opens managed API key rename and revoke dialogs without native prompts", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    const keyName = "API Key Dialog Parity";
+    const response = await fetch(baseURL + "/api/keys", {
+      method: "POST",
+      headers: {
+        Cookie: adminCookie,
+        Origin: baseURL,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: keyName }),
+    });
+    expect(response.status).toBe(201);
+
+    await page.getByRole("button", { name: "Endpoint" }).click();
+    const row = page.getByRole("row").filter({ hasText: keyName });
+    await row.waitFor({ state: "visible", timeout: 10000 });
+
+    await row.getByRole("button", { name: "Rename " + keyName }).click();
+    const renameDialog = page.getByRole("dialog").filter({ hasText: "Rename API Key" });
+    await renameDialog.waitFor({ state: "visible", timeout: 10000 });
+    expect(await renameDialog.locator("#rename-api-key").inputValue()).toBe(keyName);
+    await renameDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await renameDialog.waitFor({ state: "detached", timeout: 5000 });
+
+    await row.getByRole("button", { name: "Revoke " + keyName }).click();
+    const revokeDialog = page.getByRole("dialog").filter({ hasText: "Revoke API Key?" });
+    await revokeDialog.waitFor({ state: "visible", timeout: 10000 });
+    expect(await revokeDialog.getByText(/lose access immediately/).isVisible()).toBe(true);
+    await revokeDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await revokeDialog.waitFor({ state: "detached", timeout: 5000 });
+  }, 15000);
+
   it("shows an inherited Plan quota for a managed API key in the dashboard", async () => {
     const { page, baseURL, adminCookie } = dashboard;
     const adminHeaders = {
