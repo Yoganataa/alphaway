@@ -271,7 +271,6 @@ console.log(res.choices[0].message.content);`,
             id="copy-local-endpoint"
             onclick={() => copyText("local", localEndpoint)}
             disabled={copyingId !== null}
-            ariaBusy={copyingId === "local"}
           >
             <span class="material-symbols-outlined text-[14px]">
               {copiedId === "local" ? "check" : "content_copy"}
@@ -318,7 +317,6 @@ console.log(res.choices[0].message.content);`,
               size="xs"
               onclick={() => copyText("tunnel", publicEndpointUrl)}
               disabled={copyingId !== null}
-              ariaBusy={copyingId === "tunnel"}
             >
               <span class="material-symbols-outlined text-[14px]">
                 {copiedId === "tunnel" ? "check" : "content_copy"}
@@ -379,7 +377,6 @@ console.log(res.choices[0].message.content);`,
           id="copy-client-snippet"
           onclick={copyCurrentSnippet}
           disabled={copyingId !== null}
-          ariaBusy={copyingId === "snippet"}
         >
           <span class="material-symbols-outlined text-[14px]">
             {copiedSnippet ? "check" : "content_copy"}
