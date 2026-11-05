@@ -531,19 +531,18 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     await page.getByRole("button", { name: "SOUL.md" }).click();
 
+    const editor = page.locator("#soul-editor");
+    await editor.waitFor({ state: "visible" });
+    // Soul configuration and its preset catalog are loaded asynchronously after the inner tab mounts.
+    await page.waitForFunction(() => {
+      const element = document.querySelector<HTMLTextAreaElement>("#soul-editor");
+      return Boolean(element && element.value.trim().length > 0);
+    });
     const mainText = await page.textContent("main");
     expect(mainText).toContain("Soul Studio");
     expect(mainText).toContain("Atlas");
     expect(mainText).toContain("Minimalist");
     expect(mainText).toContain("Socratic");
-
-    const editor = page.locator("#soul-editor");
-    await editor.waitFor({ state: "visible" });
-    // Soul configuration is loaded asynchronously after the inner tab mounts.
-    await page.waitForFunction(() => {
-      const element = document.querySelector<HTMLTextAreaElement>("#soul-editor");
-      return Boolean(element && element.value.trim().length > 0);
-    });
     expect(await editor.isVisible()).toBe(true);
     const content = await editor.inputValue();
     expect(content.length).toBeGreaterThan(0);
