@@ -586,6 +586,38 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(content.length).toBeGreaterThan(0);
   }, 15000);
  
+  it("opens and cancels the managed API-key creation dialog", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    await page.getByRole("button", { name: "Create Key", exact: true }).click();
+    const dialog = page.locator('[role="dialog"]').filter({ hasText: "Create New API Key" });
+    await dialog.waitFor({ state: "visible", timeout: 10000 });
+    expect(await dialog.locator("#new-key-name").isVisible()).toBe(true);
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await dialog.waitFor({ state: "detached", timeout: 5000 });
+  }, 15000);
+
+  it("opens and cancels Profile Settings destructive confirmations", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+    await page.getByRole("button", { name: "Profile & Settings" }).click();
+
+    await page.getByRole("button", { name: "Clear Logs", exact: true }).click();
+    const clearDialog = page.locator('[role="dialog"]').filter({ hasText: "Clear Request Audit Logs?" });
+    await clearDialog.waitFor({ state: "visible", timeout: 10000 });
+    expect(await clearDialog.getByText(/delete all stored request audit logs/).isVisible()).toBe(true);
+    await clearDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await clearDialog.waitFor({ state: "detached", timeout: 5000 });
+
+    await page.getByRole("button", { name: "Reset Usage", exact: true }).click();
+    const resetDialog = page.locator('[role="dialog"]').filter({ hasText: "Reset All Usage Metrics?" });
+    await resetDialog.waitFor({ state: "visible", timeout: 10000 });
+    expect(await resetDialog.getByRole("button", { name: "Reset Everything", exact: true }).isVisible()).toBe(true);
+    await resetDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await resetDialog.waitFor({ state: "detached", timeout: 5000 });
+  }, 20000);
+
   it("labels the dashboard API key as browser-scoped and reports database journal state", async () => {
     const { page } = dashboard;
     await page.getByRole("button", { name: "Profile & Settings" }).click();
