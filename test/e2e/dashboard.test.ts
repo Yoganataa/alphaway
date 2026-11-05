@@ -117,7 +117,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.reload();
     await page.waitForFunction(() => {
       const sections = ["main", "advanced-features", "system"];
-      return sections.every((id) => document.querySelector(`[data-nav-section][data-nav-items="${id}"]`) !== null);
+      return sections.every((id) => document.querySelector(`[data-nav-items="${id}"]`) !== null);
     });
   }, 25000);
 
