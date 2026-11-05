@@ -56,6 +56,19 @@
     }
   }
 
+  function closeMobileMenu() {
+    isMobileMenuOpen = false;
+    document.getElementById("mobile-menu-toggle")?.focus();
+  }
+
+  function toggleMobileMenu() {
+    if (isMobileMenuOpen) {
+      closeMobileMenu();
+      return;
+    }
+    isMobileMenuOpen = true;
+  }
+
   async function handleLogout() {
     try { await logoutAdmin(); } catch {}
     setActiveApiKey("");
@@ -100,7 +113,7 @@
     bind:activeTab
     {health}
     isMobileOpen={isMobileMenuOpen}
-    onCloseMobile={() => (isMobileMenuOpen = false)}
+    onCloseMobile={closeMobileMenu}
   />
 
   <!-- Right Content Area with Sticky TopBar -->
@@ -112,9 +125,10 @@
     <TopBar
       {activeTab}
       {health}
+      {isMobileMenuOpen}
       onRefresh={loadHealth}
       onOpenSearch={() => (isPaletteOpen = true)}
-      onToggleMobileMenu={() => (isMobileMenuOpen = !isMobileMenuOpen)}
+      onToggleMobileMenu={toggleMobileMenu}
       onLogout={handleLogout}
     />
 

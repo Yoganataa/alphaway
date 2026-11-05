@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import type { HealthResponse } from "../lib/types";
+  import { pushEscapeHandler } from "../lib/ui/escapeStack";
 
   let {
     activeTab = $bindable("overview"),
@@ -16,6 +17,8 @@
   } = $props();
 
   let currentHost = $state("Current host");
+  let isMobileViewport = $state(false);
+  let mobileCloseButton = $state<HTMLButtonElement | null>(null);
   const healthAvailable = $derived(health?.status === "ok");
   const localGateStatus = $derived(health?.identity?.gate?.status ?? "unknown");
   const toolAnchorCount = $derived(health?.identity?.gate?.anchors.tools.length ?? 0);
@@ -23,6 +26,27 @@
 
   onMount(() => {
     currentHost = window.location.host;
+
+    const mobileQuery = window.matchMedia("(max-width: 767px)");
+    const syncViewport = () => {
+      isMobileViewport = mobileQuery.matches;
+      if (!isMobileViewport && isMobileOpen) onCloseMobile?.();
+    };
+
+    syncViewport();
+    mobileQuery.addEventListener("change", syncViewport);
+    return () => mobileQuery.removeEventListener("change", syncViewport);
+  });
+
+  $effect(() => {
+    if (!isMobileViewport || !isMobileOpen || !onCloseMobile) return;
+    return pushEscapeHandler(() => onCloseMobile?.());
+  });
+
+  $effect(() => {
+    if (!isMobileViewport || !isMobileOpen) return;
+    const frame = requestAnimationFrame(() => mobileCloseButton?.focus());
+    return () => cancelAnimationFrame(frame);
   });
 
   interface NavItem {
@@ -85,6 +109,10 @@
 {/if}
 
 <aside
+  id="primary-navigation"
+  aria-label="Primary navigation"
+  aria-hidden={isMobileViewport && !isMobileOpen ? "true" : undefined}
+  inert={isMobileViewport && !isMobileOpen}
   class="w-64 shrink-0 bg-sidebar border-r border-border-subtle flex flex-col h-screen fixed md:sticky top-0 select-none z-50 transition-transform duration-200 {isMobileOpen
     ? 'translate-x-0'
     : '-translate-x-full md:translate-x-0'}"
@@ -98,6 +126,8 @@
     </div>
     {#if onCloseMobile}
       <button
+        bind:this={mobileCloseButton}
+        id="close-mobile-sidebar"
         type="button"
         onclick={onCloseMobile}
         class="md:hidden text-text-muted hover:text-text-main p-1"

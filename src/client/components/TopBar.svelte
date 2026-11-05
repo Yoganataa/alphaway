@@ -12,6 +12,7 @@
     onRefresh,
     onOpenSearch,
     onToggleMobileMenu,
+    isMobileMenuOpen = false,
     onLogout,
   }: {
     activeTab: string;
@@ -19,6 +20,7 @@
     onRefresh?: () => void;
     onOpenSearch?: () => void;
     onToggleMobileMenu?: () => void;
+    isMobileMenuOpen?: boolean;
     onLogout?: () => void;
   } = $props();
 
@@ -152,10 +154,13 @@
     <!-- Mobile hamburger button -->
     {#if onToggleMobileMenu}
       <button
+        id="mobile-menu-toggle"
         type="button"
         onclick={onToggleMobileMenu}
         class="md:hidden p-1.5 rounded-[8px] text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer"
         aria-label="Toggle mobile menu"
+        aria-expanded={isMobileMenuOpen}
+        aria-controls="primary-navigation"
       >
         <span class="material-symbols-outlined text-[20px]">menu</span>
       </button>
