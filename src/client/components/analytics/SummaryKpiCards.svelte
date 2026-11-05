@@ -19,7 +19,7 @@
   }
 
   const successRate = $derived.by(() => {
-    if (!stats || stats.totalRequests === 0) return 100;
+    if (!stats || stats.totalRequests === 0) return null;
     return Number(((stats.successfulRequests / stats.totalRequests) * 100).toFixed(1));
   });
 
@@ -40,7 +40,9 @@
       {fmtTokens(stats?.totalRequests)}
     </span>
     <div class="flex items-center justify-between text-[11px] text-text-muted mt-0.5">
-      <span class="text-emerald-400 font-semibold">{successRate}% Success</span>
+      <span id="usage-success-rate" class="text-emerald-400 font-semibold">
+        {successRate === null ? "—" : `${successRate}% Success`}
+      </span>
       <span>{stats?.failedRequests || 0} err</span>
     </div>
   </div>
