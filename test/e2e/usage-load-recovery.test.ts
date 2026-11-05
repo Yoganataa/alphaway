@@ -191,8 +191,11 @@ describe("Usage aggregate load recovery", () => {
       const chart = await chartRequest;
       expect(new URL(chart.url()).searchParams.get("period")).toBe("7d");
 
+      const auditTable = page.locator("table").filter({
+        has: page.getByRole("columnheader", { name: "Time", exact: true }),
+      });
       await page.locator("#usage-refresh").click();
-      await page.getByRole("cell", { name: "existing-usage-model", exact: true })
+      await auditTable.getByRole("cell", { name: "existing-usage-model" })
         .waitFor({ state: "visible", timeout: 10000 });
       expect(await reset.isEnabled()).toBe(true);
 
@@ -221,7 +224,7 @@ describe("Usage aggregate load recovery", () => {
       expect(writes).toBe(0);
 
       await page.locator("#usage-load-retry").click();
-      await page.getByText("recovered-usage-model", { exact: true })
+      await auditTable.getByRole("cell", { name: "recovered-usage-model" })
         .waitFor({ state: "visible", timeout: 10000 });
       await loadError.waitFor({ state: "detached", timeout: 10000 });
       expect(await reset.isEnabled()).toBe(true);
