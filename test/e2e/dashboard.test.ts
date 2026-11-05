@@ -590,7 +590,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const { page, baseURL } = dashboard;
     await page.goto(`${baseURL}/`);
 
-    await page.getByRole("button", { name: "Create Key", exact: true }).click();
+    await page.getByRole("button", { name: /Create Key/ }).click();
     const dialog = page.locator('[role="dialog"]').filter({ hasText: "Create New API Key" });
     await dialog.waitFor({ state: "visible", timeout: 10000 });
     expect(await dialog.locator("#new-key-name").isVisible()).toBe(true);
