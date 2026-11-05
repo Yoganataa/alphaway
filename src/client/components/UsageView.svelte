@@ -8,7 +8,7 @@
   import UsageBreakdownTable from "./analytics/UsageBreakdownTable.svelte";
   import RequestDetailsTab from "./analytics/RequestDetailsTab.svelte";
   import { fetchUsageStats, resetUsageStats, clearRecentLogs } from "../lib/api";
-  import type { UsageStats, RequestLogEntry } from "../lib/types";
+  import type { UsageStats } from "../lib/types";
 
   let stats = $state<UsageStats | null>(null);
   let loading = $state(true);
