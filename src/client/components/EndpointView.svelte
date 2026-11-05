@@ -15,6 +15,7 @@
   let showTunnelUrl = $state(true);
   let showKey = $state(false);
   let copiedId = $state<string | null>(null);
+  let copyingId = $state<string | null>(null);
 
   const publicEndpointUrl = $derived(health?.endpoint?.tunnel ? health.endpoint.publicUrl : "");
   const publicEndpointConfigured = $derived(publicEndpointUrl.length > 0);
@@ -44,12 +45,14 @@
   });
 
   async function copyText(id: string, text: string): Promise<boolean> {
+    if (copyingId) return false;
     if (typeof navigator === "undefined" || !navigator.clipboard) {
       copiedId = null;
       notifications.error("Clipboard access is unavailable in this browser context");
       return false;
     }
 
+    copyingId = id;
     try {
       await navigator.clipboard.writeText(text);
       copiedId = id;
@@ -64,6 +67,8 @@
         `Could not copy to clipboard: ${error instanceof Error ? error.message : String(error)}`
       );
       return false;
+    } finally {
+      if (copyingId === id) copyingId = null;
     }
   }
 
@@ -265,6 +270,7 @@ console.log(res.choices[0].message.content);`,
             size="xs"
             id="copy-local-endpoint"
             onclick={() => copyText("local", localEndpoint)}
+            disabled={copyingId !== null}
           >
             <span class="material-symbols-outlined text-[14px]">
               {copiedId === "local" ? "check" : "content_copy"}
@@ -310,6 +316,7 @@ console.log(res.choices[0].message.content);`,
               variant="secondary"
               size="xs"
               onclick={() => copyText("tunnel", publicEndpointUrl)}
+              disabled={copyingId !== null}
             >
               <span class="material-symbols-outlined text-[14px]">
                 {copiedId === "tunnel" ? "check" : "content_copy"}
@@ -369,11 +376,12 @@ console.log(res.choices[0].message.content);`,
           size="xs"
           id="copy-client-snippet"
           onclick={copyCurrentSnippet}
+          disabled={copyingId !== null}
         >
           <span class="material-symbols-outlined text-[14px]">
             {copiedSnippet ? "check" : "content_copy"}
           </span>
-          <span>{copiedSnippet ? "Copied" : "Copy Snippet"}</span>
+          <span>{copiedSnippet ? "Copied" : copyingId === "snippet" ? "Copying..." : "Copy Snippet"}</span>
         </Button>
       </div>
       <pre class="p-4 rounded-[8px] bg-surface-2 text-text-main overflow-x-auto selection:bg-brand-500/30"><code>{snippets[activeCodeTab]}</code></pre>

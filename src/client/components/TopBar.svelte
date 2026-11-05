@@ -25,6 +25,7 @@
   } = $props();
 
   let copied = $state(false);
+  let copyingBaseUrl = $state(false);
   let currentHost = $state("Current host");
   let currentOrigin = $state("");
 
@@ -134,6 +135,7 @@
       return;
     }
 
+    copyingBaseUrl = true;
     try {
       await navigator.clipboard.writeText(`${currentOrigin}/v1`);
       copied = true;
@@ -144,6 +146,8 @@
       notifications.error(
         `Could not copy OpenAI Base URL: ${error instanceof Error ? error.message : String(error)}`
       );
+    } finally {
+      copyingBaseUrl = false;
     }
   }
 </script>
@@ -205,11 +209,13 @@
       type="button"
       onclick={copyBaseUrl}
       data-testid="copy-base-url"
+      disabled={copyingBaseUrl}
+      aria-busy={copyingBaseUrl ? "true" : undefined}
       class="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-[8px] bg-surface hover:bg-surface-2 border border-border-subtle text-xs font-mono text-text-muted hover:text-text-main transition-colors cursor-pointer"
       title="Click to copy OpenAI Base URL"
     >
       <span class="material-symbols-outlined text-[16px] text-text-subtle">content_copy</span>
-      <span>{copied ? "Copied!" : currentOrigin ? `${currentOrigin}/v1` : "Resolving origin…"}</span>
+      <span>{copied ? "Copied!" : copyingBaseUrl ? "Copying..." : currentOrigin ? `${currentOrigin}/v1` : "Resolving origin…"}</span>
     </button>
 
     {#if onLogout}
