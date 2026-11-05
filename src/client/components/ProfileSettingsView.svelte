@@ -282,6 +282,7 @@
         <div class="text-[11px] text-text-muted">Purges all recorded request payloads, tokens, and inspect drawer items.</div>
       </div>
       <Button
+        id="clear-logs-trigger"
         variant="ghost"
         size="sm"
         class="text-amber-400 hover:text-amber-300"
@@ -297,6 +298,7 @@
         <div class="text-[11px] text-text-muted">Resets total tokens, KPI numbers, and daily heatmap buckets back to zero.</div>
       </div>
       <Button
+        id="reset-usage-trigger"
         variant="ghost"
         size="sm"
         class="text-red-400 hover:text-red-300"
