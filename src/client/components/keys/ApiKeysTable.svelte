@@ -213,13 +213,13 @@
             <td class="px-4 py-3 text-right">
               <div class="flex items-center justify-end gap-1.5 font-sans">
                 {#if key.status === "active"}
-                  <Button variant="ghost" size="xs" onclick={() => openRename(key)} title="Rename key" aria-label={"Rename " + key.name}>
+                  <Button variant="ghost" size="xs" onclick={() => openRename(key)} title="Rename key" ariaLabel={"Rename " + key.name}>
                     <span class="material-symbols-outlined text-[14px]">edit</span>
                   </Button>
                   <Button variant="ghost" size="xs" onclick={() => handleRotate(key)} title="Rotate key">
                     <span class="material-symbols-outlined text-[14px]">autorenew</span>
                   </Button>
-                  <Button variant="ghost" size="xs" class="text-red-400 hover:text-red-300" onclick={() => revokeKey = key} title="Revoke key" aria-label={"Revoke " + key.name}>
+                  <Button variant="ghost" size="xs" class="text-red-400 hover:text-red-300" onclick={() => revokeKey = key} title="Revoke key" ariaLabel={"Revoke " + key.name}>
                     <span class="material-symbols-outlined text-[14px]">block</span>
                   </Button>
                 {/if}
