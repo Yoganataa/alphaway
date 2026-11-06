@@ -32,6 +32,8 @@
   let isRenaming = $state(false);
   let revokeKey = $state<APIKeyRecord | null>(null);
   let isRevoking = $state(false);
+  let rotateKeyTarget = $state<APIKeyRecord | null>(null);
+  let isRotating = $state(false);
 
   async function loadKeys() {
     loading = true;
@@ -115,15 +117,25 @@
     }
   }
 
-  async function handleRotate(key: APIKeyRecord) {
-    if (!confirm(`Rotate '${key.name}'? The old secret will stop working immediately.`)) return;
+  function openRotateConfirmation(key: APIKeyRecord) {
+    if (isRotating) return;
+    rotateKeyTarget = key;
+  }
+
+  async function confirmRotate() {
+    const key = rotateKeyTarget;
+    if (!key) return;
+    isRotating = true;
     try {
       createdKeyResult = await rotateApiKey(key.id);
       isCreateModalOpen = true;
       await loadKeys();
       notifications.success(`Rotated API key '${key.name}'`);
+      rotateKeyTarget = null;
     } catch (error: any) {
       notifications.error(error.message || "Failed to rotate API key");
+    } finally {
+      isRotating = false;
     }
   }
 
@@ -216,7 +228,7 @@
                   <Button variant="ghost" size="xs" onclick={() => openRename(key)} title="Rename key" ariaLabel={"Rename " + key.name}>
                     <span class="material-symbols-outlined text-[14px]">edit</span>
                   </Button>
-                  <Button variant="ghost" size="xs" onclick={() => handleRotate(key)} title="Rotate key">
+                  <Button variant="ghost" size="xs" onclick={() => openRotateConfirmation(key)} title="Rotate key" ariaLabel={"Rotate " + key.name}>
                     <span class="material-symbols-outlined text-[14px]">autorenew</span>
                   </Button>
                   <Button variant="ghost" size="xs" class="text-red-400 hover:text-red-300" onclick={() => revokeKey = key} title="Revoke key" ariaLabel={"Revoke " + key.name}>
@@ -310,6 +322,16 @@
     </div>
   </form>
 </Modal>
+
+<ConfirmModal
+  isOpen={rotateKeyTarget !== null}
+  title="Rotate API Key?"
+  message={rotateKeyTarget ? "Rotate '" + rotateKeyTarget.name + "'? The old secret will stop working immediately." : ""}
+  confirmLabel={isRotating ? "Rotating…" : "Rotate Key"}
+  danger={true}
+  onConfirm={() => void confirmRotate()}
+  onClose={() => { if (!isRotating) rotateKeyTarget = null; }}
+/>
 
 <ConfirmModal
   isOpen={revokeKey !== null}

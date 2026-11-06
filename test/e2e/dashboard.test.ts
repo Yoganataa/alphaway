@@ -840,6 +840,51 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 15000);
 
+  it("opens and cancels the managed API-key rotation confirmation", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    const keyName = "API Key Rotate Confirmation";
+    const response = await fetch(baseURL + "/api/keys", {
+      method: "POST",
+      headers: {
+        Cookie: adminCookie,
+        Origin: baseURL,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: keyName }),
+    });
+    expect(response.status).toBe(201);
+    const key = (await response.json()).key;
+
+    try {
+      await page.getByRole("button", { name: "Endpoint" }).click();
+      const row = page.getByRole("row").filter({ hasText: keyName });
+      await row.waitFor({ state: "visible", timeout: 10000 });
+
+      const rotateTrigger = row.getByRole("button", { name: "Rotate " + keyName });
+      await rotateTrigger.click();
+
+      const rotateDialog = page.getByRole("dialog").filter({ hasText: "Rotate API Key?" });
+      await rotateDialog.waitFor({ state: "visible", timeout: 10000 });
+      expect(await rotateDialog.getByText(/old secret will stop working immediately/).isVisible()).toBe(true);
+
+      await rotateDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await rotateDialog.waitFor({ state: "detached", timeout: 5000 });
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Rotate API Key Rotate Confirmation");
+      expect(await rotateTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
+
+      const stillValid = await fetch(baseURL + "/v1/models", {
+        headers: { "x-api-key": key.secret },
+      });
+      expect(stillValid.status).toBe(200);
+    } finally {
+      await fetch(baseURL + "/api/keys/" + encodeURIComponent(key.id), {
+        method: "DELETE",
+        headers: { Cookie: adminCookie, Origin: baseURL },
+      });
+      await page.goto(baseURL + "/");
+    }
+  }, 15000);
+
   it("shows an inherited Plan quota for a managed API key in the dashboard", async () => {
     const { page, baseURL, adminCookie } = dashboard;
     const adminHeaders = {
