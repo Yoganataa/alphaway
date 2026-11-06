@@ -3,6 +3,7 @@
   import Card from "../lib/ui/Card.svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
+  import ConfirmModal from "../lib/ui/ConfirmModal.svelte"
   import SummaryKpiCards from "./analytics/SummaryKpiCards.svelte";
   import UsageChart from "./analytics/UsageChart.svelte";
   import UsageBreakdownTable from "./analytics/UsageBreakdownTable.svelte";
@@ -15,6 +16,7 @@
   let error = $state<string | null>(null);
   let lastLoadedAt = $state<number | null>(null);
   let mutating = $state(false);
+  let confirmationAction = $state<"reset" | "clear" | null>(null);
   let loadInFlight = false;
 
   // Tab & Period state
@@ -71,35 +73,36 @@
     };
   });
 
-  async function handleResetStats() {
+  function openResetConfirmation() {
     if (writesBlocked()) return;
-    if (!confirm("Are you sure you want to reset all usage statistics? This will clear historical counters.")) return;
-
-    mutating = true;
-    try {
-      await resetUsageStats();
-      if (!await loadData()) {
-        alert("Usage statistics were reset, but the refreshed view could not be loaded. Retry the Usage refresh.");
-      }
-    } catch (reason) {
-      alert(`Reset failed: ${getErrorMessage(reason, "Unknown error")}`);
-    } finally {
-      mutating = false;
-    }
+    confirmationAction = "reset";
   }
 
-  async function handleClearLogs() {
+  function openClearConfirmation() {
     if (writesBlocked() || !stats?.recentLogs?.length) return;
-    if (!confirm("Clear all recent request audit logs?")) return;
+    confirmationAction = "clear";
+  }
+
+  async function confirmUsageAction() {
+    const action = confirmationAction;
+    if (!action || writesBlocked()) return;
 
     mutating = true;
     try {
-      await clearRecentLogs();
-      if (!await loadData()) {
-        alert("Recent logs were cleared, but the refreshed view could not be loaded. Retry the Usage refresh.");
+      if (action === "reset") {
+        await resetUsageStats();
+        if (!await loadData()) {
+          alert("Usage statistics were reset, but the refreshed view could not be loaded. Retry the Usage refresh.");
+        }
+      } else {
+        await clearRecentLogs();
+        if (!await loadData()) {
+          alert("Recent logs were cleared, but the refreshed view could not be loaded. Retry the Usage refresh.");
+        }
       }
+      confirmationAction = null;
     } catch (reason) {
-      alert(`Clear logs failed: ${getErrorMessage(reason, "Unknown error")}`);
+      alert(`${action === "reset" ? "Reset" : "Clear logs"} failed: ${getErrorMessage(reason, "Unknown error")}`);
     } finally {
       mutating = false;
     }
@@ -205,12 +208,12 @@
         <span>Export CSV</span>
       </Button>
 
-      <Button variant="ghost" size="sm" onclick={handleClearLogs} disabled={!stats?.recentLogs?.length || writesBlocked()}>
+      <Button variant="ghost" size="sm" onclick={openClearConfirmation} disabled={!stats?.recentLogs?.length || writesBlocked()}>
         <span class="material-symbols-outlined text-[15px]">cleaning_services</span>
         <span>Clear Logs</span>
       </Button>
 
-      <Button id="usage-reset-stats" variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={handleResetStats} disabled={writesBlocked()}>
+      <Button id="usage-reset-stats" variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={openResetConfirmation} disabled={writesBlocked()}>
         <span class="material-symbols-outlined text-[15px]">restart_alt</span>
         <span>Reset Stats</span>
       </Button>
@@ -521,3 +524,16 @@
   {/if}
   {/if}
 </div>
+
+
+<ConfirmModal
+  isOpen={confirmationAction !== null}
+  title={confirmationAction === "reset" ? "Reset All Usage Statistics?" : "Clear Recent Request Audit Logs?"}
+  message={confirmationAction === "reset"
+    ? "Resetting usage statistics clears historical counters and cannot be undone."
+    : "Clear all recent request audit logs? This removes the stored audit entries shown in Usage."}
+  confirmLabel={mutating ? (confirmationAction === "reset" ? "Resetting…" : "Clearing…") : (confirmationAction === "reset" ? "Reset Stats" : "Clear Logs")}
+  danger={true}
+  onConfirm={() => void confirmUsageAction()}
+  onClose={() => { if (!mutating) confirmationAction = null; }}
+/>

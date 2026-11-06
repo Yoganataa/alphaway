@@ -700,6 +700,24 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await resetTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
   }, 20000);
 
+  it("opens and cancels the Usage reset confirmation", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    await page.getByRole("button", { name: "Usage" }).click();
+
+    const resetTrigger = page.locator("#usage-reset-stats");
+    await resetTrigger.waitFor({ state: "visible", timeout: 10000 });
+    await resetTrigger.click();
+    const resetDialog = page.getByRole("dialog").filter({ hasText: "Reset All Usage Statistics?" });
+    await resetDialog.waitFor({ state: "visible", timeout: 10000 });
+    expect(await resetDialog.getByText(/clears historical counters/).isVisible()).toBe(true);
+    await resetDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await resetDialog.waitFor({ state: "hidden", timeout: 5000 });
+    await page.waitForFunction(() => document.activeElement?.id === "usage-reset-stats");
+    expect(await resetTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
+  }, 15000);
+
   it("labels the dashboard API key as browser-scoped and reports database journal state", async () => {
     const { page } = dashboard;
     await page.getByRole("button", { name: "Profile & Settings" }).click();
