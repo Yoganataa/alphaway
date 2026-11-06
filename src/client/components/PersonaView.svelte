@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import SoulStudioView from "./SoulStudioView.svelte";
+  import ConfirmModal from "../lib/ui/ConfirmModal.svelte";
   import {
     fetchPersonaState,
     PersonaApiError,
@@ -28,6 +29,7 @@
   let loadInFlight = false;
   let saving = $state(false);
   let mutating = $state(false);
+  let deleteTarget = $state<string | null>(null);
   let presets = $state<PersonaPreset[]>([]);
   let bindings = $state<PersonaModelBinding[]>([]);
   let globalExcludes = $state<PersonaKeyword[]>([]);
@@ -356,7 +358,7 @@
             </div>
             <p class="text-[11px] text-text-muted">One literal keyword per line. Prefix with <code>partial:</code> for substring matching. Default word matching requires a model-ID boundary. Regex is intentionally unsupported.</p>
             <div class="flex justify-end gap-2">
-              {#if selectedId}<Button id="persona-delete-preset" size="sm" color="danger" variant="ghost" onclick={() => removePreset(selectedId)} disabled={writesBlocked()}>Delete</Button>{/if}
+              {#if selectedId}<Button id="persona-delete-preset" size="sm" color="danger" variant="ghost" onclick={() => openDeleteConfirmation(selectedId)} disabled={writesBlocked()}>Delete</Button>{/if}
               <Button id="persona-save-preset" size="sm" variant="primary" loading={saving} onclick={savePreset} disabled={!draftId.trim() || !draftName.trim() || writesBlocked()}>Save preset</Button>
             </div>
           </Card>
@@ -431,3 +433,14 @@
     {/if}
   {/if}
 </div>
+
+
+<ConfirmModal
+  isOpen={deleteTarget !== null}
+  title="Delete Persona preset?"
+  message={deleteTarget ? "Delete Persona preset \"" + deleteTarget + "\"? Model bindings to this preset will be removed." : ""}
+  confirmLabel={mutating ? "Deleting…" : "Delete Preset"}
+  danger={true}
+  onConfirm={() => { if (deleteTarget) void removePreset(deleteTarget); }}
+  onClose={() => { if (!mutating) deleteTarget = null; }}
+/>
