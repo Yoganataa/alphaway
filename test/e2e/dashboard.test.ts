@@ -723,7 +723,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
   it("opens managed API key rename and revoke dialogs without native prompts", async () => {
     const { page, baseURL, adminCookie } = dashboard;
-    const dialogPage = await dialogPage.context().newPage();
+    const dialogPage = await page.context().newPage();
     const keyName = "API Key Dialog Parity";
     const response = await fetch(baseURL + "/api/keys", {
       method: "POST",
@@ -760,7 +760,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
         method: "DELETE",
         headers: { Cookie: adminCookie, Origin: baseURL },
       });
-      await dialogPage.goto(baseURL + "/");
+      await dialogPage.close();
     }
   }, 15000);
 
