@@ -602,6 +602,14 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     expect(await range.getByRole("button", { name: "60D", exact: true }).getAttribute("aria-pressed")).toBe("true");
     expect(await range.getByRole("button", { name: "7D", exact: true }).getAttribute("aria-pressed")).toBe("false");
+
+    const chartMode = page.getByRole("button", { name: "Est. Value", exact: true });
+    const tokenMode = page.getByRole("button", { name: "Tokens", exact: true });
+    expect(await tokenMode.getAttribute("aria-pressed")).toBe("true");
+    expect(await chartMode.getAttribute("aria-pressed")).toBe("false");
+    await chartMode.click();
+    expect(await chartMode.getAttribute("aria-pressed")).toBe("true");
+    expect(await tokenMode.getAttribute("aria-pressed")).toBe("false");
   }, 20000);
 
   it("opens and cancels the Persona preset delete confirmation", async () => {

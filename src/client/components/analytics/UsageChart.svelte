@@ -178,6 +178,7 @@
         type="button"
         onclick={() => (viewMode = "tokens")}
         class="px-2.5 py-1 text-xs font-semibold rounded-[6px] transition-colors {viewMode === 'tokens' ? 'bg-surface text-brand-400 shadow-sm' : 'text-text-muted hover:text-text-main'}"
+        aria-pressed={viewMode === "tokens"}
       >
         Tokens
       </button>
@@ -185,6 +186,7 @@
         type="button"
         onclick={() => (viewMode = "cost")}
         class="px-2.5 py-1 text-xs font-semibold rounded-[6px] transition-colors {viewMode === 'cost' ? 'bg-surface text-amber-400 shadow-sm' : 'text-text-muted hover:text-text-main'}"
+        aria-pressed={viewMode === "cost"}
       >
         Est. Value
       </button>
