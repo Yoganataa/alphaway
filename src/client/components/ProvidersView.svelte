@@ -678,6 +678,16 @@
   </Card>
 </div>
 
+<ConfirmModal
+  isOpen={deleteProviderTarget !== null}
+  title="Delete Custom Provider?"
+  message={deleteProviderTarget ? `Delete custom provider "${deleteProviderTarget.id}"? Its saved credentials and configuration will be removed.` : ""}
+  confirmLabel={providerMutating ? "Deleting…" : "Delete Provider"}
+  danger={true}
+  onConfirm={() => void confirmDeleteProvider()}
+  onClose={() => { if (!providerMutating) deleteProviderTarget = null; }}
+/>
+
 <!-- Modal Form for Add/Edit Provider -->
 {#if showProviderModal}
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
