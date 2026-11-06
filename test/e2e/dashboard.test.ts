@@ -881,6 +881,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
         method: "DELETE",
         headers: { Cookie: adminCookie, Origin: baseURL },
       });
+      await page.goto(baseURL + "/");
     }
   }, 15000);
 
