@@ -175,6 +175,7 @@
     statusError = "";
     try {
       await deletePersonaPreset(id);
+      deleteTarget = null;
       if (selectedId === id) startNewPreset();
       if (await load()) notifications.info("Persona preset removed");
       else notifications.warning("Persona preset was deleted, but the library could not be refreshed. Retry before making further changes.");
