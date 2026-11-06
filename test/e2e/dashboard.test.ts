@@ -885,6 +885,57 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 15000);
 
+  it("opens and cancels the custom provider delete confirmation", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    const providerId = "e2e-delete-confirm";
+    const providerResponse = await fetch(baseURL + "/api/custom-providers", {
+      method: "POST",
+      headers: {
+        Cookie: adminCookie,
+        Origin: baseURL,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: providerId,
+        name: "E2E Delete Confirmation",
+        baseUrl: "https://api.example.test/v1",
+        apiKey: "e2e-provider-secret",
+        protocol: "openai",
+        models: ["e2e-model"],
+        enabled: true,
+      }),
+    });
+    expect(providerResponse.status).toBe(201);
+
+    try {
+      await page.getByRole("button", { name: "Providers" }).click();
+      const deleteTrigger = page.locator("#providers-delete-" + providerId);
+      await deleteTrigger.waitFor({ state: "visible", timeout: 10000 });
+      await deleteTrigger.click();
+
+      const deleteDialog = page.getByRole("dialog").filter({ hasText: "Delete Custom Provider?" });
+      await deleteDialog.waitFor({ state: "visible", timeout: 10000 });
+      expect(await deleteDialog.getByText(/saved credentials and configuration will be removed/).isVisible()).toBe(true);
+
+      await deleteDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await deleteDialog.waitFor({ state: "detached", timeout: 5000 });
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Delete E2E Delete Confirmation");
+      expect(await deleteTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
+
+      const verifyResponse = await fetch(baseURL + "/api/custom-providers", {
+        headers: { Cookie: adminCookie, Origin: baseURL },
+      });
+      expect(verifyResponse.status).toBe(200);
+      const verifyBody = await verifyResponse.json();
+      expect(verifyBody.providers.some((provider: { id: string }) => provider.id === providerId)).toBe(true);
+    } finally {
+      await fetch(baseURL + "/api/custom-providers/" + encodeURIComponent(providerId), {
+        method: "DELETE",
+        headers: { Cookie: adminCookie, Origin: baseURL },
+      });
+    }
+  }, 15000);
+
   it("shows an inherited Plan quota for a managed API key in the dashboard", async () => {
     const { page, baseURL, adminCookie } = dashboard;
     const adminHeaders = {
