@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import SoulStudioView from "./SoulStudioView.svelte";
   import ConfirmModal from "../lib/ui/ConfirmModal.svelte";
+  import ConfirmModal from "../lib/ui/ConfirmModal.svelte";
   import {
     fetchPersonaState,
     PersonaApiError,
@@ -29,6 +30,7 @@
   let loadInFlight = false;
   let saving = $state(false);
   let mutating = $state(false);
+  let deleteTarget = $state<string | null>(null);
   let deleteTarget = $state<string | null>(null);
   let presets = $state<PersonaPreset[]>([]);
   let bindings = $state<PersonaModelBinding[]>([]);
@@ -161,9 +163,14 @@
     }
   }
 
+
+  function openDeleteConfirmation(id: string) {
+    if (writesBlocked()) return;
+    deleteTarget = id;
+  }
+
   async function removePreset(id: string) {
     if (writesBlocked()) return;
-    if (!confirm(`Delete Persona preset "${id}"? Model bindings to this preset will be removed.`)) return;
     mutating = true;
     statusError = "";
     try {
@@ -253,6 +260,7 @@
     }
   }
 </script>
+
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-center justify-between gap-4">
@@ -432,6 +440,17 @@
       </div>
     {/if}
   {/if}
+
+<ConfirmModal
+  isOpen={deleteTarget !== null}
+  title="Delete Persona preset?"
+  message={deleteTarget ? "Delete Persona preset \"" + deleteTarget + "\"? Model bindings to this preset will be removed." : ""}
+  confirmLabel={mutating ? "Deleting…" : "Delete Preset"}
+  danger={true}
+  onConfirm={() => { if (deleteTarget) void removePreset(deleteTarget); }}
+  onClose={() => { if (!mutating) deleteTarget = null; }}
+/>
+
 </div>
 
 
