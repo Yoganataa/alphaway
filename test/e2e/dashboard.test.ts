@@ -925,10 +925,16 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     await page.getByRole("heading", { name: editedName }).waitFor({ state: "visible", timeout: 10000 });
     const editedCard = page.locator("article").filter({ hasText: editedName });
-    page.once("dialog", async (dialog) => {
-      await dialog.accept();
-    });
     await editedCard.getByRole("button", { name: "Delete" }).click();
+    const deleteDialog = page.getByRole("dialog").filter({ hasText: "Delete Plan?" });
+    await deleteDialog.waitFor({ state: "visible", timeout: 10000 });
+    expect(await deleteDialog.getByText(/Plans assigned to API keys cannot be deleted/).isVisible()).toBe(true);
+    await deleteDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await deleteDialog.waitFor({ state: "hidden", timeout: 5000 });
+
+    await editedCard.getByRole("button", { name: "Delete" }).click();
+    await deleteDialog.waitFor({ state: "visible", timeout: 10000 });
+    await deleteDialog.getByRole("button", { name: "Delete Plan", exact: true }).click();
     await page.getByRole("heading", { name: editedName }).waitFor({ state: "detached", timeout: 10000 });
   }, 20000);
 

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
+  import ConfirmModal from "../lib/ui/ConfirmModal.svelte";
   import { notifications } from "../lib/notifications";
   import {
     fetchPlans,
@@ -21,6 +22,7 @@
   let saving = $state(false);
   let editingId = $state<string | null>(null);
   let deletingId = $state<string | null>(null);
+  let deleteTarget = $state<PlanRecord | null>(null);
   let name = $state("");
   let description = $state("");
   let rpmLimit = $state("0");
@@ -121,9 +123,14 @@
     }
   }
 
-  async function removePlan(plan: PlanRecord) {
+  function openDeleteConfirmation(plan: PlanRecord) {
     if (writesBlocked()) return;
-    if (!confirm("Delete Plan '" + plan.name + "'? Plans assigned to API keys cannot be deleted.")) return;
+    deleteTarget = plan;
+  }
+
+  async function confirmDeletePlan() {
+    const plan = deleteTarget;
+    if (!plan || writesBlocked()) return;
     saving = true;
     deletingId = plan.id;
     try {
@@ -135,6 +142,7 @@
           ? "Plan deleted"
           : "Plan deleted, but the list could not be refreshed. Retry to sync the current state.",
       );
+      deleteTarget = null;
     } catch (error: any) {
       notifications.error(error.message || "Plan could not be deleted");
     } finally {
@@ -216,7 +224,7 @@
                   <Button
                     variant="ghost"
                     size="sm"
-                    onclick={() => removePlan(plan)}
+                    onclick={() => openDeleteConfirmation(plan)}
                     disabled={writesBlocked()}
                     loading={deletingId === plan.id}
                   >
@@ -289,3 +297,14 @@
     </section>
   </div>
 </div>
+
+
+<ConfirmModal
+  isOpen={deleteTarget !== null}
+  title="Delete Plan?"
+  message={deleteTarget ? "Delete Plan '" + deleteTarget.name + "'? Plans assigned to API keys cannot be deleted." : ""}
+  confirmLabel={saving ? "Deleting…" : "Delete Plan"}
+  danger={true}
+  onConfirm={() => void confirmDeletePlan()}
+  onClose={() => { if (!saving) deleteTarget = null; }}
+/>
