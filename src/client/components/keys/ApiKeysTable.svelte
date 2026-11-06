@@ -3,6 +3,7 @@
   import Badge from "../../lib/ui/Badge.svelte";
   import Button from "../../lib/ui/Button.svelte";
   import Modal from "../../lib/ui/Modal.svelte";
+  import ConfirmModal from "../../lib/ui/ConfirmModal.svelte";
   import { notifications } from "../../lib/notifications";
   import {
     fetchApiKeys,
@@ -26,6 +27,11 @@
   let newKeyName = $state("");
   let isCreating = $state(false);
   let createdKeyResult = $state<IssuedAPIKey | null>(null);
+  let renameKey = $state<APIKeyRecord | null>(null);
+  let renameValue = $state("");
+  let isRenaming = $state(false);
+  let revokeKey = $state<APIKeyRecord | null>(null);
+  let isRevoking = $state(false);
 
   async function loadKeys() {
     loading = true;
@@ -67,15 +73,45 @@
     }
   }
 
-  async function handleRename(key: APIKeyRecord) {
-    const nextName = prompt("New API key label", key.name);
-    if (nextName === null || nextName.trim() === key.name) return;
+  function openRename(key: APIKeyRecord) {
+    renameKey = key;
+    renameValue = key.name;
+  }
+
+  function closeRename() {
+    if (isRenaming) return;
+    renameKey = null;
+    renameValue = "";
+  }
+
+  async function submitRename() {
+    if (!renameKey || !renameValue.trim() || renameValue.trim() === renameKey.name) return;
+    isRenaming = true;
     try {
-      await updateApiKeyLabel(key.id, nextName.trim());
+      await updateApiKeyLabel(renameKey.id, renameValue.trim());
       await loadKeys();
       notifications.success("API key label updated");
+      renameKey = null;
+      renameValue = "";
     } catch (error: any) {
       notifications.error(error.message || "Failed to rename API key");
+    } finally {
+      isRenaming = false;
+    }
+  }
+
+  async function confirmRevoke() {
+    if (!revokeKey) return;
+    isRevoking = true;
+    try {
+      await deleteApiKey(revokeKey.id);
+      await loadKeys();
+      notifications.success("API key revoked");
+      revokeKey = null;
+    } catch (error: any) {
+      notifications.error(error.message || "Failed to revoke API key");
+    } finally {
+      isRevoking = false;
     }
   }
 
@@ -88,17 +124,6 @@
       notifications.success(`Rotated API key '${key.name}'`);
     } catch (error: any) {
       notifications.error(error.message || "Failed to rotate API key");
-    }
-  }
-
-  async function handleRevoke(key: APIKeyRecord) {
-    if (!confirm(`Revoke '${key.name}'? Clients using this key will lose access immediately.`)) return;
-    try {
-      await deleteApiKey(key.id);
-      await loadKeys();
-      notifications.success(`Revoked API key '${key.name}'`);
-    } catch (error: any) {
-      notifications.error(error.message || "Failed to revoke API key");
     }
   }
 
@@ -188,13 +213,13 @@
             <td class="px-4 py-3 text-right">
               <div class="flex items-center justify-end gap-1.5 font-sans">
                 {#if key.status === "active"}
-                  <Button variant="ghost" size="xs" onclick={() => handleRename(key)} title="Rename key">
+                  <Button variant="ghost" size="xs" onclick={() => openRename(key)} title="Rename key" ariaLabel={"Rename " + key.name}>
                     <span class="material-symbols-outlined text-[14px]">edit</span>
                   </Button>
                   <Button variant="ghost" size="xs" onclick={() => handleRotate(key)} title="Rotate key">
                     <span class="material-symbols-outlined text-[14px]">autorenew</span>
                   </Button>
-                  <Button variant="ghost" size="xs" class="text-red-400 hover:text-red-300" onclick={() => handleRevoke(key)} title="Revoke key">
+                  <Button variant="ghost" size="xs" class="text-red-400 hover:text-red-300" onclick={() => revokeKey = key} title="Revoke key" ariaLabel={"Revoke " + key.name}>
                     <span class="material-symbols-outlined text-[14px]">block</span>
                   </Button>
                 {/if}
@@ -258,3 +283,40 @@
     </form>
   {/if}
 </Modal>
+
+<Modal
+  isOpen={renameKey !== null}
+  title="Rename API Key"
+  onClose={closeRename}
+>
+  <form class="space-y-4" onsubmit={(event) => { event.preventDefault(); void submitRename(); }}>
+    <div class="space-y-1.5">
+      <label for="rename-api-key" class="text-xs font-semibold text-text-muted">Key label</label>
+      <input
+        id="rename-api-key"
+        type="text"
+        bind:value={renameValue}
+        maxlength="80"
+        required
+        disabled={isRenaming}
+        class="w-full px-3 py-2 text-xs rounded-[8px] bg-surface-2 border border-border text-text-main focus:outline-hidden focus:border-brand-500"
+      />
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <Button variant="ghost" type="button" onclick={closeRename} disabled={isRenaming}>Cancel</Button>
+      <Button variant="primary" type="submit" disabled={isRenaming || !renameValue.trim() || renameValue.trim() === renameKey?.name}>
+        {isRenaming ? "Saving…" : "Save Changes"}
+      </Button>
+    </div>
+  </form>
+</Modal>
+
+<ConfirmModal
+  isOpen={revokeKey !== null}
+  title="Revoke API Key?"
+  message={revokeKey ? "Revoke '" + revokeKey.name + "'? Clients using this key will lose access immediately." : ""}
+  confirmLabel={isRevoking ? "Revoking…" : "Revoke Key"}
+  danger={true}
+  onConfirm={() => void confirmRevoke()}
+  onClose={() => { if (!isRevoking) revokeKey = null; }}
+/>
