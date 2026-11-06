@@ -604,6 +604,63 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await range.getByRole("button", { name: "7D", exact: true }).getAttribute("aria-pressed")).toBe("false");
   }, 20000);
 
+  it("opens and cancels the Persona preset delete confirmation", async () => {
+    const { page, baseURL, adminCookie } = dashboard;
+    const presetId = "e2e-delete-confirm-" + Date.now();
+    const headers = {
+      Cookie: adminCookie,
+      Origin: baseURL,
+      "Content-Type": "application/json",
+    };
+
+    const createResponse = await fetch(baseURL + "/api/persona/presets", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        id: presetId,
+        name: "E2E Delete Confirmation",
+        prompt: "Delete confirmation regression",
+        kind: "PERSONA",
+        source: "dashboard E2E",
+        keywords: [],
+        excludes: [],
+        order: 0,
+      }),
+    });
+    expect(createResponse.status).toBe(200);
+
+    try {
+      await page.getByRole("button", { name: "Persona" }).click();
+      await page.getByText("Preset Library").waitFor({ state: "visible", timeout: 10000 });
+      await page.getByRole("button", { name: "E2E Delete Confirmation" }).click();
+
+      const deleteTrigger = page.locator("#persona-delete-preset");
+      await deleteTrigger.waitFor({ state: "visible", timeout: 10000 });
+      await deleteTrigger.click();
+
+      const deleteDialog = page.getByRole("dialog").filter({ hasText: "Delete Persona preset?" });
+      await deleteDialog.waitFor({ state: "visible", timeout: 10000 });
+      expect(await deleteDialog.getByText(/Model bindings to this preset will be removed/).isVisible()).toBe(true);
+
+      await deleteDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await deleteDialog.waitFor({ state: "detached", timeout: 5000 });
+      await page.waitForFunction(() => document.activeElement?.id === "persona-delete-preset");
+      expect(await deleteTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
+
+      const verifyResponse = await fetch(baseURL + "/api/persona/presets", {
+        headers: { Cookie: adminCookie, Origin: baseURL },
+      });
+      expect(verifyResponse.status).toBe(200);
+      const verifyBody = await verifyResponse.json();
+      expect(verifyBody.presets.some((preset: { id: string }) => preset.id === presetId)).toBe(true);
+    } finally {
+      await fetch(baseURL + "/api/persona/presets/" + encodeURIComponent(presetId), {
+        method: "DELETE",
+        headers: { Cookie: adminCookie, Origin: baseURL },
+      });
+    }
+  }, 15000);
+
   it("navigates to Tunnel & Daemon and verifies status cards", async () => {
     const { page } = dashboard;
 
