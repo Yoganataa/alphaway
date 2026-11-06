@@ -905,7 +905,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
         enabled: true,
       }),
     });
-    expect(providerResponse.status).toBe(201);
+    expect(providerResponse.status).toBe(200);
 
     try {
       await page.getByRole("button", { name: "Providers" }).click();
