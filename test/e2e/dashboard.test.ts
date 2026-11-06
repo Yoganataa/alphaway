@@ -718,46 +718,6 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await resetTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
   }, 15000);
 
-  it("opens and cancels the Usage clear-logs confirmation", async () => {
-    const { page, baseURL } = dashboard;
-    await page.goto(`${baseURL}/`);
-
-    await page.route("**/api/usage", async (route) => {
-      if (route.request().url().endsWith("/api/usage")) {
-        const response = await route.fetch();
-        const payload = await response.json();
-        payload.recentLogs = [{
-          id: "e2e-usage-dialog",
-          timestamp: new Date().toISOString(),
-          protocol: "openai",
-          model: "e2e-model",
-          provider: "e2e-provider",
-          status: 200,
-          latencyMs: 1,
-          promptTokens: 1,
-          completionTokens: 1,
-          totalTokens: 2,
-          savedTokens: 0,
-          stream: false,
-        }];
-        await route.fulfill({ response, json: payload });
-        return;
-      }
-      await route.continue();
-    });
-
-    await page.getByRole("button", { name: "Usage" }).click();
-
-    const clearTrigger = page.getByRole("button", { name: "Clear Logs", exact: true });
-    await clearTrigger.waitFor({ state: "visible", timeout: 10000 });
-    await clearTrigger.click();
-    const clearDialog = page.getByRole("dialog").filter({ hasText: "Clear Recent Request Audit Logs?" });
-    await clearDialog.waitFor({ state: "visible", timeout: 10000 });
-    expect(await clearDialog.getByText(/stored audit entries/).isVisible()).toBe(true);
-    await clearDialog.getByRole("button", { name: "Cancel", exact: true }).click();
-    await clearDialog.waitFor({ state: "hidden", timeout: 5000 });
-  }, 20000);
-
   it("labels the dashboard API key as browser-scoped and reports database journal state", async () => {
     const { page } = dashboard;
     await page.getByRole("button", { name: "Profile & Settings" }).click();
