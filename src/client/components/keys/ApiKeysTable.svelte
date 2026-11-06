@@ -228,7 +228,7 @@
                   <Button variant="ghost" size="xs" onclick={() => openRename(key)} title="Rename key" ariaLabel={"Rename " + key.name}>
                     <span class="material-symbols-outlined text-[14px]">edit</span>
                   </Button>
-                  <Button variant="ghost" size="xs" onclick={() => openRotateConfirmation(key)} title="Rotate key">
+                  <Button variant="ghost" size="xs" onclick={() => openRotateConfirmation(key)} title="Rotate key" ariaLabel={"Rotate " + key.name}>
                     <span class="material-symbols-outlined text-[14px]">autorenew</span>
                   </Button>
                   <Button variant="ghost" size="xs" class="text-red-400 hover:text-red-300" onclick={() => revokeKey = key} title="Revoke key" ariaLabel={"Revoke " + key.name}>
