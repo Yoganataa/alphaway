@@ -723,6 +723,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
   it("opens managed API key rename and revoke dialogs without native prompts", async () => {
     const { page, baseURL, adminCookie } = dashboard;
+    const dialogPage = await dialogPage.context().newPage();
     const keyName = "API Key Dialog Parity";
     const response = await fetch(baseURL + "/api/keys", {
       method: "POST",
@@ -737,19 +738,19 @@ describe("AlphaWay Web Dashboard E2E", () => {
     const key = (await response.json()).key;
 
     try {
-      await page.getByRole("button", { name: "Endpoint" }).click();
-      const row = page.getByRole("row").filter({ hasText: keyName });
+      await dialogPage.getByRole("button", { name: "Endpoint" }).click();
+      const row = dialogPage.getByRole("row").filter({ hasText: keyName });
       await row.waitFor({ state: "visible", timeout: 10000 });
 
       await row.getByRole("button", { name: "Rename " + keyName }).click();
-      const renameDialog = page.getByRole("dialog").filter({ hasText: "Rename API Key" });
+      const renameDialog = dialogPage.getByRole("dialog").filter({ hasText: "Rename API Key" });
       await renameDialog.waitFor({ state: "visible", timeout: 10000 });
       expect(await renameDialog.locator("#rename-api-key").inputValue()).toBe(keyName);
       await renameDialog.getByRole("button", { name: "Cancel", exact: true }).click();
       await renameDialog.waitFor({ state: "detached", timeout: 5000 });
 
       await row.getByRole("button", { name: "Revoke " + keyName }).click();
-      const revokeDialog = page.getByRole("dialog").filter({ hasText: "Revoke API Key?" });
+      const revokeDialog = dialogPage.getByRole("dialog").filter({ hasText: "Revoke API Key?" });
       await revokeDialog.waitFor({ state: "visible", timeout: 10000 });
       expect(await revokeDialog.getByText(/lose access immediately/).isVisible()).toBe(true);
       await revokeDialog.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -759,7 +760,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
         method: "DELETE",
         headers: { Cookie: adminCookie, Origin: baseURL },
       });
-      await page.goto(baseURL + "/");
+      await dialogPage.goto(baseURL + "/");
     }
   }, 15000);
 
