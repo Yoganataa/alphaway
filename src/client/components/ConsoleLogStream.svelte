@@ -3,6 +3,7 @@
   import Card from "../lib/ui/Card.svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
+  import ConfirmModal from "../lib/ui/ConfirmModal.svelte";
   import Toggle from "../lib/ui/Toggle.svelte";
   import { fetchConsoleLogs, clearConsoleLogs, type ConsoleLogItem } from "../lib/api";
   import { notifications } from "../lib/notifications";
@@ -20,6 +21,8 @@
   let followScroll = $state(true);
   let pollHandle: any = null;
   let logViewport = $state<HTMLDivElement | null>(null);
+  let clearConfirmationOpen = $state(false);
+  let clearing = $state(false);
 
   function formatUpdateTime(timestamp: number): string {
     return new Date(timestamp).toLocaleTimeString();
@@ -98,14 +101,22 @@
     notifications.success("Downloaded log export");
   }
 
-  async function handleClear() {
-    if (!confirm("Clear server console log buffer?")) return;
+  function openClearConfirmation() {
+    clearConfirmationOpen = true;
+  }
+
+  async function confirmClear() {
+    if (clearing) return;
+    clearing = true;
     try {
       await clearConsoleLogs();
       entries = [];
+      clearConfirmationOpen = false;
       notifications.info("Console buffer cleared");
     } catch {
       notifications.error("Failed to clear console logs");
+    } finally {
+      clearing = false;
     }
   }
 </script>
@@ -133,7 +144,7 @@
           <span class="material-symbols-outlined text-[14px]">download</span>
           <span>Export</span>
         </Button>
-        <Button variant="ghost" size="xs" class="text-red-400" onclick={handleClear}>
+        <Button variant="ghost" size="xs" class="text-red-400" onclick={openClearConfirmation}>
           <span class="material-symbols-outlined text-[14px]">delete</span>
           <span>Clear</span>
         </Button>
@@ -300,3 +311,14 @@
     </div>
   </Card>
 </div>
+
+
+<ConfirmModal
+  isOpen={clearConfirmationOpen}
+  title="Clear Server Console Log Buffer?"
+  message="Clear all currently buffered server console events? This does not change persisted configuration or historical gateway data."
+  confirmLabel={clearing ? "Clearing…" : "Clear Buffer"}
+  danger={true}
+  onConfirm={() => void confirmClear()}
+  onClose={() => { if (!clearing) clearConfirmationOpen = false; }}
+/>
