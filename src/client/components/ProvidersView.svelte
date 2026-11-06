@@ -3,6 +3,7 @@
   import Card from "../lib/ui/Card.svelte";
   import Badge from "../lib/ui/Badge.svelte";
   import Button from "../lib/ui/Button.svelte";
+  import ConfirmModal from "../lib/ui/ConfirmModal.svelte";
   import {
     fetchHealth,
     fetchModels,
@@ -31,6 +32,7 @@
   let providersLastLoadedAt = $state<number | null>(null);
   let providersRefreshInFlight = false;
   let providerMutating = $state(false);
+  let deleteProviderTarget = $state<CustomProviderConfig | null>(null);
   let oauthData = $state<CodeBuddyOAuthStart | null>(null);
   let oauthPolling = $state<boolean>(false);
   let oauthStatusText = $state<string | null>(null);
@@ -315,15 +317,21 @@
     }
   }
 
-  async function handleDelete(id: string) {
+  function openDeleteConfirmation(provider: CustomProviderConfig) {
     if (providerWritesBlocked()) return;
-    if (!confirm(`Are you sure you want to delete custom provider "${id}"?`)) return;
+    deleteProviderTarget = provider;
+  }
+
+  async function confirmDeleteProvider() {
+    const provider = deleteProviderTarget;
+    if (!provider || providerWritesBlocked()) return;
     providerMutating = true;
     try {
-      await deleteCustomProvider(id);
+      await deleteCustomProvider(provider.id);
       const refreshed = await loadCustomProviders();
       if (refreshed) notifications.success("Custom provider deleted");
       else notifications.warning("Provider was deleted, but its list could not be refreshed. Retry loading Providers.");
+      deleteProviderTarget = null;
     } catch (err: any) {
       notifications.error(err.message || "Failed to delete custom provider");
     } finally {
@@ -658,7 +666,7 @@
                   <span class="material-symbols-outlined text-[16px]">edit</span>
                   <span>Edit</span>
                 </Button>
-                <Button id={`providers-delete-${p.id}`} variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={() => handleDelete(p.id)} disabled={providerWritesBlocked()} title="Delete custom provider">
+                <Button id={`providers-delete-${p.id}`} variant="ghost" size="sm" class="text-rose-400 hover:text-rose-300" onclick={() => openDeleteConfirmation(p)} disabled={providerWritesBlocked()} title="Delete custom provider" ariaLabel={"Delete " + p.name}>
                   <span class="material-symbols-outlined text-[16px]">delete</span>
                 </Button>
               </div>
@@ -669,6 +677,16 @@
     </div>
   </Card>
 </div>
+
+<ConfirmModal
+  isOpen={deleteProviderTarget !== null}
+  title="Delete Custom Provider?"
+  message={deleteProviderTarget ? `Delete custom provider "${deleteProviderTarget.id}"? Its saved credentials and configuration will be removed.` : ""}
+  confirmLabel={providerMutating ? "Deleting…" : "Delete Provider"}
+  danger={true}
+  onConfirm={() => void confirmDeleteProvider()}
+  onClose={() => { if (!providerMutating) deleteProviderTarget = null; }}
+/>
 
 <!-- Modal Form for Add/Edit Provider -->
 {#if showProviderModal}
