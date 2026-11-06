@@ -734,24 +734,32 @@ describe("AlphaWay Web Dashboard E2E", () => {
       body: JSON.stringify({ name: keyName }),
     });
     expect(response.status).toBe(201);
+    const key = (await response.json()).key;
 
-    await page.getByRole("button", { name: "Endpoint" }).click();
-    const row = page.getByRole("row").filter({ hasText: keyName });
-    await row.waitFor({ state: "visible", timeout: 10000 });
+    try {
+      await page.getByRole("button", { name: "Endpoint" }).click();
+      const row = page.getByRole("row").filter({ hasText: keyName });
+      await row.waitFor({ state: "visible", timeout: 10000 });
 
-    await row.getByRole("button", { name: "Rename " + keyName }).click();
-    const renameDialog = page.getByRole("dialog").filter({ hasText: "Rename API Key" });
-    await renameDialog.waitFor({ state: "visible", timeout: 10000 });
-    expect(await renameDialog.locator("#rename-api-key").inputValue()).toBe(keyName);
-    await renameDialog.getByRole("button", { name: "Cancel", exact: true }).click();
-    await renameDialog.waitFor({ state: "detached", timeout: 5000 });
+      await row.getByRole("button", { name: "Rename " + keyName }).click();
+      const renameDialog = page.getByRole("dialog").filter({ hasText: "Rename API Key" });
+      await renameDialog.waitFor({ state: "visible", timeout: 10000 });
+      expect(await renameDialog.locator("#rename-api-key").inputValue()).toBe(keyName);
+      await renameDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await renameDialog.waitFor({ state: "detached", timeout: 5000 });
 
-    await row.getByRole("button", { name: "Revoke " + keyName }).click();
-    const revokeDialog = page.getByRole("dialog").filter({ hasText: "Revoke API Key?" });
-    await revokeDialog.waitFor({ state: "visible", timeout: 10000 });
-    expect(await revokeDialog.getByText(/lose access immediately/).isVisible()).toBe(true);
-    await revokeDialog.getByRole("button", { name: "Cancel", exact: true }).click();
-    await revokeDialog.waitFor({ state: "detached", timeout: 5000 });
+      await row.getByRole("button", { name: "Revoke " + keyName }).click();
+      const revokeDialog = page.getByRole("dialog").filter({ hasText: "Revoke API Key?" });
+      await revokeDialog.waitFor({ state: "visible", timeout: 10000 });
+      expect(await revokeDialog.getByText(/lose access immediately/).isVisible()).toBe(true);
+      await revokeDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await revokeDialog.waitFor({ state: "detached", timeout: 5000 });
+    } finally {
+      await fetch(baseURL + "/api/keys/" + key.id, {
+        method: "DELETE",
+        headers: { Cookie: adminCookie, Origin: baseURL },
+      });
+    }
   }, 15000);
 
   it("shows an inherited Plan quota for a managed API key in the dashboard", async () => {
