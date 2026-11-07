@@ -138,7 +138,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await plansOption.waitFor({ state: "visible", timeout: 10000 });
     expect(await plansOption.getAttribute("aria-selected")).toBe("true");
     await search.press("Enter");
-    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("main").getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     // Backend-gap pages must not appear as working navigation commands.
     await page.keyboard.press("Control+k");
@@ -157,6 +157,25 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await reopenedSearch.press("Enter");
     await page.getByText("Egress Proxy Configuration", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
   }, 20000);
+
+  it("renders TopBar route metadata with the reference dashboard shell hierarchy", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    const header = page.locator("header");
+    const title = header.locator("h1");
+    const icon = header.locator(".material-symbols-outlined").nth(1);
+    const search = header.getByRole("button", { name: "Open search" });
+
+    expect(await title.textContent()).toContain("Endpoint & Key");
+    expect(await icon.textContent()).toBe("hub");
+    expect(await search.isVisible()).toBe(true);
+    expect(await search.getAttribute("title")).toContain("Ctrl+K");
+
+    await page.getByRole("button", { name: "Usage" }).click();
+    await page.waitForFunction(() => document.querySelector("header h1")?.textContent?.includes("Usage") ?? false);
+    expect(await icon.textContent()).toBe("monitoring");
+  }, 15000);
 
   it("keeps TopBar titles aligned with implemented navigation labels", async () => {
     const { page, baseURL } = dashboard;
@@ -260,7 +279,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     });
 
     const headerTitle = await page.textContent("header h1");
-    expect(headerTitle).toContain("AlphaWay");
+    expect(headerTitle).toContain("Endpoint & Key");
 
     await page.locator("header").getByText(new URL(baseURL).host, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     await page.locator("header").getByText(health.tls, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
@@ -1033,7 +1052,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.getByText("Recorded usage (Last 7 days)", { exact: true }).waitFor({ state: "visible" });
 
     await page.getByRole("button", { name: "Plans" }).click();
-    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("main").getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
     await page.getByRole("heading", { name: planName }).waitFor({ state: "visible", timeout: 10000 });
     const mainText = await page.textContent("main");
     expect(mainText).toContain("Plans");
@@ -1103,7 +1122,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
   it("creates, edits, and deletes a Plan through the dashboard UI", async () => {
     const { page } = dashboard;
     await page.getByRole("button", { name: "Plans" }).click();
-    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("main").getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     const originalName = "Phase 3 UI Lifecycle";
     const editedName = "Phase 3 UI Lifecycle Edited";
