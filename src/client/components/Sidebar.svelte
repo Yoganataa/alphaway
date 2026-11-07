@@ -53,6 +53,15 @@
     const mobileQuery = window.matchMedia("(max-width: 767px)");
     const syncViewport = () => {
       isMobileViewport = mobileQuery.matches;
+      if (isMobileViewport) {
+        isIconRail = false;
+      } else {
+        try {
+          isIconRail = localStorage.getItem(iconRailStorageKey) === "true";
+        } catch {
+          isIconRail = false;
+        }
+      }
       if (!isMobileViewport && isMobileOpen) onCloseMobile?.();
     };
 
@@ -253,6 +262,7 @@
               <button
                 type="button"
                 onclick={() => selectTab(item.id)}
+                title={isIconRail ? item.label : undefined}
                 class="w-full flex items-center justify-between {isIconRail ? 'justify-center px-2' : 'px-3'} py-2 rounded-[10px] text-sm font-medium transition-all duration-150 cursor-pointer {isActive
                   ? 'bg-brand-500/10 text-brand-500 dark:text-brand-400 border border-brand-500/30 font-semibold shadow-xs'
                   : 'text-text-muted hover:text-text-main hover:bg-surface-2 border border-transparent'}"
