@@ -164,7 +164,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     const header = page.locator("header");
     const title = header.locator("h1");
-    const icon = title.locator("xpath=../preceding-sibling::span[1]");
+    const icon = header.locator(".material-symbols-outlined").nth(1);
     const search = header.getByRole("button", { name: "Open search" });
 
     expect(await title.textContent()).toContain("Endpoint & Key");
