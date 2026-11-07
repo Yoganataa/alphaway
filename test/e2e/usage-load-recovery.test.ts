@@ -242,7 +242,7 @@ describe("Usage aggregate load recovery", () => {
       await reset.click();
       const resetDialog = page.getByRole("dialog").filter({ hasText: "Reset All Usage Statistics?" });
       await resetDialog.waitFor({ state: "visible", timeout: 5000 });
-      await resetDialog.getByRole("button", { name: "Reset Statistics", exact: true }).click();
+      await resetDialog.getByRole("button", { name: "Reset Stats", exact: true }).click();
       await loadError.waitFor({ state: "visible", timeout: 10000 });
       expect(await loadError.textContent()).toContain("Reset failed:");
       expect(await loadError.textContent()).toContain("Temporary usage mutation failure");
