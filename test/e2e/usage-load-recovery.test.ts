@@ -245,7 +245,7 @@ describe("Usage aggregate load recovery", () => {
       await resetDialog.getByRole("button", { name: "Reset Stats", exact: true }).click();
       await loadError.waitFor({ state: "visible", timeout: 10000 });
       expect(await loadError.textContent()).toContain("Reset failed:");
-      expect(await loadError.textContent()).toContain("Temporary usage mutation failure");
+      expect(await loadError.textContent()).toContain("Failed to reset usage: Service Unavailable");
       expect(writes).toBe(1);
     } finally {
       releaseRefresh();
