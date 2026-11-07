@@ -803,6 +803,23 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await resetTrigger.evaluate((element) => element === document.activeElement)).toBe(true);
   }, 20000);
 
+  it("keeps CSV export unavailable when the recorded audit log is empty", async () => {
+    const { page, baseURL } = dashboard;
+    await page.route("**/api/usage", async (route) => {
+      const response = await route.fetch();
+      const payload = await response.json();
+      payload.recentLogs = [];
+      await route.fulfill({ response, json: payload });
+    });
+
+    await page.goto(baseURL + "/");
+    await page.getByRole("button", { name: "Usage" }).click();
+
+    const exportButton = page.getByRole("button", { name: "Export CSV", exact: true });
+    await exportButton.waitFor({ state: "visible", timeout: 10000 });
+    expect(await exportButton.isDisabled()).toBe(true);
+  }, 15000);
+
   it("opens and cancels the Usage reset confirmation", async () => {
     const { page, baseURL } = dashboard;
     await page.goto(`${baseURL}/`);
