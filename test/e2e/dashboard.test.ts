@@ -1052,7 +1052,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.getByText("Recorded usage (Last 7 days)", { exact: true }).waitFor({ state: "visible" });
 
     await page.getByRole("button", { name: "Plans" }).click();
-    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("main").getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
     await page.getByRole("heading", { name: planName }).waitFor({ state: "visible", timeout: 10000 });
     const mainText = await page.textContent("main");
     expect(mainText).toContain("Plans");
@@ -1122,7 +1122,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
   it("creates, edits, and deletes a Plan through the dashboard UI", async () => {
     const { page } = dashboard;
     await page.getByRole("button", { name: "Plans" }).click();
-    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("main").getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     const originalName = "Phase 3 UI Lifecycle";
     const editedName = "Phase 3 UI Lifecycle Edited";
