@@ -573,6 +573,22 @@ describe("AlphaWay Web Dashboard E2E", () => {
   it("navigates to Usage and keeps chart-window scope distinct from lifetime summaries", async () => {
     const { page } = dashboard;
 
+    await page.route("**/api/usage/chart**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("period") === "7d") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            { label: "Nov 6", tokens: 1000, cost: 0.1234, byModel: { "gpt-4o": 700, "claude-3.5": 300 } },
+            { label: "Nov 7", tokens: 2000, cost: 0.2468, byModel: { "gpt-4o": 1500, "claude-3.5": 500 } },
+          ]),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
     const initialChartRequest = page.waitForRequest((request) =>
       request.url().includes("/api/usage/chart?period=7d")
     );
@@ -631,6 +647,8 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await tooltip.textContent()).toContain("Total ingested:");
     expect(await tooltip.textContent()).toContain("$");
     expect(await page.getByText(/Peak: \$/).isVisible()).toBe(true);
+
+    await page.unroute("**/api/usage/chart**");
   }, 20000);
 
   it("opens and cancels the Persona preset delete confirmation", async () => {
