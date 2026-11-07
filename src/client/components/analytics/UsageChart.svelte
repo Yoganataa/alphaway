@@ -35,6 +35,15 @@
     return n.toLocaleString();
   }
 
+  function fmtMetric(value: number | undefined): string {
+    if (viewMode === "cost") return `${(value ?? 0).toFixed(4)}`;
+    return `${fmtTokens(value)} tokens`;
+  }
+
+  function metricLabel(): string {
+    return viewMode === "cost" ? "Estimated savings" : "Total ingested";
+  }
+
   interface Series {
     family: string;
     color: string;
@@ -94,23 +103,32 @@
 
   const keptFamilies = $derived(families.slice(0, MAX_SERIES).map((s) => s.family));
 
-  // Per-bucket stack: cumulative height of each series
+  // Per-bucket stack: cumulative height of each series.
+  // Cost mode uses the existing bucket-level estimated savings and allocates it
+  // proportionally by token share so the chart never invents per-family pricing.
   const stack = $derived(
     buckets.map((b) => {
-      const values = families.map((s) =>
+      const tokenValues = families.map((s) =>
         s.family === "other"
           ? Object.entries(b.byModel || {})
               .filter(([family]) => !keptFamilies.includes(family))
               .reduce((sum, [, t]) => sum + (t || 0), 0)
           : b.byModel?.[s.family] || 0
       );
+      const totalTokens = tokenValues.reduce((sum, value) => sum + value, 0);
+      const bucketCost = b.cost ?? 0;
+      const values =
+        viewMode === "cost"
+          ? tokenValues.map((value) => (totalTokens > 0 ? (bucketCost * value) / totalTokens : 0))
+          : tokenValues;
+
       const cumulative: number[] = [];
       let acc = 0;
       for (const v of values) {
         acc += v;
         cumulative.push(acc);
       }
-      return { bucket: b, cumulative, total: acc };
+      return { bucket: b, cumulative, total: acc, tokenTotal: totalTokens };
     })
   );
 
@@ -165,10 +183,10 @@
     <div>
       <div class="flex items-center gap-2">
         <span class="material-symbols-outlined text-[18px] text-brand-400">stacked_line_chart</span>
-        <h3 class="font-bold text-text-main text-sm">Token Ingestion Trends</h3>
+        <h3 class="font-bold text-text-main text-sm">{viewMode === "cost" ? "Estimated Savings Trends" : "Token Ingestion Trends"}</h3>
       </div>
       <p class="text-[11px] text-text-muted">
-        {hourly ? "Hourly" : "Daily"} breakdown by model family · Period: <span class="uppercase font-mono font-bold text-text-main">{period}</span>
+        {hourly ? "Hourly" : "Daily"} {viewMode === "cost" ? "estimated savings" : "token"} breakdown by model family · Period: <span class="uppercase font-mono font-bold text-text-main">{period}</span>
       </p>
     </div>
 
@@ -245,7 +263,7 @@
           <rect
             role="button"
             tabindex={i === focusedPoint ? 0 : -1}
-            aria-label="{stack[i].bucket.label}: {fmtTokens(stack[i].bucket.tokens)} tokens"
+            aria-label="{stack[i].bucket.label}: {fmtMetric(stack[i].total)}"
             x={xAt(i) - step / 2}
             y="0"
             width={step}
@@ -299,12 +317,14 @@
 
           <div class="mt-2 space-y-1.5">
             <div class="flex items-center justify-between gap-4 font-mono">
-              <span class="text-text-muted">Total Ingested:</span>
-              <span class="font-bold text-brand-400">{fmtTokens(stack[hovered].bucket.tokens)} tokens</span>
+              <span class="text-text-muted">{metricLabel()}:</span>
+              <span class="font-bold {viewMode === "cost" ? "text-amber-400" : "text-brand-400"}">{fmtMetric(stack[hovered].total)}</span>
             </div>
             <div class="flex items-center justify-between gap-4 font-mono">
-              <span class="text-text-muted">Est. Saved:</span>
-              <span class="font-bold text-amber-400">${(stack[hovered].bucket.cost ?? 0).toFixed(4)}</span>
+              <span class="text-text-muted">{viewMode === "cost" ? "Total ingested:" : "Est. saved:"}</span>
+              <span class="font-bold {viewMode === "cost" ? "text-brand-400" : "text-amber-400"}">
+                {viewMode === "cost" ? fmtTokens(stack[hovered].bucket.tokens) + " tokens" : "$" + (stack[hovered].bucket.cost ?? 0).toFixed(4)}
+              </span>
             </div>
 
             {#if families.length > 0}
@@ -317,7 +337,7 @@
                         <span class="w-2 h-2 rounded-full shrink-0" style="background: {s.color}"></span>
                         <span class="truncate">{s.family}</span>
                       </span>
-                      <span class="font-semibold text-text-main">{fmtTokens(val)}</span>
+                      <span class="font-semibold text-text-main">{fmtMetric(val)}</span>
                     </div>
                   {/if}
                 {/each}
@@ -337,7 +357,7 @@
         </span>
       {/each}
       <span class="ml-auto font-mono text-[11px] text-text-main font-semibold bg-surface-2 px-2 py-0.5 rounded border border-border-subtle">
-        Peak: {fmtTokens(maxTotal)} tokens
+        Peak: {fmtMetric(maxTotal)}
       </span>
     </div>
 
