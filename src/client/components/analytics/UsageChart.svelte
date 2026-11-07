@@ -36,7 +36,7 @@
   }
 
   function fmtMetric(value: number | undefined): string {
-    if (viewMode === "cost") return `${(value ?? 0).toFixed(4)}`;
+    if (viewMode === "cost") return String.fromCharCode(36) + (value ?? 0).toFixed(4);
     return `${fmtTokens(value)} tokens`;
   }
 
