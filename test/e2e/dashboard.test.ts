@@ -138,7 +138,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await plansOption.waitFor({ state: "visible", timeout: 10000 });
     expect(await plansOption.getAttribute("aria-selected")).toBe("true");
     await search.press("Enter");
-    await page.getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("main").getByRole("heading", { name: "Plans", exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     // Backend-gap pages must not appear as working navigation commands.
     await page.keyboard.press("Control+k");
@@ -164,7 +164,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
 
     const header = page.locator("header");
     const title = header.locator("h1");
-    const icon = header.locator(".material-symbols-outlined").first();
+    const icon = title.locator("xpath=..").locator(".material-symbols-outlined");
     const search = header.getByRole("button", { name: "Open search" });
 
     expect(await title.textContent()).toContain("Endpoint & Key");
@@ -279,7 +279,7 @@ describe("AlphaWay Web Dashboard E2E", () => {
     });
 
     const headerTitle = await page.textContent("header h1");
-    expect(headerTitle).toContain("AlphaWay");
+    expect(headerTitle).toContain("Endpoint & Key");
 
     await page.locator("header").getByText(new URL(baseURL).host, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     await page.locator("header").getByText(health.tls, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
