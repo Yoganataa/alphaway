@@ -92,17 +92,17 @@
       if (action === "reset") {
         await resetUsageStats();
         if (!await loadData()) {
-          alert("Usage statistics were reset, but the refreshed view could not be loaded. Retry the Usage refresh.");
+          error = "Usage statistics were reset, but the refreshed view could not be loaded. Retry the Usage refresh.";
         }
       } else {
         await clearRecentLogs();
         if (!await loadData()) {
-          alert("Recent logs were cleared, but the refreshed view could not be loaded. Retry the Usage refresh.");
+          error = "Recent logs were cleared, but the refreshed view could not be loaded. Retry the Usage refresh.";
         }
       }
       confirmationAction = null;
     } catch (reason) {
-      alert(`${action === "reset" ? "Reset" : "Clear logs"} failed: ${getErrorMessage(reason, "Unknown error")}`);
+      error = `${action === "reset" ? "Reset" : "Clear logs"} failed: ${getErrorMessage(reason, "Unknown error")}`;
     } finally {
       mutating = false;
     }
