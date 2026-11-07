@@ -153,8 +153,8 @@
 </script>
 
 <header class="h-16 shrink-0 border-b border-border-subtle bg-sidebar/90 backdrop-blur-[2px] px-4 md:px-8 flex items-center justify-between z-20 sticky top-0">
-  <!-- Left Side: Mobile Menu Button + View Title & Subtitle -->
-  <div class="flex items-center gap-3 min-w-0">
+  <!-- Left: mobile navigation + route icon/title/description -->
+  <div class="flex items-center gap-3 min-w-0 flex-1">
     <!-- Mobile hamburger button -->
     {#if onToggleMobileMenu}
       <button
@@ -170,37 +170,35 @@
       </button>
     {/if}
 
-    <div class="flex flex-col min-w-0">
-      <div class="flex items-center gap-2.5">
-        <h1 class="text-sm md:text-base font-bold text-text-main tracking-tight truncate flex items-center gap-1.5">
-          <span class="text-brand-500 font-mono text-xs md:text-sm">AlphaWay</span>
-          <span class="text-text-subtle">&middot;</span>
-          <span>{currentMeta.title}</span>
-        </h1>
-        <Badge tone={health?.tls ? "neutral" : "warning"} size="sm" dot>{health?.tls || "TLS profile unavailable"}</Badge>
-        <span class="text-xs font-mono text-text-subtle hidden sm:inline">{currentHost}</span>
+    <div class="flex items-center gap-2.5 min-w-0">
+      <span class="material-symbols-outlined text-brand-500 text-xl md:text-2xl shrink-0" aria-hidden="true">{currentMeta.icon}</span>
+      <div class="min-w-0">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <h1 class="text-sm md:text-base font-bold text-text-main tracking-tight truncate">{currentMeta.title}</h1>
+          <Badge tone={health?.tls ? "neutral" : "warning"} size="sm" dot>{health?.tls || "TLS profile unavailable"}</Badge>
+          <span class="text-xs font-mono text-text-subtle hidden lg:inline truncate">{currentHost}</span>
+        </div>
+        <p class="text-xs text-text-muted truncate mt-0.5 hidden sm:block">
+          {currentMeta.subtitle}
+        </p>
       </div>
-      <p class="text-xs text-text-muted truncate mt-0.5 hidden sm:block">
-        {currentMeta.subtitle}
-      </p>
     </div>
   </div>
 
   <!-- Right Actions: Global Search, Quick Copy, Theme Toggle, Refresh -->
   <div class="flex items-center gap-2 shrink-0">
-    <!-- Command Palette Quick Launcher -->
+    <!-- Command Palette launcher -->
     {#if onOpenSearch}
       <button
         type="button"
         onclick={onOpenSearch}
-        class="flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] bg-surface hover:bg-surface-2 border border-border-subtle text-xs text-text-muted hover:text-text-main transition-colors cursor-pointer"
-        title="Open Command Palette (Ctrl+K)"
+        aria-label="Open search"
+        class="flex items-center gap-1.5 rounded-[8px] border border-border-subtle bg-surface-2 px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:border-brand-500/40 hover:text-text-main cursor-pointer"
+        title="Search models, providers, pages and settings (Ctrl+K)"
       >
-        <span class="material-symbols-outlined text-[16px] text-brand-500">search</span>
-        <span class="hidden md:inline text-xs">Search</span>
-        <kbd class="hidden md:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-2 border border-border-subtle text-text-subtle">
-          Ctrl K
-        </kbd>
+        <span class="material-symbols-outlined text-[16px]">search</span>
+        <span class="hidden sm:inline">Search</span>
+        <kbd class="hidden lg:inline rounded border border-border-subtle bg-bg px-1 font-mono text-[10px] text-text-subtle">Ctrl K</kbd>
       </button>
     {/if}
 
