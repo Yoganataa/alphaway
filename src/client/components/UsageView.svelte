@@ -114,7 +114,7 @@
 
   function exportCsv() {
     if (!stats?.recentLogs?.length) {
-      alert("No logs available to export.");
+      notifications.warning("No logs are available to export.", "Usage export");
       return;
     }
     const headers = [
