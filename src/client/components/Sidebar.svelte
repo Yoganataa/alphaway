@@ -19,7 +19,9 @@
   let currentHost = $state("Current host");
   let isMobileViewport = $state(false);
   let collapsedSections = $state<Set<string>>(new Set());
+  let isIconRail = $state(false);
   const collapsedSectionsStorageKey = "alphaway-sidebar-collapsed-sections";
+  const iconRailStorageKey = "alphaway-sidebar-icon-rail";
   let mobileCloseButton = $state<HTMLButtonElement | null>(null);
   const healthAvailable = $derived(health?.status === "ok");
   const localGateStatus = $derived(health?.identity?.gate?.status ?? "unknown");
@@ -30,6 +32,9 @@
     currentHost = window.location.host;
 
     try {
+      const iconRailRaw = localStorage.getItem(iconRailStorageKey);
+      if (iconRailRaw === "true") isIconRail = true;
+
       const raw = localStorage.getItem(collapsedSectionsStorageKey);
       if (raw) {
         const stored: unknown = JSON.parse(raw);
@@ -124,10 +129,19 @@
       );
       return {
         ...section,
-        isOpen: containsActiveTab || !collapsedSections.has(section.id),
+        isOpen: isIconRail || containsActiveTab || !collapsedSections.has(section.id),
       };
     })
   );
+
+  function toggleIconRail() {
+    isIconRail = !isIconRail;
+    try {
+      localStorage.setItem(iconRailStorageKey, String(isIconRail));
+    } catch {
+      // Storage-restricted browsers still get the session state.
+    }
+  }
 
   function toggleSection(sectionId: string) {
     const next = new Set(collapsedSections);
@@ -163,13 +177,13 @@
   aria-label="Primary navigation"
   aria-hidden={isMobileViewport && !isMobileOpen ? "true" : undefined}
   inert={isMobileViewport && !isMobileOpen}
-  class="w-64 shrink-0 bg-sidebar border-r border-border-subtle flex flex-col h-screen fixed md:sticky top-0 select-none z-50 transition-transform duration-200 {isMobileOpen
+  class="{isIconRail ? 'w-14' : 'w-64'} shrink-0 bg-sidebar border-r border-border-subtle flex flex-col h-screen fixed md:sticky top-0 select-none z-50 transition-all duration-200 {isMobileOpen
     ? 'translate-x-0'
     : '-translate-x-full md:translate-x-0'}"
 >
   <!-- macOS window control / traffic lights (9router-go style) -->
   <div class="flex items-center justify-between px-5 pt-4 pb-1 shrink-0">
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 {isIconRail ? 'hidden' : ''}">
       <div class="w-2.5 h-2.5 rounded-full bg-[#FF5F56] shadow-xs"></div>
       <div class="w-2.5 h-2.5 rounded-full bg-[#FFBD2E] shadow-xs"></div>
       <div class="w-2.5 h-2.5 rounded-full bg-[#27C93F] shadow-xs"></div>
@@ -187,6 +201,11 @@
       </button>
     {/if}
   </div>
+  {#if !isIconRail && !isMobileViewport}
+    <button type="button" onclick={toggleIconRail} aria-label="Collapse sidebar" title="Collapse sidebar" class="mx-5 mb-1 self-end text-text-muted hover:text-text-main p-1 rounded-md hover:bg-surface-2 transition-colors">
+      <span class="material-symbols-outlined text-[18px]">left_panel_close</span>
+    </button>
+  {/if}
 
   <!-- Brand Header -->
   <div class="px-5 py-3.5 border-b border-border-subtle flex items-center justify-between">
@@ -194,7 +213,7 @@
       <div class="w-8 h-8 rounded-[9px] bg-brand-500/15 border border-brand-500/30 flex items-center justify-center text-brand-500 font-mono font-bold text-sm shadow-[var(--shadow-warm)]">
         AW
       </div>
-      <div>
+      <div class="min-w-0 {isIconRail ? 'hidden' : ''}">
         <div class="flex items-center gap-1.5">
           <span class="font-bold text-base text-text-main tracking-tight">AlphaWay</span>
           <span class="w-2 h-2 rounded-full {healthAvailable ? 'bg-emerald-500' : 'bg-zinc-500'}"></span>
@@ -202,11 +221,11 @@
         <p class="text-[11px] text-text-muted font-mono">{health?.version ? `v${health.version}` : "v0.0.1"}</p>
       </div>
     </div>
-    <Badge tone={healthAvailable ? "success" : "neutral"} size="sm" dot>{healthAvailable ? "API RESPONDING" : "UNKNOWN"}</Badge>
+    {#if !isIconRail}<Badge tone={healthAvailable ? "success" : "neutral"} size="sm" dot>{healthAvailable ? "API RESPONDING" : "UNKNOWN"}</Badge>{/if}
   </div>
 
   <!-- Grouped Navigation Menu (9Router-Go Architecture) -->
-  <div class="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
+  <div class="flex-1 py-4 {isIconRail ? 'px-1.5' : 'px-3'} space-y-5 overflow-y-auto">
     {#each renderedSections as section (section.id)}
       <div class="space-y-1" data-nav-section={section.title}>
         <button
@@ -215,7 +234,7 @@
           aria-expanded={section.isOpen}
           aria-controls={`nav-section-${section.id}-items`}
           onclick={() => toggleSection(section.id)}
-          class="w-full flex items-center justify-between px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-subtle hover:text-text-muted transition-colors"
+          class="w-full flex items-center justify-between px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-subtle hover:text-text-muted transition-colors {isIconRail ? 'hidden' : ''}"
         >
           <span>{section.title}</span>
           <span
@@ -234,15 +253,15 @@
               <button
                 type="button"
                 onclick={() => selectTab(item.id)}
-                class="w-full flex items-center justify-between px-3 py-2 rounded-[10px] text-sm font-medium transition-all duration-150 cursor-pointer {isActive
+                class="w-full flex items-center justify-between {isIconRail ? 'justify-center px-2' : 'px-3'} py-2 rounded-[10px] text-sm font-medium transition-all duration-150 cursor-pointer {isActive
                   ? 'bg-brand-500/10 text-brand-500 dark:text-brand-400 border border-brand-500/30 font-semibold shadow-xs'
                   : 'text-text-muted hover:text-text-main hover:bg-surface-2 border border-transparent'}"
               >
                 <div class="flex items-center gap-2.5 min-w-0">
                   <span class="material-symbols-outlined text-[19px] shrink-0 {isActive ? 'text-brand-500 dark:text-brand-400' : 'text-text-muted'}">{item.icon}</span>
-                  <span class="truncate">{item.label}</span>
+                  {#if !isIconRail}<span class="truncate">{item.label}</span>{/if}
                 </div>
-                {#if item.badge}
+                {#if item.badge && !isIconRail}
                   <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-surface border border-border-subtle {isActive ? 'text-brand-500 border-brand-500/30' : 'text-text-subtle'}">
                     {item.badge}
                   </span>
@@ -256,6 +275,7 @@
   </div>
 
   <!-- Runtime metadata reported by the health endpoint -->
+  {#if !isIconRail}
   <div class="p-3 m-3 rounded-[12px] bg-surface border border-border-subtle space-y-1.5 text-xs">
     <div class="flex items-center justify-between gap-3 font-medium text-text-muted">
       <span>TLS profile</span>
@@ -274,6 +294,7 @@
       <span class="text-text-main font-mono text-[11px] text-right break-all">{currentHost}</span>
     </div>
   </div>
+  {/if}
 
   <!-- Sidebar Footer -->
   <div class="p-3.5 border-t border-border-subtle flex items-center justify-between text-xs text-text-subtle">
@@ -284,7 +305,7 @@
       class="hover:text-text-main flex items-center gap-1 transition-colors"
     >
       <span class="material-symbols-outlined text-[16px]">code</span>
-      <span>GitHub</span>
+      {#if !isIconRail}<span>GitHub</span>{/if}
     </a>
     <div class="flex items-center gap-2">
       <a href="/health" target="_blank" class="hover:text-text-main transition-colors font-mono">/health</a>
@@ -292,4 +313,9 @@
       <a href="/v1/models" target="_blank" class="hover:text-text-main transition-colors font-mono">/v1/models</a>
     </div>
   </div>
+  {#if isIconRail && !isMobileViewport}
+    <button type="button" onclick={toggleIconRail} aria-label="Expand sidebar" title="Expand sidebar" class="mx-auto mb-3 text-text-muted hover:text-text-main p-1 rounded-md hover:bg-surface-2 transition-colors">
+      <span class="material-symbols-outlined text-[18px]">left_panel_open</span>
+    </button>
+  {/if}
 </aside>
