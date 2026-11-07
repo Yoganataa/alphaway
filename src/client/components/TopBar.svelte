@@ -175,7 +175,7 @@
       <div class="min-w-0">
         <div class="flex items-center gap-2.5 min-w-0">
           <h1 class="text-sm md:text-base font-bold text-text-main tracking-tight truncate">{currentMeta.title}</h1>
-          <Badge tone={health?.tls ? "neutral" : "warning"} size="sm" dot>{health?.tls || "TLS profile unavailable"}</Badge>
+          <Badge tone={health?.tls ? "neutral" : "warning"} size="sm" dot class="hidden sm:inline-flex">{health?.tls || "TLS profile unavailable"}</Badge>
           <span class="text-xs font-mono text-text-subtle hidden lg:inline truncate">{currentHost}</span>
         </div>
         <p class="text-xs text-text-muted truncate mt-0.5 hidden sm:block">
