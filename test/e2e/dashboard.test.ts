@@ -158,6 +158,25 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.getByText("Egress Proxy Configuration", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
   }, 20000);
 
+  it("renders TopBar route metadata with the reference dashboard shell hierarchy", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(`${baseURL}/`);
+
+    const header = page.locator("header");
+    const title = header.locator("h1");
+    const icon = header.locator(".material-symbols-outlined").first();
+    const search = header.getByRole("button", { name: "Open search" });
+
+    expect(await title.textContent()).toContain("Endpoint & Key");
+    expect(await icon.textContent()).toBe("hub");
+    expect(await search.isVisible()).toBe(true);
+    expect(await search.getAttribute("title")).toContain("Ctrl+K");
+
+    await page.getByRole("button", { name: "Usage" }).click();
+    await page.waitForFunction(() => document.querySelector("header h1")?.textContent?.includes("Usage") ?? false);
+    expect(await icon.textContent()).toBe("monitoring");
+  }, 15000);
+
   it("keeps TopBar titles aligned with implemented navigation labels", async () => {
     const { page, baseURL } = dashboard;
     await page.goto(`${baseURL}/`);
