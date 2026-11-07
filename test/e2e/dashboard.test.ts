@@ -603,6 +603,15 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await range.getByRole("button", { name: "60D", exact: true }).getAttribute("aria-pressed")).toBe("true");
     expect(await range.getByRole("button", { name: "7D", exact: true }).getAttribute("aria-pressed")).toBe("false");
 
+    // Keep the metric-mode regression on the populated default window so the SVG
+    // presentation is exercised even when the 60D fixture is empty.
+    const sevenDayChartRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === "/api/usage/chart" && url.searchParams.get("period") === "7d";
+    });
+    await range.getByRole("button", { name: "7D", exact: true }).click();
+    await sevenDayChartRequest;
+
     const chartMode = page.getByRole("button", { name: "Est. Value", exact: true });
     const tokenMode = page.getByRole("button", { name: "Tokens", exact: true });
     expect(await tokenMode.getAttribute("aria-pressed")).toBe("true");
