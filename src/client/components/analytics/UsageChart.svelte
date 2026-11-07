@@ -318,11 +318,11 @@
           <div class="mt-2 space-y-1.5">
             <div class="flex items-center justify-between gap-4 font-mono">
               <span class="text-text-muted">{metricLabel()}:</span>
-              <span class="font-bold {viewMode === "cost" ? "text-amber-400" : "text-brand-400"}">{fmtMetric(stack[hovered].total)}</span>
+              <span class="font-bold {viewMode === 'cost' ? 'text-amber-400' : 'text-brand-400'}">{fmtMetric(stack[hovered].total)}</span>
             </div>
             <div class="flex items-center justify-between gap-4 font-mono">
               <span class="text-text-muted">{viewMode === "cost" ? "Total ingested:" : "Est. saved:"}</span>
-              <span class="font-bold {viewMode === "cost" ? "text-brand-400" : "text-amber-400"}">
+              <span class="font-bold {viewMode === 'cost' ? 'text-brand-400' : 'text-amber-400'}">
                 {viewMode === "cost" ? fmtTokens(stack[hovered].bucket.tokens) + " tokens" : "$" + (stack[hovered].bucket.cost ?? 0).toFixed(4)}
               </span>
             </div>
