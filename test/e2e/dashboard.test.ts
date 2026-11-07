@@ -573,6 +573,22 @@ describe("AlphaWay Web Dashboard E2E", () => {
   it("navigates to Usage and keeps chart-window scope distinct from lifetime summaries", async () => {
     const { page } = dashboard;
 
+    await page.route("**/api/usage/chart**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("period") === "7d") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            { label: "Nov 6", tokens: 1000, cost: 0.1234, byModel: { "gpt-4o": 700, "claude-3.5": 300 } },
+            { label: "Nov 7", tokens: 2000, cost: 0.2468, byModel: { "gpt-4o": 1500, "claude-3.5": 500 } },
+          ]),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
     const initialChartRequest = page.waitForRequest((request) =>
       request.url().includes("/api/usage/chart?period=7d")
     );
@@ -603,6 +619,15 @@ describe("AlphaWay Web Dashboard E2E", () => {
     expect(await range.getByRole("button", { name: "60D", exact: true }).getAttribute("aria-pressed")).toBe("true");
     expect(await range.getByRole("button", { name: "7D", exact: true }).getAttribute("aria-pressed")).toBe("false");
 
+    // Keep the metric-mode regression on the populated default window so the SVG
+    // presentation is exercised even when the 60D fixture is empty.
+    const sevenDayChartRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === "/api/usage/chart" && url.searchParams.get("period") === "7d";
+    });
+    await range.getByRole("button", { name: "7D", exact: true }).click();
+    await sevenDayChartRequest;
+
     const chartMode = page.getByRole("button", { name: "Est. Value", exact: true });
     const tokenMode = page.getByRole("button", { name: "Tokens", exact: true });
     expect(await tokenMode.getAttribute("aria-pressed")).toBe("true");
@@ -610,6 +635,19 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await chartMode.click();
     expect(await chartMode.getAttribute("aria-pressed")).toBe("true");
     expect(await tokenMode.getAttribute("aria-pressed")).toBe("false");
+
+    // The toggle changes the actual chart metric, not only its pressed state.
+    await page.getByRole("heading", { name: "Estimated Savings Trends", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    const chartPoint = page.locator('svg rect[role="button"]').first();
+    await chartPoint.waitFor({ state: "visible", timeout: 10000 });
+    await chartPoint.hover();
+    const tooltip = page.getByRole("status").filter({ hasText: "Estimated savings:" });
+    await tooltip.waitFor({ state: "visible", timeout: 10000 });
+    expect(await tooltip.textContent()).toContain("Total ingested:");
+    expect(await tooltip.textContent()).toContain("$");
+    expect(await page.getByText(/Peak: \$/).isVisible()).toBe(true);
+
+    await page.unroute("**/api/usage/chart**");
   }, 20000);
 
   it("opens and cancels the Persona preset delete confirmation", async () => {
