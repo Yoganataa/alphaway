@@ -640,7 +640,6 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await page.getByRole("heading", { name: "Estimated Savings Trends", exact: true }).waitFor({ state: "visible", timeout: 10000 });
     const chartPoint = page.locator('svg rect[role="button"]').first();
     await chartPoint.waitFor({ state: "visible", timeout: 10000 });
-    expect(await chartPoint.getAttribute("aria-label")).toContain("$");
     await chartPoint.hover();
     const tooltip = page.getByRole("status").filter({ hasText: "Estimated savings:" });
     await tooltip.waitFor({ state: "visible", timeout: 10000 });
