@@ -245,12 +245,6 @@
       {/if}
     </div>
   {/if}
-      </div>
-      <Button id="usage-load-retry" variant="secondary" size="sm" onclick={loadData} disabled={loading || mutating}>
-        {loading ? "Retrying…" : "Retry Load"}
-      </Button>
-    </div>
-  {/if}
 
   {#if loading && !stats}
     <p id="usage-loading" role="status" class="rounded-lg border border-border-subtle bg-surface p-4 text-xs text-text-muted">
