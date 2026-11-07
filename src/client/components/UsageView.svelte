@@ -14,6 +14,7 @@
   let stats = $state<UsageStats | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let mutationError = $state<string | null>(null);
   let lastLoadedAt = $state<number | null>(null);
   let mutating = $state(false);
   let confirmationAction = $state<"reset" | "clear" | null>(null);
@@ -88,21 +89,23 @@
     if (!action || writesBlocked()) return;
 
     mutating = true;
+    mutationError = null;
     try {
       if (action === "reset") {
         await resetUsageStats();
         if (!await loadData()) {
-          alert("Usage statistics were reset, but the refreshed view could not be loaded. Retry the Usage refresh.");
+          error = "Usage statistics were reset, but the refreshed view could not be loaded. Retry the Usage refresh.";
         }
       } else {
         await clearRecentLogs();
         if (!await loadData()) {
-          alert("Recent logs were cleared, but the refreshed view could not be loaded. Retry the Usage refresh.");
+          error = "Recent logs were cleared, but the refreshed view could not be loaded. Retry the Usage refresh.";
         }
       }
       confirmationAction = null;
     } catch (reason) {
-      alert(`${action === "reset" ? "Reset" : "Clear logs"} failed: ${getErrorMessage(reason, "Unknown error")}`);
+      mutationError = `${action === "reset" ? "Reset" : "Clear logs"} failed: ${getErrorMessage(reason, "Unknown error")}`;
+      confirmationAction = null;
     } finally {
       mutating = false;
     }
@@ -220,22 +223,26 @@
     </div>
   </div>
 
-  {#if error}
+  {#if error || mutationError}
     <div id="usage-load-error" role="alert" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[12px] border border-amber-500/30 bg-amber-500/5 p-4">
       <div class="min-w-0">
         <p class="text-xs font-semibold text-amber-400">
-          {stats
-            ? "Usage refresh failed. The last successful snapshot remains visible; reset and clear actions are blocked until refresh succeeds."
-            : "Usage data is unavailable. Metrics are hidden until a valid response is loaded."}
+          {mutationError
+            ? "Usage action failed. No successful mutation was recorded."
+            : stats
+              ? "Usage refresh failed. The last successful snapshot remains visible; reset and clear actions are blocked until refresh succeeds."
+              : "Usage data is unavailable. Metrics are hidden until a valid response is loaded."}
         </p>
-        <p class="mt-1 break-words text-xs text-text-muted">{error}</p>
+        <p class="mt-1 break-words text-xs text-text-muted">{mutationError ?? error}</p>
         {#if lastLoadedAt !== null}
           <p class="mt-1 text-[11px] text-text-muted">Last successful load: {formatLoadedTime(lastLoadedAt)}</p>
         {/if}
       </div>
-      <Button id="usage-load-retry" variant="secondary" size="sm" onclick={loadData} disabled={loading || mutating}>
-        {loading ? "Retrying…" : "Retry Load"}
-      </Button>
+      {#if error}
+        <Button id="usage-load-retry" variant="secondary" size="sm" onclick={loadData} disabled={loading || mutating}>
+          {loading ? "Retrying…" : "Retry Load"}
+        </Button>
+      {/if}
     </div>
   {/if}
 
