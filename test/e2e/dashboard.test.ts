@@ -210,6 +210,28 @@ describe("AlphaWay Web Dashboard E2E", () => {
     }
   }, 20000);
 
+  it("collapses the desktop sidebar into an icon rail and persists the preference", async () => {
+    const { page, baseURL } = dashboard;
+    await page.goto(baseURL + "/");
+
+    const sidebar = page.locator("#primary-navigation");
+    const collapse = sidebar.getByRole("button", { name: "Collapse sidebar" });
+    await collapse.click();
+
+    await expect(sidebar).toHaveClass(/w-14/);
+    const endpointItem = sidebar.getByRole("button", { name: "Endpoint & Key" });
+    await expect(endpointItem).toHaveAttribute("title", "Endpoint & Key");
+    await expect(sidebar.getByText("Main", { exact: true })).toBeHidden();
+
+    await page.reload();
+    await expect(sidebar).toHaveClass(/w-14/);
+    await expect(sidebar.getByRole("button", { name: "Endpoint & Key" })).toHaveAttribute("title", "Endpoint & Key");
+
+    await sidebar.getByRole("button", { name: "Expand sidebar" }).click();
+    await expect(sidebar).toHaveClass(/w-64/);
+    await page.evaluate(() => localStorage.removeItem("alphaway-sidebar-icon-rail"));
+  }, 15000);
+
   it("keeps the mobile sidebar keyboard-accessible and dismissible", async () => {
     const { page, baseURL } = dashboard;
     await page.setViewportSize({ width: 390, height: 844 });
