@@ -610,6 +610,18 @@ describe("AlphaWay Web Dashboard E2E", () => {
     await chartMode.click();
     expect(await chartMode.getAttribute("aria-pressed")).toBe("true");
     expect(await tokenMode.getAttribute("aria-pressed")).toBe("false");
+
+    // The toggle changes the actual chart metric, not only its pressed state.
+    await page.getByRole("heading", { name: "Estimated Savings Trends", exact: true }).waitFor({ state: "visible", timeout: 10000 });
+    const chartPoint = page.locator('svg rect[role="button"]').first();
+    await chartPoint.waitFor({ state: "visible", timeout: 10000 });
+    expect(await chartPoint.getAttribute("aria-label")).toContain("$");
+    await chartPoint.hover();
+    const tooltip = page.getByRole("status").filter({ hasText: "Estimated savings:" });
+    await tooltip.waitFor({ state: "visible", timeout: 10000 });
+    expect(await tooltip.textContent()).toContain("Total ingested:");
+    expect(await tooltip.textContent()).toContain("$");
+    expect(await page.getByText(/Peak: \$/).isVisible()).toBe(true);
   }, 20000);
 
   it("opens and cancels the Persona preset delete confirmation", async () => {
