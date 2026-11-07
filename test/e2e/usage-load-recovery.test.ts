@@ -20,6 +20,7 @@ describe("Usage aggregate load recovery", () => {
     const { page, baseURL } = dashboard;
     let reads = 0;
     let writes = 0;
+    let failNextMutation = true;
     let signalHeldRefresh!: () => void;
     const heldRefresh = new Promise<void>((resolve) => {
       signalHeldRefresh = resolve;
@@ -148,6 +149,15 @@ describe("Usage aggregate load recovery", () => {
 
         if (url.pathname.startsWith("/api/usage") && request.method() !== "GET") {
           writes += 1;
+          if (failNextMutation) {
+            failNextMutation = false;
+            await route.fulfill({
+              status: 503,
+              contentType: "application/json",
+              body: JSON.stringify({ error: "Temporary usage mutation failure" }),
+            });
+            return;
+          }
         }
         await route.continue();
       });
@@ -226,6 +236,17 @@ describe("Usage aggregate load recovery", () => {
       expect(await clearLogs.isEnabled()).toBe(true);
       expect(reads).toBe(6);
       expect(writes).toBe(0);
+
+      // A failed destructive write must surface through the in-page recovery
+      // state instead of a blocking browser alert.
+      await reset.click();
+      const resetDialog = page.getByRole("dialog").filter({ hasText: "Reset All Usage Statistics?" });
+      await resetDialog.waitFor({ state: "visible", timeout: 5000 });
+      await resetDialog.getByRole("button", { name: "Reset Statistics", exact: true }).click();
+      await loadError.waitFor({ state: "visible", timeout: 10000 });
+      expect(await loadError.textContent()).toContain("Reset failed:");
+      expect(await loadError.textContent()).toContain("Temporary usage mutation failure");
+      expect(writes).toBe(1);
     } finally {
       releaseRefresh();
       await page.unroute("**/api/usage**");
