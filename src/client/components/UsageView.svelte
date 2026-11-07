@@ -9,6 +9,7 @@
   import UsageBreakdownTable from "./analytics/UsageBreakdownTable.svelte";
   import RequestDetailsTab from "./analytics/RequestDetailsTab.svelte";
   import { fetchUsageStats, resetUsageStats, clearRecentLogs } from "../lib/api";
+  import { notifications } from "../lib/notifications";
   import type { UsageStats } from "../lib/types";
 
   let stats = $state<UsageStats | null>(null);
@@ -113,7 +114,7 @@
 
   function exportCsv() {
     if (!stats?.recentLogs?.length) {
-      alert("No logs available to export.");
+      notifications.warning("No logs are available to export.", "Usage export");
       return;
     }
     const headers = [
